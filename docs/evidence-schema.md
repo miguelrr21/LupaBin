@@ -1,6 +1,6 @@
 # Dissect: diseño inicial y contrato de evidencias
 
-Estado: propuesta para revisión; no describe funcionalidad implementada.
+Estado del diseño: aprobado por el usuario el 20 de septiembre de 2026. El plan de implementación al final de este documento está pendiente de aprobación. Este documento no implica que la funcionalidad esté implementada.
 
 ## Objetivo y alcance
 
@@ -153,3 +153,100 @@ La documentación inicial incluirá README, CONTRIBUTING, SECURITY, licencia y p
 El informe de entrega distinguirá comprobaciones locales, comprobaciones en contenedor y resultados remotos de GitHub Actions. Tener un workflow escrito no significa tener CI en verde. No se declarará un test o build exitoso si no se ha ejecutado y observado su resultado.
 
 El repositorio local existe en `C:\Users\migue\orca\projects\Dissect`. Crear un remoto o publicar requiere confirmar propietario y visibilidad. No se hará push sin autorización explícita.
+
+## Plan de implementación de la primera entrega
+
+Estado: pendiente de aprobación. Ejecución recomendada: secuencial en esta sesión, sin subagentes adicionales. Cada bloque funcional comienza con pruebas que fallen por el comportamiento ausente, continúa con la implementación mínima y termina con verificación y un commit pequeño. No se habilitan funciones de fases posteriores.
+
+Los archivos y comandos siguientes son objetivos del plan, no archivos existentes ni verificaciones ya realizadas.
+
+### 1. Entorno y andamiaje
+
+Archivos: `pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, `.pre-commit-config.yaml`, `src/dissect/__init__.py`, `src/dissect/py.typed` y configuración inicial de pytest.
+
+- Provisionar uv y Python 3.12 sin cambiar el Python por defecto ni la configuración Git del usuario. Crear un entorno virtual local aislado.
+- Usar un nombre de distribución diferenciado, `dissect-tutor`, conservando el paquete y el comando `dissect`; no publicar en un índice de paquetes.
+- Añadir dependencias mediante uv con versiones verificadas y publicadas al menos siete días antes: Pydantic v2, Typer y pefile. Incorporar pytest, Ruff, mypy y las herramientas de build/pre-commit necesarias como dependencias de desarrollo.
+- Configurar layout `src`, build de wheel/sdist, mypy estricto y detección de tests. No desactivar validaciones globales para acomodar una dependencia sin tipos: limitar esa frontera a un adaptador del parser.
+- Prueba inicial: importación del paquete y versión; confirmar que wheel/sdist se construyen y contienen el código y el marcador de tipos.
+
+Comandos previstos: `uv sync --frozen`, `uv run pytest tests/test_package.py`, `uv run ruff check .`, `uv run mypy src`, `uv build`.
+
+### 2. Modelos y JSON Schema
+
+Archivos: `src/dissect/evidence/models.py`, `src/dissect/evidence/schema.py`, `tests/test_evidence.py`, `tests/test_schema.py` y `docs/evidence-schema.json`.
+
+- Escribir primero pruebas de round-trip JSON, versión no soportada, campos extra, hashes/tamaños inválidos, timestamps sin zona horaria o desordenados, IDs repetidos y referencias inválidas.
+- Implementar los modelos tipados del contrato, coherencia de estados y relación entre evidencias, ejecuciones y errores.
+- Representar los nombres importados mediante bytes originales en hexadecimal y texto ASCII estricto opcional. La exclusión nombre/ordinal se valida sobre la representación original, no sobre el texto decodificado opcional.
+- Mantener la procedencia directa de imports. No habilitar transformaciones aún no implementadas. Validar referencias de origen existentes y acíclicas en los campos admitidos.
+- Exportar el esquema de manera determinista con `python -m dissect.evidence.schema`. Proporcionar `--check` para comparar el esquema versionado sin sobrescribirlo; una diferencia debe hacer fallar la verificación.
+- Aclarar que algunas invariantes entre campos requieren validación Pydantic y no son expresables únicamente mediante JSON Schema.
+
+Comandos previstos: `uv run pytest tests/test_evidence.py tests/test_schema.py`, `uv run python -m dissect.evidence.schema --check`.
+
+### 3. Ingesta y fixtures inofensivos
+
+Archivos: `src/dissect/ingest/reader.py`, `tests/fixtures/pe_builder.py`, `tests/test_ingest.py` y `samples/README.md`.
+
+- Construir fixtures mínimos en bytes con la biblioteca estándar, sin compilar ni ejecutar código de muestra. Cubrir PE32 y PE32+, imports por nombre/ordinal y tablas normales/retardadas. No versionar ejecutables.
+- Probar primero lectura acotada, entrada vacía, directorios/dispositivos, tamaño justo en el límite y un byte por encima, y modificación del tamaño durante la lectura.
+- Abrir y comprobar el descriptor para evitar confiar exclusivamente en un `stat` previo. Calcular hashes y tamaño sobre el buffer definitivo, que será el mismo enviado al worker.
+- Mantener errores públicos tipados y sin rutas locales. Distinguir los fallos de ingesta de los fallos del extractor.
+- Documentar la procedencia de los fixtures y su uso exclusivo como datos de prueba.
+
+Comando previsto: `uv run pytest tests/test_ingest.py`.
+
+### 4. Extractor PE y ensamblado del informe
+
+Archivos: `src/dissect/extractors/base.py`, `src/dissect/extractors/pe.py`, `src/dissect/analysis.py`, `tests/test_pe.py` y `tests/test_analysis.py`.
+
+- Escribir primero tests que fallen para clasificación real de cabeceras, imports normales/retardados, ordinales, nombres no ASCII, ausencia de tabla, tabla corrupta, offsets inválidos y truncamientos.
+- Usar pefile con parsing selectivo y límites explícitos. No desensamblar ni emular código, ni cargar DLLs de la muestra.
+- Examinar cómo la versión fijada de pefile trata errores y warnings. Traducirlos a códigos y mensajes propios; ante una condición no clasificada, abstenerse de afirmar que la extracción está completa.
+- Conservar solo hallazgos cuyo origen sea validable. Marcar cobertura parcial si hay resultados válidos junto con errores. Si no hay resultados respaldados, no fabricar evidencias para llenar el informe.
+- Ordenar canónicamente resultados y asignar IDs. Separar el reloj de los extractores e inyectarlo en pruebas.
+- Probar que un extractor fallido no borra resultados válidos de otro usando extractores simulados; no añadir integraciones nuevas para demostrarlo.
+- Probar que el límite de imports produce una limitación explícita, no una lista aparentemente completa.
+
+Comandos previstos: `uv run pytest tests/test_pe.py tests/test_analysis.py`, `uv run mypy src`.
+
+### 5. Worker aislado y CLI
+
+Archivos: `src/dissect/worker.py`, `src/dissect/runner.py`, `src/dissect/cli.py`, `docker/Dockerfile`, `compose.yaml`, `.dockerignore`, `tests/test_worker.py`, `tests/test_runner.py` y `tests/test_cli.py`.
+
+- Probar primero, con un cliente Docker simulado, falta de motor/imagen, timeout, respuesta excesiva, JSON corrupto, informe inconsistente y limpieza tras fallo/interrupción.
+- Construir un launcher que solo use una imagen local conocida y nunca descargue durante el análisis. Pasar argumentos sin shell y no permitir que nombres de archivo se conviertan en argumentos del worker.
+- Crear un contenedor identificado de forma inequívoca antes de arrancarlo; transmitir bytes por stdin con stdout/stderr acotados. Terminar y retirar exclusivamente ese contenedor al acabar o fallar, sin operaciones globales de limpieza Docker.
+- Aplicar usuario no root, `network=none`, raíz de solo lectura, eliminación de capacidades, `no-new-privileges` y los límites del contrato. No montar directorios del host ni el socket Docker.
+- Verificar el resultado del worker en el host, incluyendo hashes/tamaño respecto al buffer original. Rechazar respuestas inválidas en vez de repararlas con conjeturas.
+- Exponer `dissect analyze <archivo> --json`. Códigos de salida: 0 para análisis solicitado completo, 3 para parcial, 1 para fallo y 2 para uso incorrecto de la CLI. Los códigos no representan un veredicto de seguridad.
+- Construir la imagen con las dependencias runtime fijadas; mantener herramientas de desarrollo fuera de la imagen final. Evitar incluir el repositorio completo en el contexto efectivo de la imagen.
+
+Comandos previstos: `uv run pytest tests/test_worker.py tests/test_runner.py tests/test_cli.py`, `docker compose config --quiet`, `docker build -f docker/Dockerfile -t dissect-worker:0.1.0 .`.
+
+### 6. Pruebas reales de aislamiento y CI
+
+Archivos: `tests/integration/test_docker.py` y `.github/workflows/ci.yml`.
+
+- Añadir pruebas reales que inspeccionen la configuración del contenedor y comprueben usuario, ausencia de acceso de red, raíz no escribible, límites y timeout con terminación efectiva.
+- Probar el recorrido completo fixture sintético -> CLI -> worker -> JSON validado. Ninguna prueba ejecutará el fixture como programa.
+- Separar las pruebas Docker con un marcador. La suite de integración debe fallar si se solicita explícitamente sin Docker disponible; no producir un éxito aparente por omitirlas todas.
+- Configurar CI con Python 3.12: formato/lint, tipos, tests unitarios, coherencia del esquema, build de paquete y build/pruebas Docker. Añadir pruebas unitarias en Windows para el launcher y la ingesta.
+- Fijar versiones de dependencias y revisar procedencia de acciones; usar permisos mínimos y no incluir secretos ni muestras reales.
+- Si el motor Linux local sigue sin estar disponible, reportar el bloqueo exacto. No declarar aislamiento probado ni CI remota en verde hasta observar las ejecuciones correspondientes.
+
+Comandos previstos: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src`, `uv run pytest -m "not docker"`, `uv run pytest -m docker`, `uv run python -m dissect.evidence.schema --check`, `uv build`.
+
+### 7. Documentación, revisión y entrega
+
+Archivos: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, actualización de este documento y `AGENTS.md`.
+
+- Añadir licencia Apache-2.0 y guías mínimas de uso, contribución, seguridad y procedencia de fixtures.
+- Mostrar un ejemplo reproducible generado por el programa, no un informe inventado. Indicar explícitamente que no hay detección concluyente de malware, desofuscación general, web ni LLM en esta entrega.
+- Documentar instalación, build previo de la imagen, análisis sin red y estados/códigos de salida. Describir exactamente qué cubren y qué no cubren las pruebas.
+- Registrar en AGENTS.md los comandos que realmente hayan sido configurados y verificados.
+- Revisar diffs, secretos accidentales y coherencia del contrato; ejecutar la batería final y comunicar resultados y bloqueos sin generalizaciones.
+- Mantener commits convencionales pequeños. No publicar paquetes, crear releases ni hacer push en esta etapa.
+
+La creación de un remoto GitHub continúa pendiente de confirmar propietario y visibilidad. Si el usuario la solicita, se tratará como una acción separada de la validación local; no se confundirá tener repositorio remoto con tener CI ejecutada.
