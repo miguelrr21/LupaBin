@@ -165,6 +165,7 @@ def read_table(
         layout.locate(iat, width)
         dll = Name.from_bytes(layout.string(name_rva))
         for entry in range(limits.imports + 1):
+            layout.locate(iat + entry * width, width)
             address = thunk_rva + entry * width
             pointer, region = layout.locate(address, width)
             value = int.from_bytes(layout.data[pointer : pointer + width], "little")
