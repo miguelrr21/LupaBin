@@ -1,26 +1,18 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from dissect.evidence.models import ExtractorError, ImportData, Limits, Location, Run
-
-
-@dataclass(frozen=True)
-class Finding:
-    source: str
-    data: ImportData
-    location: Location
+from dissect.evidence.collector import Collector, Progress
+from dissect.evidence.primitives import Source
 
 
 @dataclass(frozen=True)
 class Extraction:
     sample_type: Literal["PE32", "PE32+", "unknown"]
-    findings: tuple[Finding, ...]
-    run: Run
-    errors: tuple[ExtractorError, ...] = ()
+    progress: Progress
 
 
 class Extractor(Protocol):
-    source: str
+    source: Source
     version: str
 
-    def extract(self, data: bytes, limits: Limits) -> Extraction: ...
+    def extract(self, data: bytes, collector: Collector, progress: Progress) -> Extraction: ...

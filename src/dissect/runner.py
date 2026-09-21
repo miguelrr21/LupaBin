@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from uuid import uuid4
 
@@ -10,7 +11,7 @@ from dissect.ingest.reader import from_bytes
 from dissect.transport import Completed as Completed
 from dissect.transport import DockerCLI, Transport
 
-IMAGE = "dissect-worker:0.1.0"
+IMAGE = "dissect-worker:0.2.0"
 LABEL = "org.dissect.analysis"
 
 
@@ -101,8 +102,12 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         if response.code not in (0, 1, 3) or not response.stdout:
             raise DissectError("worker_failure")
         try:
+            envelope = json.loads(response.stdout)
+            if isinstance(envelope, dict) and isinstance(envelope.get("schema_version"), str):
+                if envelope["schema_version"] != "0.2.0":
+                    raise DissectError("incompatible_worker")
             report = Report.model_validate_json(response.stdout)
-        except (ValidationError, ValueError):
+        except (ValidationError, ValueError, RecursionError):
             raise DissectError("invalid_worker_output") from None
         expected_exit = {"completed": 0, "partial": 3, "failed": 1}[report.analysis.status]
         if response.code != expected_exit:
@@ -113,7 +118,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
             blob.sample.size,
         ) or report.analysis.limits != limits:
             raise DissectError("invalid_worker_output")
-        if tuple(run.source for run in report.extractor_runs) != ("pe",):
+        if tuple(run.source for run in report.extractor_runs) != ("pe", "strings"):
             raise DissectError("invalid_worker_output")
         return report
     finally:

@@ -1,0 +1,466 @@
+{
+  "$defs": {
+    "Analysis": {
+      "additionalProperties": false,
+      "properties": {
+        "finished_at": {
+          "format": "date-time",
+          "title": "Finished At",
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "partial",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "const": "0.1.0",
+          "default": "0.1.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "started_at",
+        "finished_at",
+        "status"
+      ],
+      "title": "Analysis",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ImportData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "import",
+          "default": "import",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "maxLength": 32,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "data"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "ExtractorError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "invalid_pe",
+            "unsupported_format",
+            "timeout",
+            "resource_limit",
+            "output_limit",
+            "extractor_failure",
+            "parser_warning",
+            "import_limit",
+            "invalid_import_table"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 32,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "code"
+      ],
+      "title": "ExtractorError",
+      "type": "object"
+    },
+    "ImportData": {
+      "additionalProperties": false,
+      "properties": {
+        "dll": {
+          "$ref": "#/$defs/Name"
+        },
+        "function": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ordinal": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ordinal"
+        },
+        "table": {
+          "enum": [
+            "normal",
+            "delay"
+          ],
+          "title": "Table",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dll",
+        "table"
+      ],
+      "title": "ImportData",
+      "type": "object"
+    },
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "cpus": {
+          "const": 1,
+          "default": 1,
+          "title": "Cpus",
+          "type": "integer"
+        },
+        "imports": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "title": "Imports",
+          "type": "integer"
+        },
+        "input_bytes": {
+          "default": 20971520,
+          "exclusiveMinimum": 0,
+          "maximum": 20971520,
+          "title": "Input Bytes",
+          "type": "integer"
+        },
+        "memory_bytes": {
+          "const": 536870912,
+          "default": 536870912,
+          "title": "Memory Bytes",
+          "type": "integer"
+        },
+        "output_bytes": {
+          "default": 8388608,
+          "exclusiveMinimum": 0,
+          "maximum": 8388608,
+          "title": "Output Bytes",
+          "type": "integer"
+        },
+        "pids": {
+          "const": 64,
+          "default": 64,
+          "title": "Pids",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 30,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "Limits",
+      "type": "object"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "length": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Offset"
+        },
+        "rva": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rva"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Location",
+      "type": "object"
+    },
+    "Name": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_hex": {
+          "maxLength": 8192,
+          "pattern": "^(?:[a-f0-9]{2})+$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        }
+      },
+      "required": [
+        "raw_hex"
+      ],
+      "title": "Name",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "maxLength": 16,
+            "pattern": "^E[1-9][0-9]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Evidence Ids",
+          "type": "array"
+        }
+      },
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Run": {
+      "additionalProperties": false,
+      "properties": {
+        "delay": {
+          "default": "not_attempted",
+          "enum": [
+            "complete",
+            "partial",
+            "not_attempted"
+          ],
+          "title": "Delay",
+          "type": "string"
+        },
+        "normal": {
+          "default": "not_attempted",
+          "enum": [
+            "complete",
+            "partial",
+            "not_attempted"
+          ],
+          "title": "Normal",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 32,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "partial",
+            "failed",
+            "not_applicable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "version",
+        "status"
+      ],
+      "title": "Run",
+      "type": "object"
+    },
+    "Sample": {
+      "additionalProperties": false,
+      "properties": {
+        "md5": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Md5",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "exclusiveMinimum": 0,
+          "maximum": 20971520,
+          "title": "Size",
+          "type": "integer"
+        },
+        "type": {
+          "enum": [
+            "PE32",
+            "PE32+",
+            "unknown"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "md5",
+        "size",
+        "type"
+      ],
+      "title": "Sample",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "analysis": {
+      "$ref": "#/$defs/Analysis"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "maxItems": 10000,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "extractor_errors": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ExtractorError"
+      },
+      "maxItems": 128,
+      "title": "Extractor Errors",
+      "type": "array"
+    },
+    "extractor_runs": {
+      "items": {
+        "$ref": "#/$defs/Run"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Extractor Runs",
+      "type": "array"
+    },
+    "sample": {
+      "$ref": "#/$defs/Sample"
+    },
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "analysis",
+    "sample",
+    "extractor_runs"
+  ],
+  "title": "Report",
+  "type": "object"
+}

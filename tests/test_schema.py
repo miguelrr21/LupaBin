@@ -10,6 +10,13 @@ def test_generated_schema_is_current():
     assert Path("docs/evidence-schema.json").read_text(encoding="utf-8") == schema_text()
 
 
+def test_historical_schema_is_preserved():
+    old = json.loads(Path("docs/schemas/0.1.0.json").read_text(encoding="utf-8"))
+    assert old["properties"]["schema_version"]["const"] == "0.1.0"
+    Draft202012Validator.check_schema(old)
+    assert old != json.loads(schema_text())
+
+
 def test_schema_is_valid():
     Draft202012Validator.check_schema(json.loads(schema_text()))
 
