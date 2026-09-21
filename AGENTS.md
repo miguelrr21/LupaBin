@@ -22,7 +22,7 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 
 ## Contrato y desarrollo
 
-- Consultar `docs/evidence-schema.md`; su cabecera indica si el diseño está pendiente de revisión o aprobado.
+- Consultar `docs/evidence-schema.md` para la entrega 0.1.0. La propuesta de la Fase 1A está en `docs/superpowers/specs/2026-09-20-static-evidence-design.md`; comprobar su estado de aprobación antes de implementar. Un diseño propuesto no describe funcionalidad disponible.
 - Stack acordado: Python 3.12, uv, Pydantic v2, Typer y pefile para la primera entrega.
 - Mantener datos tipados, esquema versionado, IDs locales al informe, procedencia verificable y fallos por extractor explícitos.
 - Escribir pruebas negativas, especialmente para abstención, datos malformados, límites y resultados incompletos.
@@ -33,3 +33,14 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 - La CLI de fixtures es `uv run python -m tests.fixtures.pe_builder --output samples/practice.bin`; crea datos sintéticos y rechaza sobrescrituras. Nunca ejecutar el archivo generado.
 - En este workspace Windows uv está instalado de forma aislada en `.bootstrap/Scripts/uv.exe`; no asumir que está disponible globalmente. El Python del proyecto está en `.venv`.
 - No publicar ni hacer push sin autorización. Mantener commits pequeños y convencionales.
+
+## Cierre de cada entrega: explicar el producto
+
+La última comunicación de cada entrega, después de ejecutar y verificar las acciones, debe ayudar al usuario a comprender Dissect. No terminar únicamente con una lista de archivos, commits o tests.
+
+- Mostrar qué ha cambiado y qué puede hacer ahora el usuario, incluyendo una demostración real cuando sea posible.
+- Explicar brevemente cada cambio o implementación, su motivo y el requisito, evidencia o decisión que lo fundamenta.
+- Indicar qué habilita para etapas futuras, separando explícitamente lo ya implementado de lo solo previsto.
+- Resumir las comprobaciones realmente ejecutadas, los resultados y las limitaciones pendientes. No presentar una propuesta como una funcionalidad terminada.
+- Usar lenguaje de producto, explicar los términos técnicos necesarios y evitar afirmaciones o beneficios no comprobados.
+- Si se retoma el trabajo después del resumen, cerrar de nuevo con el estado actualizado.
