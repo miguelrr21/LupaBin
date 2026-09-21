@@ -1,44 +1,50 @@
-from collections import deque
+from collections import Counter, deque
 from typing import Annotated, Literal, Self
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
-from dissect import __version__
+from dissect.evidence.facts import Evidence as Evidence
+from dissect.evidence.facts import ImportData as ImportData
+from dissect.evidence.primitives import (
+    COMPONENTS,
+    Component,
+    Model,
+    NonNegative,
+    Source,
+    Status,
+)
+from dissect.evidence.primitives import Limits as Limits
+from dissect.evidence.primitives import Location as Location
+from dissect.evidence.primitives import Name as Name
+from dissect.evidence.relations import validate_anomaly
 
-NonNegative = Annotated[int, Field(ge=0)]
-EvidenceId = Annotated[str, Field(pattern=r"^E[1-9][0-9]*$", max_length=16)]
-Source = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=32)]
-Status = Literal["completed", "partial", "failed"]
-Coverage = Literal["complete", "partial", "not_attempted"]
+Coverage = Literal["complete", "partial", "blocked"]
 ErrorCode = Literal[
     "invalid_pe",
     "unsupported_format",
-    "timeout",
-    "resource_limit",
-    "output_limit",
     "extractor_failure",
     "parser_warning",
-    "import_limit",
     "invalid_import_table",
+    "invalid_export_table",
+    "invalid_section_table",
+    "unsafe_mapping",
+    "import_limit",
+    "descriptor_limit",
+    "export_limit",
+    "export_name_limit",
+    "section_limit",
+    "string_limit",
+    "string_length_limit",
+    "entropy_limit",
+    "anomaly_limit",
+    "evidence_budget",
+    "dependency_omitted",
+    "output_limit",
 ]
 
 
-class Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-
-
-class Limits(Model):
-    input_bytes: Annotated[int, Field(gt=0, le=20 * 1024 * 1024)] = 20 * 1024 * 1024
-    timeout_seconds: Annotated[int, Field(gt=0, le=30)] = 30
-    memory_bytes: Literal[536870912] = 536870912
-    cpus: Literal[1] = 1
-    pids: Literal[64] = 64
-    output_bytes: Annotated[int, Field(gt=0, le=8 * 1024 * 1024)] = 8 * 1024 * 1024
-    imports: Annotated[int, Field(gt=0, le=10000)] = 10000
-
-
 class Analysis(Model):
-    version: Literal["0.1.0"] = __version__
+    version: Literal["0.2.0"] = "0.2.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -54,100 +60,57 @@ class Analysis(Model):
 class Sample(Model):
     sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
     md5: Annotated[str, Field(pattern=r"^[a-f0-9]{32}$")]
-    size: Annotated[int, Field(gt=0, le=20 * 1024 * 1024)]
+    size: Annotated[int, Field(gt=0, le=20971520)]
     type: Literal["PE32", "PE32+", "unknown"]
 
 
-class Name(Model):
-    raw_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2})+$", max_length=8192)]
-    text: Annotated[str, Field(max_length=4096)] | None = None
-
-    @classmethod
-    def from_bytes(cls, value: bytes) -> Self:
-        try:
-            text = value.decode("ascii")
-        except UnicodeDecodeError:
-            text = None
-        return cls(raw_hex=value.hex(), text=text)
-
-    @model_validator(mode="after")
-    def faithful(self) -> Self:
-        raw = bytes.fromhex(self.raw_hex)
-        try:
-            text = raw.decode("ascii")
-        except UnicodeDecodeError:
-            text = None
-        if self.text != text:
-            raise ValueError("text does not match original bytes")
-        return self
+class ComponentRun(Model):
+    name: Component
+    status: Coverage
+    examined: NonNegative = 0
+    evidence_count: NonNegative = 0
 
 
-class ImportData(Model):
-    dll: Name
-    function: Name | None = None
-    ordinal: Annotated[int, Field(ge=0, le=65535)] | None = None
-    table: Literal["normal", "delay"]
-
-    @model_validator(mode="after")
-    def name_or_ordinal(self) -> Self:
-        if (self.function is None) == (self.ordinal is None):
-            raise ValueError("exactly one of function and ordinal is required")
-        return self
-
-
-class Location(Model):
-    offset: NonNegative | None = None
-    rva: NonNegative | None = None
-    length: Annotated[int, Field(gt=0)] | None = None
-    section: Name | None = None
-
-    @model_validator(mode="after")
-    def length_has_offset(self) -> Self:
-        if self.length is not None and self.offset is None:
-            raise ValueError("length requires a file offset")
-        return self
-
-
-class Provenance(Model):
-    evidence_ids: Annotated[tuple[EvidenceId, ...], Field(max_length=32)] = ()
-
-
-class Evidence(Model):
-    id: EvidenceId
-    kind: Literal["import"] = "import"
-    source: Source
-    data: ImportData
-    location: Location = Field(default_factory=Location)
-    confidence: Literal["observed"] = "observed"
-    provenance: Provenance = Field(default_factory=Provenance)
+def aggregate(states: tuple[Coverage, ...]) -> Status:
+    return (
+        "completed"
+        if all(s == "complete" for s in states)
+        else ("failed" if all(s == "blocked" for s in states) else "partial")
+    )
 
 
 class Run(Model):
     source: Source
     version: Annotated[str, Field(min_length=1, max_length=64)]
-    status: Literal["completed", "partial", "failed", "not_applicable"]
-    normal: Coverage = "not_attempted"
-    delay: Coverage = "not_attempted"
+    status: Status
+    components: Annotated[tuple[ComponentRun, ...], Field(max_length=7)]
+    evidence_count: NonNegative
 
     @model_validator(mode="after")
-    def coverage_matches_status(self) -> Self:
-        if self.status == "completed" and (self.normal, self.delay) != ("complete", "complete"):
-            raise ValueError("completed extraction requires complete coverage")
+    def coherent(self) -> Self:
+        if tuple(part.name for part in self.components) != COMPONENTS[self.source]:
+            raise ValueError("unexpected component coverage")
+        if self.status != aggregate(tuple(part.status for part in self.components)):
+            raise ValueError("extractor status disagrees with coverage")
+        if self.evidence_count != sum(part.evidence_count for part in self.components):
+            raise ValueError("extractor evidence count disagrees with components")
         return self
 
 
 class ExtractorError(Model):
     source: Source
+    component: Component
     code: ErrorCode
 
 
 class Report(Model):
-    schema_version: Literal["0.1.0"] = "0.1.0"
+    schema_version: Literal["0.2.0"] = "0.2.0"
     analysis: Analysis
     sample: Sample
-    evidence: Annotated[tuple[Evidence, ...], Field(max_length=10000)] = ()
-    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=32)]
+    evidence: Annotated[tuple[Evidence, ...], Field(max_length=20321)] = ()
+    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=2)]
     extractor_errors: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
+    limitations: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
 
     @model_validator(mode="after")
     def consistent(self) -> Self:
@@ -155,34 +118,111 @@ class Report(Model):
         facts = {fact.id: fact for fact in self.evidence}
         if len(runs) != len(self.extractor_runs) or len(facts) != len(self.evidence):
             raise ValueError("duplicate source or evidence ID")
-        if self.sample.size > self.analysis.limits.input_bytes:
+        limits = self.analysis.limits
+        if self.sample.size > limits.input_bytes:
             raise ValueError("sample exceeds effective size limit")
-        if len(self.evidence) > self.analysis.limits.imports:
-            raise ValueError("evidence exceeds effective import limit")
-        error_sources = {error.source for error in self.extractor_errors}
-        if not error_sources <= runs.keys():
-            raise ValueError("error has unknown source")
+        counts: Counter[str] = Counter(fact.kind for fact in self.evidence)
+        quotas = {
+            "import": limits.imports,
+            "pe_header": 1,
+            "section": limits.sections,
+            "entropy": limits.sections,
+            "export": limits.exports,
+            "string": limits.strings,
+            "header_anomaly": limits.anomalies,
+        }
+        if any(counts[kind] > limit for kind, limit in quotas.items()):
+            raise ValueError("evidence exceeds effective quota")
+        reasons = self.extractor_errors + self.limitations
+        reason_parts = {(reason.source, reason.component) for reason in reasons}
+        for reason in reasons:
+            if reason.source not in runs or reason.component not in COMPONENTS[reason.source]:
+                raise ValueError("reason has unknown source or component")
         for run in runs.values():
-            if (run.status != "completed") != (run.source in error_sources):
-                raise ValueError("extraction status and errors disagree")
-        complete = all(run.status == "completed" for run in runs.values())
-        expected = "completed" if complete else "partial" if self.evidence else "failed"
+            for part in run.components:
+                if (part.status != "complete") != ((run.source, part.name) in reason_parts):
+                    raise ValueError("component status and reasons disagree")
+                actual = sum(
+                    f.source == run.source and f.component == part.name for f in self.evidence
+                )
+                if actual != part.evidence_count or (part.status == "blocked" and actual):
+                    raise ValueError("component count disagrees with evidence")
+        statuses = [run.status for run in runs.values()]
+        expected = (
+            "completed"
+            if all(s == "completed" for s in statuses)
+            else ("failed" if all(s == "failed" for s in statuses) else "partial")
+        )
         if self.analysis.status != expected:
-            raise ValueError("global status disagrees with extraction results")
-        if self.sample.type == "unknown" and (complete or self.evidence):
-            raise ValueError("unknown format cannot have completed PE evidence")
-        degrees = {}
+            raise ValueError("global status disagrees with coverage")
+        degrees: dict[str, int] = {}
         children: dict[str, list[str]] = {key: [] for key in facts}
         for fact in self.evidence:
-            if fact.source not in runs or runs[fact.source].status not in ("completed", "partial"):
+            if fact.source not in runs or runs[fact.source].status == "failed":
                 raise ValueError("evidence has no successful or partial source")
+            if fact.source != ("strings" if fact.kind == "string" else "pe"):
+                raise ValueError("evidence source disagrees with kind")
+            expected_component = {
+                "pe_header": "headers",
+                "section": "sections",
+                "entropy": "entropy",
+                "export": "exports",
+                "header_anomaly": "anomalies",
+            }.get(fact.kind)
+            if fact.kind == "import":
+                expected_component = "imports_" + fact.data.table
+            if fact.kind == "string":
+                expected_component = "ascii" if fact.data.encoding == "ascii" else "utf16le"
+                if fact.location.length != len(bytes.fromhex(fact.data.raw_hex)):
+                    raise ValueError("string location disagrees with bytes")
+                if fact.data.characters > limits.string_characters:
+                    raise ValueError("string exceeds character limit")
+                if fact.location.rva is not None or fact.location.section is not None:
+                    raise ValueError("strings do not claim a PE mapping")
+            elif self.sample.type == "unknown":
+                raise ValueError("unknown format cannot have PE evidence")
+            if fact.component != expected_component:
+                raise ValueError("evidence component disagrees with kind")
             location = fact.location
-            if location.offset is not None:
-                if location.offset + (location.length or 1) > self.sample.size:
-                    raise ValueError("evidence location exceeds sample bounds")
+            if location.offset is None or location.length is None:
+                raise ValueError("observed evidence requires an exact byte span")
+            if location.offset + location.length > self.sample.size:
+                raise ValueError("evidence location exceeds sample bounds")
             refs = fact.provenance.evidence_ids
             if len(refs) != len(set(refs)) or not set(refs) <= facts.keys():
                 raise ValueError("duplicate or missing provenance reference")
+            if fact.kind == "pe_header":
+                expected_type = "PE32" if fact.data.optional_magic == 267 else "PE32+"
+                if self.sample.type != expected_type:
+                    raise ValueError("sample type disagrees with observed header")
+            if fact.kind == "section":
+                raw = fact.data
+                status = (
+                    "empty"
+                    if raw.raw_size == 0
+                    else (
+                        "present"
+                        if raw.raw_offset + raw.raw_size <= self.sample.size
+                        else "out_of_bounds"
+                    )
+                )
+                if raw.raw_status != status:
+                    raise ValueError("section range validation is inconsistent")
+            if fact.kind == "entropy":
+                if len(refs) != 1 or facts[refs[0]].kind != "section":
+                    raise ValueError("entropy requires one section reference")
+                section = facts[refs[0]]
+                if section.kind == "section" and (
+                    section.data.raw_status != "present"
+                    or fact.location.offset != section.data.raw_offset
+                    or fact.location.length != section.data.raw_size
+                    or fact.data.byte_count != section.data.raw_size
+                ):
+                    raise ValueError("entropy span disagrees with section")
+            if fact.kind == "header_anomaly":
+                if not refs or any(facts[ref].kind not in ("pe_header", "section") for ref in refs):
+                    raise ValueError("anomaly requires structural evidence")
+                validate_anomaly(fact, facts)
             degrees[fact.id] = len(refs)
             for ref in refs:
                 children[ref].append(fact.id)
@@ -197,4 +237,9 @@ class Report(Model):
                     ready.append(child)
         if visited != len(facts):
             raise ValueError("cyclic provenance")
+        if (
+            sum(f.data.byte_count for f in self.evidence if f.kind == "entropy")
+            > limits.entropy_bytes
+        ):
+            raise ValueError("entropy exceeds byte budget")
         return self

@@ -9,6 +9,7 @@ FailureCode = Literal[
     "timeout",
     "output_limit",
     "invalid_worker_output",
+    "incompatible_worker",
     "worker_failure",
     "cleanup_failure",
 ]
@@ -21,6 +22,7 @@ MESSAGES: dict[FailureCode, str] = {
     "timeout": "El análisis superó el tiempo permitido; no se puede afirmar un resultado completo.",
     "output_limit": "La respuesta superó el límite permitido; no se publican datos incompletos.",
     "invalid_worker_output": "La respuesta del worker no pudo validarse; no se publican sus datos.",
+    "incompatible_worker": "El esquema del worker es incompatible; se requiere la imagen 0.2.0.",
     "worker_failure": "El worker falló; no se pudo determinar el resultado.",
     "cleanup_failure": "No se pudo confirmar la eliminación del contenedor de este análisis.",
 }
