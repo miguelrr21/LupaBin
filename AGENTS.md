@@ -22,14 +22,15 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 
 ## Contrato y desarrollo
 
-- Consultar `docs/evidence-schema.md` para la entrega 0.1.0. La propuesta de la Fase 1A está en `docs/superpowers/specs/2026-09-20-static-evidence-design.md`; comprobar su estado de aprobación antes de implementar. Un diseño propuesto no describe funcionalidad disponible.
+- Consultar `docs/evidence-schema.md` para el contrato activo 0.2.0 y sus antecedentes 0.1.0. El diseño y plan aprobados de la Fase 1A están en `docs/superpowers/specs/2026-09-20-static-evidence-design.md`; no confundir alcance previsto de fases posteriores con funcionalidad disponible.
+- La Fase 1A separa PE y strings, valida cobertura por componente y conserva bytes originales. No inferir fechas de compilación, empaquetado, ejecución o conexiones a partir de esos hechos. Las entropías citan secciones; las anomalías deben satisfacer su predicado sobre los campos citados.
 - Stack acordado: Python 3.12, uv, Pydantic v2, Typer y pefile para la primera entrega.
 - Mantener datos tipados, esquema versionado, IDs locales al informe, procedencia verificable y fallos por extractor explícitos.
 - Escribir pruebas negativas, especialmente para abstención, datos malformados, límites y resultados incompletos.
 - No presentar el determinismo de los hechos como igualdad de timestamps ni prometer resultados completos cuando vence un timeout.
 - Antes de dar una entrega por terminada, ejecutar las verificaciones disponibles y revisar el diff. Distinguir resultados locales de CI remota; un workflow escrito no es CI en verde.
 - Verificaciones locales configuradas y ejecutadas: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src`, `uv run mypy --platform linux src`, `uv run pytest -m "not docker"`, `uv run python -m dissect.evidence.schema --check`, `uv build` y `docker compose config --quiet`.
-- Las pruebas reales de aislamiento son `uv run pytest -m docker`, después de `docker build -f docker/Dockerfile -t dissect-worker:0.1.0 .`. Exigen motor Docker Linux e imagen local; no deben omitirse silenciosamente si se solicitan.
+- Las pruebas reales de aislamiento son `uv run pytest -m docker`, después de `docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .`. Exigen motor Docker Linux e imagen local; no deben omitirse silenciosamente si se solicitan.
 - La CLI de fixtures es `uv run python -m tests.fixtures.pe_builder --output samples/practice.bin`; crea datos sintéticos y rechaza sobrescrituras. Nunca ejecutar el archivo generado.
 - En este workspace Windows uv está instalado de forma aislada en `.bootstrap/Scripts/uv.exe`; no asumir que está disponible globalmente. El Python del proyecto está en `.venv`.
 - No publicar ni hacer push sin autorización. Mantener commits pequeños y convencionales.

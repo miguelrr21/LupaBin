@@ -12,4 +12,11 @@ Desde la raíz del repositorio:
 uv run python -m tests.fixtures.pe_builder --output samples/practice.bin
 ```
 
+La Fase 1A añade `--scenario demo`: dos secciones, un export, una URL literal del dominio reservado `.invalid` y una cadena UTF-16LE. Estos textos se han escrito deliberadamente como material de práctica; no provienen de malware ni acreditan actividad de red. `--scenario corrupt` recorta 64 bytes de ese mismo fixture para demostrar una sección incompleta y la abstención de lecturas que dependen de un mapa seguro.
+
+```text
+uv run python -m tests.fixtures.pe_builder --scenario demo --output samples/phase1a-complete.bin
+uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/phase1a-partial.bin
+```
+
 El generador exige una ruta nueva y no sobrescribe archivos. Los archivos `.bin`, `.exe` y `.dll` están ignorados por Git. Para analizar el fixture, usa la CLI después de construir y verificar el worker Docker; no lo abras como programa.

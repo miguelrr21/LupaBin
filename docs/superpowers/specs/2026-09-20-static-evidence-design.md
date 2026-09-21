@@ -1,6 +1,6 @@
 # Fase 1A: evidencias estáticas básicas ampliadas
 
-Estado del diseño (secciones 1–9): aprobado por el usuario. El plan de implementación de la sección 10 está pendiente de revisión y autorización de ejecución. El motor actual sigue usando el contrato 0.1.0.
+Estado del diseño (secciones 1–9): aprobado por el usuario. El plan de implementación de la sección 10 está aprobado y su ejecución secuencial está autorizada. La implementación de esta rama usa el contrato 0.2.0; las secciones siguientes conservan la especificación y el plan acordados, no sustituyen los resultados de verificación de cada entrega.
 
 ## 1. Propósito y resultado para el usuario
 
@@ -43,7 +43,7 @@ Los fallos recuperables de un componente no borran los hechos válidos de otro. 
 
 Esta ampliación cambia payloads y reglas de agregación; se usará `schema_version="0.2.0"`. La versión del paquete y de la nueva imagen será 0.2.0 para distinguirla de la entrega inicial. No se sobrescribirá ni eliminará la imagen 0.1.0 existente.
 
-Se conservará el JSON Schema 0.1.0 como referencia histórica en `docs/schemas/0.1.0.json`. El esquema activo `docs/evidence-schema.json` se regenerará desde los modelos 0.2.0 durante la implementación. No se modificarán ahora los modelos ni el esquema generado.
+Se conservará el JSON Schema 0.1.0 como referencia histórica en `docs/schemas/0.1.0.json`. El esquema activo `docs/evidence-schema.json` se regenerará desde los modelos 0.2.0 durante la implementación. La regeneración forma parte de la implementación aprobada; el archivo histórico no se reescribe.
 
 La CLI nueva emitirá únicamente 0.2.0 y rechazará un worker 0.1.0 con un error de incompatibilidad identificable. No transformará informes antiguos ni prometerá compatibilidad de lectura que no existe. Los IDs siguen siendo locales al informe; añadir nuevos hechos puede cambiar la numeración de imports entre versiones.
 
@@ -187,7 +187,7 @@ La implementación se realizará en la rama `feat/static-evidence`, con commits 
 
 ## 10. Plan de implementación para revisión
 
-Estado: pendiente de aprobación. Método propuesto: ejecución secuencial en esta sesión, sin subagentes adicionales. No se añadirá ninguna dependencia ni se relajarán controles de seguridad. Los archivos nuevos descritos aquí son objetivos de implementación, no componentes ya existentes.
+Estado: aprobado. Método acordado: ejecución secuencial en esta sesión, sin subagentes adicionales. No se añadirá ninguna dependencia ni se relajarán controles de seguridad. Los archivos nuevos descritos aquí son objetivos de implementación, no componentes ya existentes.
 
 La skill `writing-plans` no está disponible en este entorno; este plan se ha redactado directamente a partir del diseño aprobado y del código revisado.
 

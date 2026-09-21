@@ -6,7 +6,9 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
 ## Estado y alcance
 
-Primera entrega: contrato de evidencias versionado, ingesta acotada, extracción PE32/PE32+ de imports normales y retardados, CLI JSON y worker Docker. No ejecuta ni emula la muestra. No incluye todavía informes didácticos completos, web, LLM, VirusTotal, YARA, capa ni desofuscación.
+Fase 1A, contrato 0.2.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales y cadenas literales, mediante CLI JSON y worker Docker. No ejecuta ni emula la muestra. No incluye todavía informes didácticos completos, web, LLM, VirusTotal, YARA, capa ni desofuscación.
+
+Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
 El código incluye pruebas unitarias y pruebas reales de aislamiento marcadas `docker`. La existencia de estas pruebas o del workflow no implica que hayan pasado en tu entorno. Ejecuta las comprobaciones de aislamiento antes de usar muestras no fiables. Este proyecto es experimental; no es un antivirus ni una garantía de seguridad.
 
@@ -22,7 +24,7 @@ Desde la raíz del repositorio, con una entrada local disponible:
 
 ```text
 uv sync --frozen
-docker build -f docker/Dockerfile -t dissect-worker:0.1.0 .
+docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .
 uv run --frozen dissect analyze "ruta/al/archivo.exe" --json
 ```
 
@@ -33,8 +35,10 @@ En el entorno Windows de desarrollo preparado para este repositorio, si uv no es
 Para generar una entrada sintética en lugar de aportar un binario:
 
 ```text
-uv run python -m tests.fixtures.pe_builder --output samples/practice.bin
-uv run --frozen dissect analyze samples/practice.bin --json
+uv run python -m tests.fixtures.pe_builder --scenario demo --output samples/phase1a-complete.bin
+uv run --frozen dissect analyze samples/phase1a-complete.bin --json
+uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/phase1a-partial.bin
+uv run --frozen dissect analyze samples/phase1a-partial.bin --json
 ```
 
 El generador no sobrescribe archivos existentes. Consulta [la procedencia de los fixtures](samples/README.md). No ejecutes los archivos generados.
@@ -43,21 +47,30 @@ El generador no sobrescribe archivos existentes. Consulta [la procedencia de los
 
 La salida es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
 
-- `completed`: terminaron las extracciones solicitadas; no es un veredicto de seguridad.
-- `partial`: hay hechos respaldados, pero también errores o limitaciones.
-- `failed`: no se pudo completar la extracción ni conservar evidencias de imports válidas.
+- `completed`: ambos extractores completaron su cobertura declarada; no es un veredicto de seguridad.
+- `partial`: una parte se revisó, pero existen componentes bloqueados, errores u omisiones. Puede no haber hallazgos.
+- `failed`: ambos extractores quedaron bloqueados, o la infraestructura no pudo producir un informe validado.
+
+La cobertura está en `extractor_runs[].components`, con contadores y estados `complete`, `partial` o `blocked`. `extractor_errors` describe fallos; `limitations` describe cuotas, truncamientos explícitos y warnings. Cero resultados con cobertura completa no equivale a un error ni demuestra seguridad.
+
+Un archivo cuyo PE no pueda interpretarse puede conservar cadenas literales y seguir clasificado como `unknown`; el resultado global será parcial. El barrido reconoce el repertorio ASCII imprimible, directamente y codificado en UTF-16LE, con mínimo de cuatro caracteres. No recupera todo Unicode ni cadenas ofuscadas. Los prefijos acotados llevan `complete=false` y nunca incluyen puntos suspensivos inventados. Una secuencia imprimible puede ser incidental o cruzar campos binarios: no se presume que sea texto intencional del programa.
 
 Códigos de salida: 0 completo, 3 parcial, 1 fallo, 2 uso incorrecto. Los errores anteriores al informe se emiten como JSON en stderr, sin rutas locales ni traceback. Las evidencias vacías deben interpretarse junto con `extractor_runs` y `extractor_errors`.
 
 Los límites predeterminados son 20 MiB de entrada, 30 segundos de worker, 512 MiB de memoria, 1 CPU, 64 procesos, 8 MiB de salida y 10.000 imports. La preparación y limpieza del contenedor tienen límites adicionales propios. Si no se puede confirmar la limpieza, la CLI lo comunica; no debe asumirse que el contenedor desapareció.
 
-Se rechazan cabeceras, regiones y tablas ambiguas. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
+También se acotan secciones (96), entradas EAT (5.000), asociaciones de nombres exportados (10.000), cadenas (5.000 y 1.024 caracteres por prefijo), anomalías (128) y bytes acumulados de entropía (20 MiB). Se reserva espacio de salida para explicar las omisiones. Las cuotas efectivas aparecen en el JSON.
+
+Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, sin borrar las cabeceras y descriptores comprobados. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
+
+La CLI 0.2.0 exige el esquema 0.2.0 del worker; un protocolo distinto produce `incompatible_worker`. El esquema 0.1.0 se conserva en `docs/schemas/0.1.0.json`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
 
 ## Arquitectura
 
 ```text
 CLI -> lectura acotada + hashes -> Docker sin red
-    -> cabeceras pefile + imports originales -> modelos Pydantic
+    -> PE (cabeceras, secciones, entropía, imports, exports, anomalías)
+    -> cadenas literales independientes -> presupuesto y modelos Pydantic
     -> validación de respuesta en el host -> JSON
 ```
 
@@ -78,7 +91,7 @@ uv run --frozen pytest -m "not docker"
 uv run --frozen python -m dissect.evidence.schema --check
 uv build
 docker compose config --quiet
-docker build -f docker/Dockerfile -t dissect-worker:0.1.0 .
+docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .
 uv run --frozen pytest -m docker
 ```
 
