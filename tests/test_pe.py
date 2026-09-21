@@ -96,3 +96,19 @@ def test_repeatable_facts():
     assert one.evidence == two.evidence
     assert one.sample == two.sample
     assert one.extractor_runs == two.extractor_runs
+
+
+def test_truncated_iat_prevents_complete_coverage():
+    data = bytearray(build_pe())
+    struct.pack_into("<I", data, 0x210, 0x1FFC)
+    report = analyze_bytes(bytes(data))
+    assert report.analysis.status == "partial"
+    assert report.extractor_runs[0].normal == "partial"
+
+
+def test_bound_iat_without_lookup_is_not_interpreted_as_names():
+    data = bytearray(build_pe())
+    struct.pack_into("<II", data, 0x200, 0, 1)
+    report = analyze_bytes(bytes(data))
+    assert report.analysis.status == "failed"
+    assert report.evidence == ()
