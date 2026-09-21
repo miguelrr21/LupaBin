@@ -57,3 +57,19 @@ def build_pe(
         struct.pack_into(fmt, data, 0x340, value)
         data[0x362 : 0x362 + len(function) + 1] = function + b"\0"
     return bytes(data)
+
+
+def main():
+    import argparse
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description="Generate inert PE test data; never execute it.")
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--bits", type=int, choices=(32, 64), default=32)
+    args = parser.parse_args()
+    with args.output.open("xb") as stream:
+        stream.write(build_pe(bits=args.bits))
+
+
+if __name__ == "__main__":
+    main()

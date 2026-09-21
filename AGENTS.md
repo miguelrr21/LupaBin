@@ -28,5 +28,8 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 - Escribir pruebas negativas, especialmente para abstención, datos malformados, límites y resultados incompletos.
 - No presentar el determinismo de los hechos como igualdad de timestamps ni prometer resultados completos cuando vence un timeout.
 - Antes de dar una entrega por terminada, ejecutar las verificaciones disponibles y revisar el diff. Distinguir resultados locales de CI remota; un workflow escrito no es CI en verde.
-- Documentar los comandos reales de lint, tipos, tests y Docker cuando se configure y verifique el andamiaje; todavía no existen comandos de proyecto verificados.
+- Verificaciones locales configuradas y ejecutadas: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src`, `uv run mypy --platform linux src`, `uv run pytest -m "not docker"`, `uv run python -m dissect.evidence.schema --check`, `uv build` y `docker compose config --quiet`.
+- Las pruebas reales de aislamiento son `uv run pytest -m docker`, después de `docker build -f docker/Dockerfile -t dissect-worker:0.1.0 .`. Exigen motor Docker Linux e imagen local; no deben omitirse silenciosamente si se solicitan.
+- La CLI de fixtures es `uv run python -m tests.fixtures.pe_builder --output samples/practice.bin`; crea datos sintéticos y rechaza sobrescrituras. Nunca ejecutar el archivo generado.
+- En este workspace Windows uv está instalado de forma aislada en `.bootstrap/Scripts/uv.exe`; no asumir que está disponible globalmente. El Python del proyecto está en `.venv`.
 - No publicar ni hacer push sin autorización. Mantener commits pequeños y convencionales.
