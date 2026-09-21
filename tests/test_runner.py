@@ -98,6 +98,7 @@ def test_failures_are_explicit_and_cleanup_is_attempted(failure, code):
     [
         lambda report: report["sample"].update(sha256="0" * 64),
         lambda report: report.update(schema_version="9.0.0"),
+        lambda report: report.update(schema_version="0.1.0"),
         lambda report: report["analysis"]["limits"].update(imports=5),
     ],
 )
@@ -107,7 +108,10 @@ def test_worker_response_must_match_original_input(change):
     docker = FakeDocker(output=json.dumps(report).encode())
     with pytest.raises(DissectError) as caught:
         asyncio.run(run_isolated(build_pe(), Limits(), docker))
-    assert caught.value.code == "invalid_worker_output"
+    expected = (
+        "incompatible_worker" if report["schema_version"] != "0.2.0" else "invalid_worker_output"
+    )
+    assert caught.value.code == expected
 
 
 def test_invalid_json_is_not_repaired():

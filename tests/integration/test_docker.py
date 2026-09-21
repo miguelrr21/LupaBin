@@ -20,7 +20,7 @@ def require_docker():
         info = await client.run(("info", "--format", "{{.OSType}}"))
         assert info.code == 0 and info.stdout.strip() == b"linux", "Linux Docker is required"
         image = await client.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
-        assert image.code == 0, "Build dissect-worker:0.1.0 before integration tests"
+        assert image.code == 0, "Build dissect-worker:0.2.0 before integration tests"
 
     asyncio.run(check())
 
@@ -29,7 +29,31 @@ def require_docker():
 def test_real_worker_round_trip(bits):
     report = asyncio.run(run_isolated(build_pe(bits=bits), Limits(), DockerCLI()))
     assert report.analysis.status == "completed"
-    assert report.evidence[0].data.function.text == "ExitProcess"
+    assert (
+        next(f for f in report.evidence if f.kind == "import").data.function.text == "ExitProcess"
+    )
+    assert {"pe_header", "section", "entropy", "string"} <= {f.kind for f in report.evidence}
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
+    from typer.testing import CliRunner
+
+    from dissect.cli import app
+    from tests.fixtures.pe_builder import build_demo
+
+    path = tmp_path / "demo.bin"
+    path.write_bytes(build_demo(corrupt=corrupt))
+    result = CliRunner().invoke(app, ["analyze", str(path), "--json"])
+    assert result.exit_code == (3 if corrupt else 0)
+    report = json.loads(result.stdout)
+    assert report["schema_version"] == "0.2.0"
+    kinds = {fact["kind"] for fact in report["evidence"]}
+    assert {"pe_header", "section", "entropy", "string"} <= kinds
+    assert ("header_anomaly" in kinds) == corrupt
+    if not corrupt:
+        assert "export" in kinds
+    assert result.stderr == ""
 
 
 def test_container_runtime_restrictions():

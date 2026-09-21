@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.1.0",
-          "default": "0.1.0",
+          "const": "0.2.0",
+          "default": "0.2.0",
           "title": "Version",
           "type": "string"
         }
@@ -40,9 +40,62 @@
       "title": "Analysis",
       "type": "object"
     },
-    "Evidence": {
+    "AnomalyData": {
       "additionalProperties": false,
       "properties": {
+        "code": {
+          "enum": [
+            "section_raw_out_of_bounds",
+            "section_raw_overlap",
+            "section_virtual_overlap",
+            "section_exceeds_image",
+            "entry_point_outside_image"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "rule_version": {
+          "const": "pe-structure-v1",
+          "default": "pe-structure-v1",
+          "title": "Rule Version",
+          "type": "string"
+        },
+        "section_indices": {
+          "default": [],
+          "items": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "title": "Section Indices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "AnomalyData",
+      "type": "object"
+    },
+    "AnomalyEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
         "confidence": {
           "const": "observed",
           "default": "observed",
@@ -50,7 +103,7 @@
           "type": "string"
         },
         "data": {
-          "$ref": "#/$defs/ImportData"
+          "$ref": "#/$defs/AnomalyData"
         },
         "id": {
           "maxLength": 16,
@@ -59,8 +112,8 @@
           "type": "string"
         },
         "kind": {
-          "const": "import",
-          "default": "import",
+          "const": "header_anomaly",
+          "default": "header_anomaly",
           "title": "Kind",
           "type": "string"
         },
@@ -71,8 +124,10 @@
           "$ref": "#/$defs/Provenance"
         },
         "source": {
-          "maxLength": 32,
-          "pattern": "^[a-z][a-z0-9_]*$",
+          "enum": [
+            "pe",
+            "strings"
+          ],
           "title": "Source",
           "type": "string"
         }
@@ -80,9 +135,284 @@
       "required": [
         "id",
         "source",
+        "component",
+        "location",
         "data"
       ],
-      "title": "Evidence",
+      "title": "AnomalyEvidence",
+      "type": "object"
+    },
+    "ComponentRun": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Evidence Count",
+          "type": "integer"
+        },
+        "examined": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Examined",
+          "type": "integer"
+        },
+        "name": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "partial",
+            "blocked"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "ComponentRun",
+      "type": "object"
+    },
+    "EntropyData": {
+      "additionalProperties": false,
+      "properties": {
+        "bits_per_byte": {
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Bits Per Byte",
+          "type": "number"
+        },
+        "byte_count": {
+          "exclusiveMinimum": 0,
+          "maximum": 20971520,
+          "title": "Byte Count",
+          "type": "integer"
+        },
+        "method": {
+          "const": "shannon-byte-v1",
+          "default": "shannon-byte-v1",
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "byte_count",
+        "bits_per_byte"
+      ],
+      "title": "EntropyData",
+      "type": "object"
+    },
+    "EntropyEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/EntropyData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "entropy",
+          "default": "entropy",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "EntropyEvidence",
+      "type": "object"
+    },
+    "ExportData": {
+      "additionalProperties": false,
+      "properties": {
+        "eat_index": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Eat Index",
+          "type": "integer"
+        },
+        "forwarder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "names": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "maxItems": 10000,
+          "title": "Names",
+          "type": "array"
+        },
+        "names_status": {
+          "enum": [
+            "complete",
+            "incomplete"
+          ],
+          "title": "Names Status",
+          "type": "string"
+        },
+        "ordinal": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "target_kind": {
+          "enum": [
+            "declared_rva",
+            "forwarder",
+            "unreadable_forwarder"
+          ],
+          "title": "Target Kind",
+          "type": "string"
+        },
+        "target_rva": {
+          "exclusiveMinimum": 0,
+          "maximum": 4294967295,
+          "title": "Target Rva",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "eat_index",
+        "ordinal",
+        "names_status",
+        "target_rva",
+        "target_kind"
+      ],
+      "title": "ExportData",
+      "type": "object"
+    },
+    "ExportEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ExportData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "export",
+          "default": "export",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "ExportEvidence",
       "type": "object"
     },
     "ExtractorError": {
@@ -92,29 +422,210 @@
           "enum": [
             "invalid_pe",
             "unsupported_format",
-            "timeout",
-            "resource_limit",
-            "output_limit",
             "extractor_failure",
             "parser_warning",
+            "invalid_import_table",
+            "invalid_export_table",
+            "invalid_section_table",
+            "unsafe_mapping",
             "import_limit",
-            "invalid_import_table"
+            "descriptor_limit",
+            "export_limit",
+            "export_name_limit",
+            "section_limit",
+            "string_limit",
+            "string_length_limit",
+            "entropy_limit",
+            "anomaly_limit",
+            "evidence_budget",
+            "dependency_omitted",
+            "output_limit"
           ],
           "title": "Code",
           "type": "string"
         },
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
         "source": {
-          "maxLength": 32,
-          "pattern": "^[a-z][a-z0-9_]*$",
+          "enum": [
+            "pe",
+            "strings"
+          ],
           "title": "Source",
           "type": "string"
         }
       },
       "required": [
         "source",
+        "component",
         "code"
       ],
       "title": "ExtractorError",
+      "type": "object"
+    },
+    "HeaderData": {
+      "additionalProperties": false,
+      "properties": {
+        "characteristics": {
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Characteristics",
+          "type": "integer"
+        },
+        "entry_point_rva": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Entry Point Rva",
+          "type": "integer"
+        },
+        "file_alignment": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "File Alignment",
+          "type": "integer"
+        },
+        "image_base": {
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "title": "Image Base",
+          "type": "integer"
+        },
+        "machine": {
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Machine",
+          "type": "integer"
+        },
+        "number_of_sections": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Number Of Sections",
+          "type": "integer"
+        },
+        "optional_magic": {
+          "enum": [
+            267,
+            523
+          ],
+          "title": "Optional Magic",
+          "type": "integer"
+        },
+        "section_alignment": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Section Alignment",
+          "type": "integer"
+        },
+        "size_of_headers": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Size Of Headers",
+          "type": "integer"
+        },
+        "size_of_image": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Size Of Image",
+          "type": "integer"
+        },
+        "timestamp_raw": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Timestamp Raw",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "machine",
+        "number_of_sections",
+        "timestamp_raw",
+        "characteristics",
+        "optional_magic",
+        "image_base",
+        "entry_point_rva",
+        "section_alignment",
+        "file_alignment",
+        "size_of_image",
+        "size_of_headers"
+      ],
+      "title": "HeaderData",
+      "type": "object"
+    },
+    "HeaderEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/HeaderData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "pe_header",
+          "default": "pe_header",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "HeaderEvidence",
       "type": "object"
     },
     "ImportData": {
@@ -164,13 +675,112 @@
       "title": "ImportData",
       "type": "object"
     },
+    "ImportEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ImportData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "import",
+          "default": "import",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "ImportEvidence",
+      "type": "object"
+    },
     "Limits": {
       "additionalProperties": false,
       "properties": {
+        "anomalies": {
+          "default": 128,
+          "exclusiveMinimum": 0,
+          "maximum": 128,
+          "title": "Anomalies",
+          "type": "integer"
+        },
         "cpus": {
           "const": 1,
           "default": 1,
           "title": "Cpus",
+          "type": "integer"
+        },
+        "entropy_bytes": {
+          "default": 20971520,
+          "exclusiveMinimum": 0,
+          "maximum": 20971520,
+          "title": "Entropy Bytes",
+          "type": "integer"
+        },
+        "export_names": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "title": "Export Names",
+          "type": "integer"
+        },
+        "exports": {
+          "default": 5000,
+          "exclusiveMinimum": 0,
+          "maximum": 5000,
+          "title": "Exports",
+          "type": "integer"
+        },
+        "import_descriptors": {
+          "default": 4096,
+          "exclusiveMinimum": 0,
+          "maximum": 4096,
+          "title": "Import Descriptors",
           "type": "integer"
         },
         "imports": {
@@ -204,6 +814,27 @@
           "const": 64,
           "default": 64,
           "title": "Pids",
+          "type": "integer"
+        },
+        "sections": {
+          "default": 96,
+          "exclusiveMinimum": 0,
+          "maximum": 96,
+          "title": "Sections",
+          "type": "integer"
+        },
+        "string_characters": {
+          "default": 1024,
+          "maximum": 1024,
+          "minimum": 4,
+          "title": "String Characters",
+          "type": "integer"
+        },
+        "strings": {
+          "default": 5000,
+          "exclusiveMinimum": 0,
+          "maximum": 5000,
+          "title": "Strings",
           "type": "integer"
         },
         "timeout_seconds": {
@@ -249,6 +880,7 @@
         "rva": {
           "anyOf": [
             {
+              "maximum": 4294967295,
               "minimum": 0,
               "type": "integer"
             },
@@ -324,29 +956,24 @@
     "Run": {
       "additionalProperties": false,
       "properties": {
-        "delay": {
-          "default": "not_attempted",
-          "enum": [
-            "complete",
-            "partial",
-            "not_attempted"
-          ],
-          "title": "Delay",
-          "type": "string"
+        "components": {
+          "items": {
+            "$ref": "#/$defs/ComponentRun"
+          },
+          "maxItems": 7,
+          "title": "Components",
+          "type": "array"
         },
-        "normal": {
-          "default": "not_attempted",
-          "enum": [
-            "complete",
-            "partial",
-            "not_attempted"
-          ],
-          "title": "Normal",
-          "type": "string"
+        "evidence_count": {
+          "minimum": 0,
+          "title": "Evidence Count",
+          "type": "integer"
         },
         "source": {
-          "maxLength": 32,
-          "pattern": "^[a-z][a-z0-9_]*$",
+          "enum": [
+            "pe",
+            "strings"
+          ],
           "title": "Source",
           "type": "string"
         },
@@ -354,8 +981,7 @@
           "enum": [
             "completed",
             "partial",
-            "failed",
-            "not_applicable"
+            "failed"
           ],
           "title": "Status",
           "type": "string"
@@ -370,7 +996,9 @@
       "required": [
         "source",
         "version",
-        "status"
+        "status",
+        "components",
+        "evidence_count"
       ],
       "title": "Run",
       "type": "object"
@@ -412,6 +1040,290 @@
       ],
       "title": "Sample",
       "type": "object"
+    },
+    "SectionData": {
+      "additionalProperties": false,
+      "properties": {
+        "characteristics": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Characteristics",
+          "type": "integer"
+        },
+        "index": {
+          "exclusiveMaximum": 96,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "name_raw_hex": {
+          "pattern": "^[a-f0-9]{16}$",
+          "title": "Name Raw Hex",
+          "type": "string"
+        },
+        "name_text": {
+          "anyOf": [
+            {
+              "maxLength": 8,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name Text"
+        },
+        "permissions": {
+          "items": {
+            "enum": [
+              "read",
+              "write",
+              "execute"
+            ],
+            "type": "string"
+          },
+          "title": "Permissions",
+          "type": "array"
+        },
+        "raw_offset": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Raw Offset",
+          "type": "integer"
+        },
+        "raw_size": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Raw Size",
+          "type": "integer"
+        },
+        "raw_status": {
+          "enum": [
+            "present",
+            "empty",
+            "out_of_bounds"
+          ],
+          "title": "Raw Status",
+          "type": "string"
+        },
+        "rva": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Rva",
+          "type": "integer"
+        },
+        "virtual_size": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Virtual Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "name_raw_hex",
+        "name_text",
+        "rva",
+        "virtual_size",
+        "raw_offset",
+        "raw_size",
+        "characteristics",
+        "raw_status",
+        "permissions"
+      ],
+      "title": "SectionData",
+      "type": "object"
+    },
+    "SectionEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SectionData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "section",
+          "default": "section",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "SectionEvidence",
+      "type": "object"
+    },
+    "StringData": {
+      "additionalProperties": false,
+      "properties": {
+        "characters": {
+          "maximum": 1024,
+          "minimum": 4,
+          "title": "Characters",
+          "type": "integer"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "encoding": {
+          "enum": [
+            "ascii",
+            "utf-16-le"
+          ],
+          "title": "Encoding",
+          "type": "string"
+        },
+        "raw_hex": {
+          "maxLength": 4096,
+          "pattern": "^(?:[a-f0-9]{2})+$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "repertoire": {
+          "const": "ascii-printable-v1",
+          "default": "ascii-printable-v1",
+          "title": "Repertoire",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 1024,
+          "minLength": 4,
+          "title": "Text",
+          "type": "string"
+        },
+        "total_characters": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Characters"
+        }
+      },
+      "required": [
+        "encoding",
+        "text",
+        "raw_hex",
+        "characters",
+        "complete"
+      ],
+      "title": "StringData",
+      "type": "object"
+    },
+    "StringEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "ascii",
+            "utf16le"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/StringData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "string",
+          "default": "string",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "StringEvidence",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -422,9 +1334,43 @@
     "evidence": {
       "default": [],
       "items": {
-        "$ref": "#/$defs/Evidence"
+        "discriminator": {
+          "mapping": {
+            "entropy": "#/$defs/EntropyEvidence",
+            "export": "#/$defs/ExportEvidence",
+            "header_anomaly": "#/$defs/AnomalyEvidence",
+            "import": "#/$defs/ImportEvidence",
+            "pe_header": "#/$defs/HeaderEvidence",
+            "section": "#/$defs/SectionEvidence",
+            "string": "#/$defs/StringEvidence"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ImportEvidence"
+          },
+          {
+            "$ref": "#/$defs/HeaderEvidence"
+          },
+          {
+            "$ref": "#/$defs/SectionEvidence"
+          },
+          {
+            "$ref": "#/$defs/EntropyEvidence"
+          },
+          {
+            "$ref": "#/$defs/ExportEvidence"
+          },
+          {
+            "$ref": "#/$defs/StringEvidence"
+          },
+          {
+            "$ref": "#/$defs/AnomalyEvidence"
+          }
+        ]
       },
-      "maxItems": 10000,
+      "maxItems": 20321,
       "title": "Evidence",
       "type": "array"
     },
@@ -441,17 +1387,26 @@
       "items": {
         "$ref": "#/$defs/Run"
       },
-      "maxItems": 32,
+      "maxItems": 2,
       "minItems": 1,
       "title": "Extractor Runs",
+      "type": "array"
+    },
+    "limitations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ExtractorError"
+      },
+      "maxItems": 128,
+      "title": "Limitations",
       "type": "array"
     },
     "sample": {
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.1.0",
-      "default": "0.1.0",
+      "const": "0.2.0",
+      "default": "0.2.0",
       "title": "Schema Version",
       "type": "string"
     }
