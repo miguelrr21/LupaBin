@@ -1,6 +1,6 @@
 # Dissect: diseño inicial y contrato de evidencias
 
-Estado del diseño: aprobado por el usuario el 20 de septiembre de 2026. El plan de implementación al final de este documento está pendiente de aprobación. Este documento no implica que la funcionalidad esté implementada.
+Estado: diseño y plan de implementación aprobados por el usuario el 20 de septiembre de 2026. Este documento no implica que todas las verificaciones se hayan ejecutado; consultar los resultados de la entrega.
 
 ## Objetivo y alcance
 
@@ -156,7 +156,7 @@ El repositorio local existe en `C:\Users\migue\orca\projects\Dissect`. Crear un 
 
 ## Plan de implementación de la primera entrega
 
-Estado: pendiente de aprobación. Ejecución recomendada: secuencial en esta sesión, sin subagentes adicionales. Cada bloque funcional comienza con pruebas que fallen por el comportamiento ausente, continúa con la implementación mínima y termina con verificación y un commit pequeño. No se habilitan funciones de fases posteriores.
+Estado: aprobado. Ejecución acordada: secuencial en esta sesión, sin subagentes adicionales. Cada bloque funcional comienza con pruebas que fallen por el comportamiento ausente, continúa con la implementación mínima y termina con verificación y un commit pequeño. No se habilitan funciones de fases posteriores.
 
 Los archivos y comandos siguientes son objetivos del plan, no archivos existentes ni verificaciones ya realizadas.
 

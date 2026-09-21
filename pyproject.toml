@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dissect-tutor"
+version = "0.1.0"
+description = "Evidence-first static analysis tutor; samples are never executed."
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    "pefile==2024.8.26",
+    "pydantic==2.11.7",
+    "typer==0.16.1",
+]
+
+[project.scripts]
+dissect = "dissect.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dissect"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "docs/evidence-schema.json", "pyproject.toml", "LICENSE", "README.md"]
+
+[tool.uv]
+exclude-newer = "2026-09-13T00:00:00Z"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["docker: requires a running Linux Docker engine and the local worker image"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = "pefile"
+ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "jsonschema==4.25.1",
+    "mypy==1.17.1",
+    "pre-commit==4.3.0",
+    "pytest==8.4.1",
+    "ruff==0.12.12",
+]
