@@ -19,7 +19,7 @@ def require_docker():
         client = DockerCLI()
         info = await client.run(("info", "--format", "{{.OSType}}"))
         assert info.code == 0 and info.stdout.strip() == b"linux", "Linux Docker is required"
-        image = await client.run(("image", "inspect", IMAGE))
+        image = await client.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
         assert image.code == 0, "Build dissect-worker:0.1.0 before integration tests"
 
     asyncio.run(check())

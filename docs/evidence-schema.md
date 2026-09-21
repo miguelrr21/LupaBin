@@ -247,6 +247,6 @@ Archivos: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECU
 - Documentar instalación, build previo de la imagen, análisis sin red y estados/códigos de salida. Describir exactamente qué cubren y qué no cubren las pruebas.
 - Registrar en AGENTS.md los comandos que realmente hayan sido configurados y verificados.
 - Revisar diffs, secretos accidentales y coherencia del contrato; ejecutar la batería final y comunicar resultados y bloqueos sin generalizaciones.
-- Mantener commits convencionales pequeños. No publicar paquetes, crear releases ni hacer push en esta etapa.
+- Mantener commits convencionales pequeños. No publicar paquetes ni crear releases. Cualquier push requiere autorización explícita; la concedida para esta entrega consta a continuación.
 
-La creación de un remoto GitHub continúa pendiente de confirmar propietario y visibilidad. Si el usuario la solicita, se tratará como una acción separada de la validación local; no se confundirá tener repositorio remoto con tener CI ejecutada.
+El usuario ha autorizado crear `miguelrr21/Dissect` como repositorio privado, subir el código y ejecutar GitHub Actions. La publicación y sus verificaciones se realizan por separado de las comprobaciones locales; no se confundirá tener repositorio remoto con tener CI ejecutada.
