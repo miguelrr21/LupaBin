@@ -1,6 +1,6 @@
 # Fase 1A: evidencias estáticas básicas ampliadas
 
-Estado: propuesta de diseño para revisión. El alcance ha sido aceptado; este documento todavía no autoriza la implementación. El motor actual sigue usando el contrato 0.1.0.
+Estado del diseño (secciones 1–9): aprobado por el usuario. El plan de implementación de la sección 10 está pendiente de revisión y autorización de ejecución. El motor actual sigue usando el contrato 0.1.0.
 
 ## 1. Propósito y resultado para el usuario
 
@@ -183,4 +183,128 @@ La entropía usa una medida matemática de distribución de bytes; su utilidad e
 
 Esta base prepara las integraciones YARA/capa, la decodificación estática acotada y las plantillas didácticas con citas. Después podrán llegar los renderers y la web. Ninguna de esas funciones se considera implementada por aprobar este diseño.
 
-La implementación se realizará en la rama `feat/static-evidence`, con commits pequeños y PR de fase cuando se autorice publicar. Este documento requiere revisión del usuario antes de redactar y aprobar el plan de implementación; no cambia el motor por sí mismo.
+La implementación se realizará en la rama `feat/static-evidence`, con commits pequeños y PR de fase cuando se autorice publicar. El diseño de las secciones 1–9 está aprobado; no cambia el motor por sí mismo.
+
+## 10. Plan de implementación para revisión
+
+Estado: pendiente de aprobación. Método propuesto: ejecución secuencial en esta sesión, sin subagentes adicionales. No se añadirá ninguna dependencia ni se relajarán controles de seguridad. Los archivos nuevos descritos aquí son objetivos de implementación, no componentes ya existentes.
+
+La skill `writing-plans` no está disponible en este entorno; este plan se ha redactado directamente a partir del diseño aprobado y del código revisado.
+
+### A. Línea base y conservación del contrato anterior
+
+Archivos afectados: esquema existente y nuevo archivo histórico `docs/schemas/0.1.0.json`; pruebas de esquema.
+
+1. Confirmar estado Git y ejecutar los tests actuales antes de cambiar el motor.
+2. Conservar una copia exacta del JSON Schema 0.1.0 antes de regenerar nada. Comprobar mediante un test que la copia histórica no se modifica al exportar el esquema activo.
+3. Trabajar en la rama actual; no sobrescribir ni eliminar la imagen Docker 0.1.0.
+
+Verificación: `uv run --frozen pytest -m "not docker"` y `uv run --frozen python -m dissect.evidence.schema --check`. Las verificaciones Docker se ejecutarán cuando el motor esté disponible; su ausencia no se contabiliza como prueba superada.
+
+### B. Modelos tipados, cobertura y validaciones cruzadas
+
+Archivos: `src/dissect/evidence/models.py`, nuevos módulos de payloads y cobertura bajo `src/dissect/evidence/` si lo exige el tamaño, `src/dissect/extractors/base.py`; `tests/test_evidence.py`, `tests/test_schema.py` y nuevos tests focalizados de payloads/cobertura.
+
+1. Escribir primero tests fallidos para cada variante nueva y para combinaciones inválidas: `kind`/payload incompatibles, floats no finitos, texto distinto de los bytes originales, estados contradictorios y referencias a tipos o ubicaciones incorrectos.
+2. Definir la unión discriminada de los siete tipos, sin sustituir la validación por `dict[str, Any]`.
+3. Distinguir ubicaciones verificadas del archivo de direcciones y tamaños meramente declarados en campos PE. Validar referencias de entropía a su sección y de anomalías a los campos que las sustentan.
+4. Introducir cobertura específica para PE y strings, contadores y motivos tipados. Separar errores de limitaciones, conservar su fuente/componente y rechazar estados completos con motivos de cobertura incompleta.
+5. Añadir cuotas por tipo, cota global y restricciones de longitud. Probar específicamente que añadir strings no consume la cuota de imports.
+6. Adaptar el contrato interno de hallazgos para identificar dependencias antes de asignar IDs públicos. No usar IDs inventados o provisionales en el JSON final.
+
+Verificación focalizada: tests de modelos/esquema y `uv run --frozen mypy src`. No se regenerará el esquema 0.2.0 definitivo hasta integrar los consumidores; un cambio parcial del contrato no se declarará una entrega funcional.
+
+### C. Cabeceras, secciones y conservación de imports
+
+Archivos: `src/dissect/extractors/pe.py`, nuevos módulos `pe_layout.py` y `pe_imports.py`; `tests/fixtures/pe_builder.py`, `tests/test_pe.py` y nuevos tests de cabeceras/secciones.
+
+1. Extender el generador sintético para disponer de varias secciones y campos conocidos sin ejecutar ni descargar binarios.
+2. Escribir tests de cabeceras válidas/truncadas, números de máquina desconocidos, timestamps originales y nombres de sección UTF-8 válidos o no decodificables.
+3. Separar reconocimiento de cabeceras, lectura de descriptores y construcción del mapa seguro RVA/offset. Conservar campos comprobados aunque otro componente no pueda interpretarse.
+4. Emitir cabeceras y descriptores con offsets de sus estructuras originales. No confundir `PointerToRawData` declarado con una ubicación comprobada dentro del archivo.
+5. Reutilizar el lector de imports actual, trasladándolo a un módulo enfocado sin perder la preservación de ordinales, bytes originales, tablas retardadas y control de IAT truncada.
+6. Mantener bloqueadas las lecturas dependientes de un mapa ambiguo. Actualizar los tests actuales que asumían que el único hallazgo era `E1`: comprobar contenido y procedencia, no perpetuar un ID que cambia legítimamente al añadir nuevos tipos.
+
+Verificación: suite PE existente y nueva, determinismo con reloj fijo y comprobación de que un valor de timestamp nunca genera una supuesta fecha de compilación.
+
+### D. Entropía y anomalías estructurales
+
+Archivos: nuevos `src/dissect/extractors/pe_sections.py` y `pe_checks.py`, integración en el extractor PE; nuevos `tests/test_entropy.py` y `tests/test_pe_checks.py`.
+
+1. Escribir los vectores matemáticos conocidos: entropía 0, 1 y 8; incluir entradas vacías y rangos truncados antes de implementar el cálculo.
+2. Calcular la medida únicamente sobre intervalos completos de bytes físicos. Redondear según el método aprobado, normalizar cero y rechazar resultados no finitos.
+3. Controlar los bytes acumulados procesados, incluyendo lecturas repetidas de secciones solapadas. El agotamiento de presupuesto no permite medir un prefijo como si fuese la sección entera.
+4. Escribir tests de cada predicado estructural aprobado y después implementarlo con referencias a evidencias originales. Un par solapado se emite una sola vez; los intervalos vacíos no se consideran solapamientos.
+5. No interpretar warnings genéricos como anomalías concretas. Conservarlos como motivos de cobertura incompleta, sin copiar mensajes arbitrarios del parser.
+
+Verificación: valores matemáticos, límites y referencias válidas; ausencia de campos o reglas que conviertan entropía/flags en un veredicto de malware.
+
+### E. Exports fieles a las tablas
+
+Archivos: nuevo `src/dissect/extractors/pe_exports.py`, integración en `pe.py`; fixtures y nuevo `tests/test_exports.py`.
+
+1. Crear fixtures de EAT y tablas de nombres/ordinales: símbolo con nombre, solo ordinal, aliases, hueco cero y forwarder.
+2. Escribir pruebas fallidas de índices fuera de rango, suma ordinal fuera de 32 bits, contadores excesivos, terminadores ausentes y nombres corruptos.
+3. Recorrer estructuras con límites de entradas examinadas, no solo de resultados encontrados. Conservar la ubicación de la entrada EAT y el destino declarado como datos diferentes.
+4. Conservar todos los nombres originales que se hayan podido validar dentro de las cuotas. Si la asociación está incompleta, marcar `names_status=incomplete`, sin afirmar que no existe nombre.
+5. Validar forwarders dentro del directorio; nunca cargar ni buscar la DLL de destino. Limitar también la memoria usada al acumular aliases y la representación serializada de una evidencia individual.
+
+Verificación: cada salida se contrasta con los bytes del fixture; ninguna entrada EAT se etiqueta como función ejecutada ni se completa mediante diccionarios de ordinales.
+
+### F. Strings estáticas independientes
+
+Archivos: nuevo `src/dissect/extractors/strings.py`, integración posterior del registro; nuevo `tests/test_strings.py`.
+
+1. Escribir primero casos de ASCII y UTF-16LE restringido en ambos alineamientos, cuatro caracteres exactos, secuencias cortas, EOF, repeticiones y datos sin texto reconocido.
+2. Implementar barridos acotados que no materialicen todas las coincidencias antes de aplicar cuotas. Intercalar candidatos por offset y codificación de forma determinista.
+3. Probar y aplicar el límite de 1.024 caracteres con prefijo explícito, sin añadir caracteres al texto observado ni inventar la longitud total si no se ha contado.
+4. Hacer verificable la equivalencia entre texto, bytes originales, codificación y longitud. No añadir RVA/sección ni interpretar semánticamente URLs/rutas.
+5. Probar que un PE malformado puede conservar strings válidas como hechos literales sin cambiar el tipo desconocido por una conjetura.
+
+Verificación: suite de strings, consumo de cuotas y conservación exacta de bytes. Quedan fuera decodificación Base64/XOR, Unicode completo y emulación.
+
+### G. Ensamblado, presupuestos e integración 0.2.0
+
+Archivos: `src/dissect/analysis.py`, `extractors/base.py`, nuevo `evidence/collector.py`, `evidence/models.py`, `evidence/schema.py`, `runner.py`, `worker.py`, `errors.py`, `__init__.py`, `pyproject.toml` y `uv.lock`; tests de análisis, presupuestos, runner, worker y CLI.
+
+1. Escribir pruebas de agregación independientes de la cantidad de hallazgos: completo vacío, parcial sin hallazgos, PE fallido con strings completas, y todas las fuentes bloqueadas.
+2. Introducir el registro cerrado `pe`/`strings` y un recolector que admita hallazgos bajo presupuestos antes de acumular una salida demasiado grande. Mantener el orden acordado y reservar espacio para explicar omisiones.
+3. Resolver dependencias internas a IDs finales solo para hechos conservados. Probar que descartar una sección por presupuesto nunca deje una entropía o anomalía citándola.
+4. Aplicar cuotas globales/por tipo y límites de metadatos; comprobar tanto muchos hallazgos pequeños como una evidencia grande con aliases. Si no cabe el informe mínimo, emitir un error sin JSON truncado.
+5. Integrar las nuevas coberturas y motivos, actualizar las expectativas de fuentes del launcher y verificar hashes, tamaño, límites, estado y código de salida del worker.
+6. Añadir error identificable de protocolo incompatible y tests frente a 0.1.0. Cambiar coherentemente paquete, contrato e imagen esperada a 0.2.0, actualizando el lockfile con uv sin actualizar dependencias de forma incidental.
+7. Regenerar el JSON Schema activo y verificarlo; conservar intacto el archivo histórico. Actualizar pruebas de CLI y paquete para el nuevo contrato, sin eliminar las garantías que ya verificaban.
+
+Verificación: suite unitaria completa, mypy, Ruff y comprobación del esquema. No considerar terminada la integración mientras algún consumidor siga esperando solo imports o el esquema 0.1.0.
+
+### H. Docker, CI, documentación y demostración
+
+Archivos: `compose.yaml`, `docker/Dockerfile` si requiere adaptar empaquetado, `.github/workflows/ci.yml`, `tests/integration/test_docker.py`, fixtures, `README.md`, `docs/evidence-schema.md`, `samples/README.md` y `AGENTS.md`.
+
+1. Apuntar build, launcher, Compose y CI a `dissect-worker:0.2.0`; no modificar controles de red, privilegios, montajes ni recursos. No borrar la imagen anterior.
+2. Ampliar el recorrido real CLI -> worker -> JSON con los tipos nuevos y un caso parcial; repetir las pruebas de aislamiento y timeout que ya existen.
+3. Mantener comprobaciones de Windows/Linux en CI, pero no atribuir a esta rama los resultados verdes anteriores de `master`. El push y el PR requieren autorización explícita.
+4. Actualizar documentación de contrato, códigos de salida y límites. Indicar que el comando sigue siendo de consola y que la web y las explicaciones narrativas aún no existen.
+5. Generar dos entradas sintéticas nuevas, sin sobrescribir archivos: una demostración de hechos nuevos y otra de limitación/abstención. Ejecutar la CLI real aislada y mostrar exclusivamente los resultados obtenidos.
+6. Revisar el diff final, mantener commits convencionales acotados y cerrar con explicación de producto: qué puede hacer ahora, motivo/fundamento de cada cambio, qué prepara después y qué sigue sin estar disponible.
+
+Comprobaciones finales previstas:
+
+```text
+uv run --frozen ruff format --check .
+uv run --frozen ruff check .
+uv run --frozen mypy src
+uv run --frozen mypy --platform linux src
+uv run --frozen pytest -m "not docker"
+uv run --frozen python -m dissect.evidence.schema --check
+uv build
+docker compose config --quiet
+docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .
+uv run --frozen pytest -m docker
+```
+
+En el workspace Windows actual se usará `.bootstrap/Scripts/uv.exe` donde uv no esté en el PATH. Una comprobación no ejecutada se declarará pendiente, y cualquier fallo se investigará sin relajar las condiciones para aparentar éxito.
+
+### Condición de cierre
+
+La fase solo se considerará implementada cuando el nuevo contrato y todos sus consumidores estén integrados, pasen las verificaciones ejecutables disponibles y se haya demostrado el comportamiento real de éxito y abstención. La validación remota se informa por separado y solo tras observar su ejecución. Este plan no autoriza web, nuevas integraciones, publicación de paquetes, releases ni cambios en políticas de seguridad.
