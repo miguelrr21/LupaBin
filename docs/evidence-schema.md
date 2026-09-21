@@ -1,6 +1,32 @@
-# Dissect: diseño inicial y contrato de evidencias
+# Dissect: contrato de evidencias
 
-Estado: diseño y plan de implementación aprobados por el usuario el 20 de septiembre de 2026. Este documento no implica que todas las verificaciones se hayan ejecutado; consultar los resultados de la entrega.
+## Contrato activo 0.2.0
+
+La Fase 1A amplía el contrato inicial. El esquema activo se genera desde `src/dissect/evidence/models.py` en `docs/evidence-schema.json`; el anterior se conserva sin cambios en `docs/schemas/0.1.0.json`. No hay conversión automática entre versiones. La CLI y la imagen esperada usan 0.2.0.
+
+El diseño y los límites completos están en [Fase 1A](superpowers/specs/2026-09-20-static-evidence-design.md). El resto de este documento conserva el diseño histórico de la primera entrega; sus campos y reglas 0.1.0 no sustituyen los de esta sección.
+
+| Campo | Contrato actual |
+| --- | --- |
+| `schema_version` | Literal `0.2.0`; versiones distintas se rechazan. |
+| `sample` | Hashes, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. |
+| `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`. |
+| `extractor_runs` | Fuentes `pe`/`strings`, versión y componentes tipados con cobertura y contadores. |
+| `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
+| `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
+
+Cada evidencia tiene `id`, `source`, `component`, `kind`, payload tipado, intervalo real `location`, `confidence=observed` y referencias de procedencia. Las direcciones meramente declaradas se guardan en el payload, no como offsets comprobados. Los IDs son locales al informe y pueden cambiar entre versiones.
+
+Las entropías indican método, bytes medidos y sección de origen. El modelo verifica que sus intervalos coincidan; los tests verifican los cálculos. Las anomalías deben estar respaldadas por los valores de las cabeceras/secciones que citan, no solo por IDs existentes. Los exports conservan símbolos, nombres/ordinales y forwarders sin resolver DLLs. Las strings conservan el texto exacto y bytes, con repertorio ASCII imprimible explícito para ASCII/UTF-16LE.
+
+La cobertura de un componente es `complete`, `partial` o `blocked`. Un extractor completado puede tener cero hallazgos. El estado global es `completed` si ambos completan, `failed` si ambos quedan bloqueados y `partial` en los otros casos. Si falla la infraestructura antes de validar un informe, se emite un error separado; no se fabrica un informe. El análisis de bytes literales puede conservar resultados aunque falle PE, sin afirmar soporte de su formato.
+
+Un `completed` no es un veredicto de seguridad. El timestamp de cabecera es un entero declarado, no fecha de compilación acreditada; la entropía no demuestra empaquetado y una URL no demuestra una conexión. El JSON Schema comprueba estructura; las relaciones entre hechos también se validan mediante Pydantic. Ninguna de estas comprobaciones garantiza veracidad absoluta ante un parser comprometido.
+
+## Diseño histórico de la primera entrega (0.1.0)
+
+Estado histórico: diseño y plan aprobados por el usuario el 20 de septiembre de 2026. Las secciones siguientes se conservan como antecedentes; consultar arriba el contrato activo.
 
 ## Objetivo y alcance
 
