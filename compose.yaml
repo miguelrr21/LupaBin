@@ -1,0 +1,28 @@
+services:
+  worker:
+    image: dissect-worker:0.1.0
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    pull_policy: never
+    user: "65532:65532"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1
+    pids_limit: 64
+    ipc: none
+    ulimits:
+      nofile:
+        soft: 64
+        hard: 64
+      core: 0
+    logging:
+      driver: none
+    stdin_open: true
+    tty: false
+    restart: "no"
