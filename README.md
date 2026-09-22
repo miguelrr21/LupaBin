@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
 ## Estado y alcance
 
-Fase 1A, contrato 0.2.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales y cadenas literales, mediante CLI JSON y worker Docker. No ejecuta ni emula la muestra. No incluye todavía informes didácticos completos, web, LLM, VirusTotal, YARA, capa ni desofuscación.
+Fase 1B, contrato 0.3.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales y coincidencias YARA, mediante CLI JSON y worker Docker. No ejecuta ni emula la muestra. No incluye todavía informes didácticos completos, web, LLM, VirusTotal, capa ni desofuscación.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -24,7 +24,7 @@ Desde la raíz del repositorio, con una entrada local disponible:
 
 ```text
 uv sync --frozen
-docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .
+docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .
 uv run --frozen dissect analyze "ruta/al/archivo.exe" --json
 ```
 
@@ -47,9 +47,9 @@ El generador no sobrescribe archivos existentes. Consulta [la procedencia de los
 
 La salida es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
 
-- `completed`: ambos extractores completaron su cobertura declarada; no es un veredicto de seguridad.
+- `completed`: los tres extractores completaron su cobertura declarada; no es un veredicto de seguridad.
 - `partial`: una parte se revisó, pero existen componentes bloqueados, errores u omisiones. Puede no haber hallazgos.
-- `failed`: ambos extractores quedaron bloqueados, o la infraestructura no pudo producir un informe validado.
+- `failed`: los tres extractores quedaron bloqueados, o la infraestructura no pudo producir un informe validado.
 
 La cobertura está en `extractor_runs[].components`, con contadores y estados `complete`, `partial` o `blocked`. `extractor_errors` describe fallos; `limitations` describe cuotas, truncamientos explícitos y warnings. Cero resultados con cobertura completa no equivale a un error ni demuestra seguridad.
 
@@ -63,14 +63,34 @@ También se acotan secciones (96), entradas EAT (5.000), asociaciones de nombres
 
 Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, sin borrar las cabeceras y descriptores comprobados. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
 
-La CLI 0.2.0 exige el esquema 0.2.0 del worker; un protocolo distinto produce `incompatible_worker`. El esquema 0.1.0 se conserva en `docs/schemas/0.1.0.json`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
+La CLI 0.3.0 exige el esquema 0.3.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 y 0.2.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
+
+Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' dissect-worker:0.3.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
+
+## Qué aporta YARA
+
+El catálogo propio incluye cuatro reglas: texto del stub DOS, presencia conjunta de tres nombres de APIs, marcadores `RSDS`/`.pdb` y el marcador sintético `DISSECT PRACTICE`. Ninguna identifica una familia ni prueba ejecución, imports, inyección o actividad de red.
+
+Cada `yara_match` contiene regla, namespace, revisión, hashes de fuente/conjunto, versiones observadas e instancias con offsets y bytes originales. Su `location` global es nula porque una regla puede depender de varios intervalos; consulta `data.instances`. `yara_context` identifica el catálogo incluso cuando no hay coincidencias.
+
+El motor nativo corre en un hijo dentro del worker. Usa solo el buffer recibido, sin rutas, PIDs ni reglas externas. Los límites iniciales son 5 segundos de matching, 10 segundos de proceso, 32 reglas publicadas, 16 instancias por regla y 256 bytes por instancia. Los bytes o apariciones omitidos se marcan como parciales. Un timeout, warning nativo o respuesta inválida descarta los matches YARA, conservando PE/strings cuando el padre sigue operativo.
+
+Para probar representación limitada con datos sintéticos:
+
+```text
+uv run python -m tests.fixtures.pe_builder --scenario yara-limited --output samples/yara-limited.bin
+uv run --frozen dissect analyze samples/yara-limited.bin --json
+```
+
+El fixture contiene veinte apariciones ASCII del marcador. Con los límites predeterminados el informe debe conservar dieciséis e indicar cuatro omitidas, con salida 3. `--scenario demo` ofrece un positivo y `--scenario basic` un caso sin coincidencias de este catálogo. No ejecutes ninguno como programa.
 
 ## Arquitectura
 
 ```text
 CLI -> lectura acotada + hashes -> Docker sin red
     -> PE (cabeceras, secciones, entropía, imports, exports, anomalías)
-    -> cadenas literales independientes -> presupuesto y modelos Pydantic
+    -> cadenas literales independientes -> hijo YARA con catálogo propio
+    -> presupuesto y modelos Pydantic
     -> validación de respuesta en el host -> JSON
 ```
 
@@ -90,8 +110,9 @@ uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
 uv run --frozen python -m dissect.evidence.schema --check
 uv build
+uv run --frozen python -m tests.check_yara_distribution
 docker compose config --quiet
-docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .
+docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .
 uv run --frozen pytest -m docker
 ```
 

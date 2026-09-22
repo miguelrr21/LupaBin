@@ -22,19 +22,36 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 
 ## Contrato y desarrollo
 
-- Consultar `docs/evidence-schema.md` para el contrato activo 0.2.0 y sus antecedentes 0.1.0. El diseño y plan aprobados de la Fase 1A están en `docs/superpowers/specs/2026-09-20-static-evidence-design.md`; no confundir alcance previsto de fases posteriores con funcionalidad disponible.
-- La propuesta de la Fase 1B está en `docs/superpowers/specs/2026-09-20-yara-evidence-design.md`: el alcance está aceptado, pero el diseño escrito requiere revisión antes del plan de implementación. No presentar YARA como instalado o disponible por la existencia de ese documento.
+- Consultar `docs/evidence-schema.md` para el contrato activo 0.3.0 (Fase 1B, con YARA) y sus antecedentes 0.2.0/0.1.0. El diseño y plan aprobados de la Fase 1A están en `docs/superpowers/specs/2026-09-20-static-evidence-design.md`; no confundir alcance previsto de fases posteriores con funcionalidad disponible.
+- La Fase 1B (YARA) ya está implementada e integrada en la CLI: catálogo propio de cuatro reglas en `src/dissect/rules/yara/`, evaluado en un subproceso aislado (`src/dissect/yara_worker.py`) dentro del worker Docker. El diseño y su plan de implementación (secciones 1–12) están en `docs/superpowers/specs/2026-09-20-yara-evidence-design.md`. No aceptar reglas arbitrarias por CLI ni feeds externos: añadir contenido requiere un cambio revisado del catálogo del repositorio (ver `CONTRIBUTING.md`).
 - La Fase 1A separa PE y strings, valida cobertura por componente y conserva bytes originales. No inferir fechas de compilación, empaquetado, ejecución o conexiones a partir de esos hechos. Las entropías citan secciones; las anomalías deben satisfacer su predicado sobre los campos citados.
 - Stack acordado: Python 3.12, uv, Pydantic v2, Typer y pefile para la primera entrega.
 - Mantener datos tipados, esquema versionado, IDs locales al informe, procedencia verificable y fallos por extractor explícitos.
 - Escribir pruebas negativas, especialmente para abstención, datos malformados, límites y resultados incompletos.
 - No presentar el determinismo de los hechos como igualdad de timestamps ni prometer resultados completos cuando vence un timeout.
 - Antes de dar una entrega por terminada, ejecutar las verificaciones disponibles y revisar el diff. Distinguir resultados locales de CI remota; un workflow escrito no es CI en verde.
-- Verificaciones locales configuradas y ejecutadas: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src`, `uv run mypy --platform linux src`, `uv run pytest -m "not docker"`, `uv run python -m dissect.evidence.schema --check`, `uv build` y `docker compose config --quiet`.
-- Las pruebas reales de aislamiento son `uv run pytest -m docker`, después de `docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .`. Exigen motor Docker Linux e imagen local; no deben omitirse silenciosamente si se solicitan.
+- Verificaciones locales configuradas y ejecutadas: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src`, `uv run mypy --platform linux src`, `uv run pytest -m "not docker"`, `uv run python -m dissect.evidence.schema --check`, `uv build`, `uv run python -m tests.check_yara_distribution` y `docker compose config --quiet`.
+- Las pruebas reales de aislamiento son `uv run pytest -m docker`, después de `docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .`. Exigen motor Docker Linux e imagen local; no deben omitirse silenciosamente si se solicitan.
 - La CLI de fixtures es `uv run python -m tests.fixtures.pe_builder --output samples/practice.bin`; crea datos sintéticos y rechaza sobrescrituras. Nunca ejecutar el archivo generado.
 - En este workspace Windows uv está instalado de forma aislada en `.bootstrap/Scripts/uv.exe`; no asumir que está disponible globalmente. El Python del proyecto está en `.venv`.
 - No publicar ni hacer push sin autorización. Mantener commits pequeños y convencionales.
+
+## Navegación eficiente (no releer el repo entero)
+
+El repo ya está mapeado abajo. No listar recursivamente `src/` o `docs/` al empezar una tarea: ir directo al archivo relevante, y si hace falta más contexto, leer solo ese subárbol.
+
+- `src/dissect/extractors/` — un extractor por responsabilidad: `pe.py` (orquestador), `pe_imports.py`, `pe_exports.py`, `pe_sections.py`, `pe_layout.py`, `pe_checks.py`, `strings.py`, `base.py` (contrato común).
+- `src/dissect/evidence/` — esquema de evidencias: `models.py`, `facts.py`, `primitives.py`, `relations.py`, `collector.py`, `schema.py`.
+- `src/dissect/ingest/reader.py` — lectura de la muestra de entrada.
+- `src/dissect/runner.py`, `worker.py`, `transport.py` — aislamiento y ejecución del worker sin red (nivel superior de `src/dissect/`, no dentro de `ingest/`).
+- `src/dissect/cli.py`, `analysis.py`, `errors.py` — entrypoint, orquestación y errores.
+- `docs/evidence-schema.md` — contrato activo 0.3.0 (Fase 1B, con YARA); `docs/schemas/0.1.0.json` y `0.2.0.json` son históricos.
+- `src/dissect/rules/` — catálogo YARA propio: `catalog.py` (carga/valida), `process.py` (lanza el subproceso), `models.py`, `yara/*.yar` + `manifest.json`. `src/dissect/yara_worker.py` es el entrypoint aislado del hijo.
+- `docs/superpowers/specs/` — diseños aprobados por fase; leer solo el spec de la fase en la que se trabaja, no todas.
+- `docs/decisions/` — ADRs puntuales; consultar solo si la tarea toca esa decisión.
+- `tests/` — espeja `src/dissect/` módulo a módulo (`test_pe.py` ↔ `extractors/pe.py`, `test_evidence.py` ↔ `evidence/`, etc.); `tests/fixtures/pe_builder.py` genera los binarios sintéticos, `tests/integration/` son las pruebas `-m docker`.
+
+Para localizar un símbolo (función/clase) o sus llamadores, usar búsqueda dirigida (grep/AST) en vez de abrir archivo por archivo. Para "qué se rompe si cambio X", hacer un barrido de referencias acotado al símbolo, no una relectura completa del árbol.
 
 ## Cierre de cada entrega: explicar el producto
 
