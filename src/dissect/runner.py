@@ -7,11 +7,13 @@ from pydantic import ValidationError
 
 from dissect.errors import DissectError
 from dissect.evidence.models import Limits, Report
+from dissect.evidence.yara import validate_matches
 from dissect.ingest.reader import from_bytes
+from dissect.rules.catalog import CatalogError, load_catalog
 from dissect.transport import Completed as Completed
 from dissect.transport import DockerCLI, Transport
 
-IMAGE = "dissect-worker:0.2.0"
+IMAGE = "dissect-worker:0.3.0"
 LABEL = "org.dissect.analysis"
 
 
@@ -104,7 +106,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         try:
             envelope = json.loads(response.stdout)
             if isinstance(envelope, dict) and isinstance(envelope.get("schema_version"), str):
-                if envelope["schema_version"] != "0.2.0":
+                if envelope["schema_version"] != "0.3.0":
                     raise DissectError("incompatible_worker")
             report = Report.model_validate_json(response.stdout)
         except (ValidationError, ValueError, RecursionError):
@@ -118,8 +120,19 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
             blob.sample.size,
         ) or report.analysis.limits != limits:
             raise DissectError("invalid_worker_output")
-        if tuple(run.source for run in report.extractor_runs) != ("pe", "strings"):
+        if tuple(run.source for run in report.extractor_runs) != ("pe", "strings", "yara"):
             raise DissectError("invalid_worker_output")
+        context = report.yara_context
+        if context is not None and context.catalog is not None:
+            try:
+                if context.catalog != load_catalog(limits.yara).info:
+                    raise DissectError("incompatible_worker")
+                matches = tuple(f.data for f in report.evidence if f.kind == "yara_match")
+                validate_matches(matches, context, len(blob.data), limits.yara, blob.data)
+            except CatalogError:
+                raise DissectError("incompatible_worker") from None
+            except ValueError:
+                raise DissectError("invalid_worker_output") from None
         return report
     finally:
         await remove_owned_container(transport, name)

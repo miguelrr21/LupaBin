@@ -20,7 +20,7 @@ def require_docker():
         info = await client.run(("info", "--format", "{{.OSType}}"))
         assert info.code == 0 and info.stdout.strip() == b"linux", "Linux Docker is required"
         image = await client.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
-        assert image.code == 0, "Build dissect-worker:0.2.0 before integration tests"
+        assert image.code == 0, "Build dissect-worker:0.3.0 before integration tests"
 
     asyncio.run(check())
 
@@ -47,13 +47,63 @@ def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
     result = CliRunner().invoke(app, ["analyze", str(path), "--json"])
     assert result.exit_code == (3 if corrupt else 0)
     report = json.loads(result.stdout)
-    assert report["schema_version"] == "0.2.0"
+    assert report["schema_version"] == "0.3.0"
     kinds = {fact["kind"] for fact in report["evidence"]}
     assert {"pe_header", "section", "entropy", "string"} <= kinds
     assert ("header_anomaly" in kinds) == corrupt
+    assert "yara_match" in kinds
+    assert report["yara_context"]["catalog"]["ruleset_sha256"]
     if not corrupt:
         assert "export" in kinds
     assert result.stderr == ""
+
+
+def test_yara_limited_report_in_real_container():
+    data = build_pe() + b"DISSECT PRACTICE\0" * 20
+    report = asyncio.run(run_isolated(data, Limits(), DockerCLI()))
+    assert report.analysis.status == "partial"
+    match = next(f for f in report.evidence if f.kind == "yara_match")
+    assert len(match.data.instances) == 16
+    assert match.data.omitted_instances == 4
+    assert any(r.code == "yara_instance_limit" for r in report.limitations)
+
+
+def test_yara_child_timeout_preserves_other_sources_in_container():
+    script = (
+        "from dissect.rules.process import scan_child\n"
+        "from dissect.transport import run_command\n"
+        "import dissect.extractors.yara as adapter\n"
+        "async def delayed(data, limits, catalog):\n"
+        "    async def execute(executable, args, **kwargs):\n"
+        "        kwargs['timeout'] = 0.1\n"
+        "        command = ('-c', 'import time; time.sleep(60)')\n"
+        "        return await run_command(executable, command, **kwargs)\n"
+        "    return await scan_child(data, limits, catalog, execute=execute)\n"
+        "adapter.scan_child = delayed\n"
+        "from dissect.worker import main\n"
+        "raise SystemExit(main())\n"
+    )
+
+    class TimeoutChildDocker(DockerCLI):
+        async def run(self, args, **kwargs):
+            if args[0] == "create":
+                index = next(i for i, value in enumerate(args) if value.startswith("sha256:"))
+                args = (
+                    *args[:index],
+                    "--entrypoint=/app/.venv/bin/python",
+                    args[index],
+                    "-c",
+                    script,
+                    *args[index + 1 :],
+                )
+            return await super().run(args, **kwargs)
+
+    report = asyncio.run(run_isolated(build_pe(), Limits(), TimeoutChildDocker()))
+    assert report.analysis.status == "partial"
+    assert any(f.kind == "import" for f in report.evidence)
+    assert any(f.kind == "string" for f in report.evidence)
+    assert not any(f.kind == "yara_match" for f in report.evidence)
+    assert any(r.code == "yara_timeout" for r in report.extractor_errors)
 
 
 def test_container_runtime_restrictions():
