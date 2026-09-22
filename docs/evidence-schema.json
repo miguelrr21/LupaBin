@@ -1743,7 +1743,7 @@
       "additionalProperties": false,
       "properties": {
         "catalog": {
-          "const": "dissect-xor-cribs-v1",
+          "const": "dissect-xor-cribs-v2",
           "title": "Catalog",
           "type": "string"
         },

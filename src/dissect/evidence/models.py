@@ -12,6 +12,7 @@ from dissect.evidence.primitives import (
     NonNegative,
     Source,
     Status,
+    canonical_key,
 )
 from dissect.evidence.primitives import Limits as Limits
 from dissect.evidence.primitives import Location as Location
@@ -229,7 +230,17 @@ class Report(Model):
                 degrees[fact.id] = len(refs)
                 for ref in refs:
                     cited = facts.get(ref)
-                    if cited is None or cited.kind != "string" or cited.location != span:
+                    if fact.transform.key_hex is not None:
+                        if (
+                            cited is None
+                            or cited.kind != "decoded_string"
+                            or cited.transform.key_hex is None
+                            or cited.provenance.evidence_ids
+                            or canonical_key(bytes.fromhex(cited.transform.key_hex))
+                            != canonical_key(bytes.fromhex(fact.transform.key_hex))
+                        ):
+                            raise ValueError("a reused XOR key must cite the decoding that set it")
+                    elif cited is None or cited.kind != "string" or cited.location != span:
                         raise ValueError("a decoding must cite the string at its own location")
                     children[ref].append(fact.id)
                 continue

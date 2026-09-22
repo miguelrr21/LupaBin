@@ -209,7 +209,7 @@ class DecodedStringData(Model):
 
 
 class XorAnchor(Model):
-    catalog: Literal["dissect-xor-cribs-v1"]
+    catalog: Literal["dissect-xor-cribs-v2"]
     crib: Annotated[str, Field(min_length=5, max_length=64)]
     crib_offset: NonNegative
 
@@ -239,8 +239,10 @@ class DecodedStringEvidence(Model):
         if self.transform.name == "xor-repeating-v1":
             if self.component != "decode_xor" or self.anchor is None:
                 raise ValueError("an XOR decoding belongs to decode_xor and needs its anchor")
-            if self.provenance.evidence_ids:
-                raise ValueError("an XOR decoding derives from raw bytes, not from other facts")
+            if len(self.provenance.evidence_ids) > 1:
+                # empty: the anchor verified the key; one: the XOR decoding that
+                # established the same key elsewhere (checked against the report)
+                raise ValueError("an XOR decoding cites at most the decoding that set its key")
             if self.location.length != len(self.data.raw_hex) // 2:
                 raise ValueError("XOR preserves length; region and decoded bytes must match")
             end = self.anchor.crib_offset + len(self.anchor.crib)
