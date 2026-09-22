@@ -1,6 +1,6 @@
 # Fase 1B: coincidencias YARA trazables
 
-Estado: alcance aceptado; diseño escrito pendiente de revisión. No se han instalado dependencias ni implementado YARA. El contrato ejecutable continúa en 0.2.0.
+Estado: diseño de las secciones 1–11 aprobado por el usuario. El plan de implementación de la sección 12 está pendiente de aprobación. No se han instalado dependencias ni implementado YARA; el contrato ejecutable continúa en 0.2.0.
 
 ## 1. Propósito y límites del producto
 
@@ -175,4 +175,127 @@ Referencias primarias consultadas: [API de yara-python](https://yara.readthedocs
 
 Esta fase prepara el contenido didáctico sobre coincidencias y, más adelante, integraciones de capacidades que respeten la prohibición de emulación. No introduce todavía capa, FLOSS, LLM ni web.
 
-Este documento requiere aprobación antes de preparar y autorizar el plan de implementación. La rama `feat/yara-evidence` parte de la Fase 1A local; no se hará push, merge ni publicación sin autorización explícita.
+El diseño de las secciones 1–11 está aprobado. La rama `feat/yara-evidence` parte de la Fase 1A local; no se hará push, merge ni publicación sin autorización explícita.
+
+## 12. Plan de implementación para revisión
+
+Estado: pendiente de aprobación. Ejecución propuesta: secuencial en esta sesión, con pruebas primero, commits locales acotados y demostración real al finalizar. No se usarán subagentes sin autorización expresa. Los archivos y comandos descritos a continuación son objetivos del plan, no resultados ya obtenidos.
+
+La skill `writing-plans` no está disponible; este plan se prepara directamente a partir del diseño aprobado y del código existente. Tampoco hay herramientas MCP de context-mode conectadas. La revisión realizada será manual, no se presentará como revisión independiente ni se le atribuirá una puntuación de review-loop.
+
+### A. Línea base y preservación de versiones
+
+Archivos: esquema actual y futuro `docs/schemas/0.2.0.json`; pruebas de esquema.
+
+1. Confirmar estado Git y ejecutar la suite existente antes de cambiar contratos o dependencias.
+2. Generar y verificar una copia exacta del esquema 0.2.0 con el exportador actual. Mantener el archivo histórico 0.1.0 intacto.
+3. Registrar el contexto/motor Docker usado por las verificaciones y comprobar las imágenes existentes; no borrar ni sobrescribir las etiquetas 0.1.0/0.2.0.
+
+Aceptación: punto de partida comprobado, esquema histórico preservado y ningún resultado de la fase anterior atribuido a la nueva integración.
+
+### B. Catálogo y empaquetado de reglas
+
+Archivos: nuevos recursos en `src/dissect/rules/yara/`, manifiesto JSON, cargador `src/dissect/rules/catalog.py`, `.gitattributes`; nuevos tests de catálogo y empaquetado.
+
+1. Escribir primero pruebas fallidas de inventario, IDs/namespaces duplicados, archivo ausente, regla extra, ruta insegura, enlaces fuera del recurso y límites de fuente/manifiesto.
+2. Implementar modelos tipados y carga mediante recursos del paquete. No depender del cwd ni permitir rutas aportadas por la muestra.
+3. Añadir las cuatro reglas propias aprobadas, con descripciones neutrales y metadatos de licencia. Un archivo equivale a una regla y un namespace único.
+4. Calcular hashes de fuente y digest canónico del catálogo. Probar que una modificación cambia el digest y que volver a cargar los mismos bytes lo conserva.
+5. Fijar LF solo para los recursos pertinentes mediante atributos de Git, sin cambiar la configuración global del usuario.
+6. Construir wheel y sdist y comprobar que contienen los mismos recursos que la instalación editable. Probar la carga desde fuera del directorio del repo.
+
+Aceptación: catálogo único, reproducible y empaquetado; todavía sin activar YARA en la CLI.
+
+### C. Modelos de coincidencia y protocolo del subproceso
+
+Archivos: nuevos modelos YARA bajo `src/dissect/evidence/` y protocolo interno tipado; tests de contrato.
+
+1. Escribir pruebas fallidas para `yara_match`, contexto, instancias y estados, incluyendo patrones desconocidos, offsets fuera del archivo, longitudes incoherentes y hexadecimal incorrecto.
+2. Definir la ubicación global nula exclusivamente para YARA. Mantener intactos los requisitos de ubicación de los tipos existentes.
+3. Exigir al menos una instancia comprobada por coincidencia publicada. Diferenciar bytes coincidentes de bytes conservados y desconocido de cero.
+4. Definir una respuesta interna con hash/tamaño de muestra, digest de catálogo, versiones observadas opcionales, estados y motivos sanitizados. Nunca publicar stderr crudo del motor.
+5. Preparar validaciones cruzadas de identidad de regla, fuente y catálogo. La verificación de bytes se hará contra el buffer original, sin ejecutar reglas en el host.
+
+Aceptación: payloads y protocolo rechazando datos inconsistentes, sin alterar todavía la versión pública hasta integrar sus consumidores.
+
+### D. Binding y motor nativo acotado
+
+Archivos: `pyproject.toml`, `uv.lock`, adaptador nativo y entrypoint interno del subproceso; tests con reglas y datos sintéticos.
+
+1. Incorporar la versión fijada mediante `uv add yara-python==4.5.4`, manteniendo el resto de dependencias y la política de antigüedad. Verificar las versiones realmente expuestas por el paquete/módulo en vez de asumir su equivalencia.
+2. Probar cada regla con un positivo y un negativo, y la combinación de APIs con cada nombre ausente por separado.
+3. Compilar solo las fuentes del catálogo con `includes=False` y `error_on_warning=True`. No cargar reglas compiladas externas ni escanear rutas o PIDs.
+4. Aplicar `fast=False`, timeout nativo, configuración de patrones/bytes capturados y callbacks de advertencias, módulos y consola.
+5. Probar explícitamente sintaxis inválida, warnings, include, módulo y consola. Un incumplimiento descarta las coincidencias, no se oculta ni se imprime en stdout.
+6. Canonizar resultados y conservar una aparición por patrón antes de repeticiones. Probar truncamiento de bytes e instancias sin fabricar totales desconocidos.
+7. Ante interrupción nativa o política incumplida, devolver un resultado de fallo/incompleto sin matches YARA. El código de muestra nunca se interpreta como instrucciones.
+
+Aceptación: resultados reales del binding sobre fixtures, con procedencia y condiciones de descarte comprobadas. Las pruebas directas del núcleo nativo se limitan a fixtures sintéticos; no sustituyen el aislamiento de la ruta pública.
+
+### E. Ciclo de vida del subproceso dentro de Docker
+
+Archivos: controlador interno del proceso YARA, posible extracción del transporte acotado reutilizable desde `src/dissect/transport.py`; tests de transporte/worker.
+
+1. Escribir primero tests con procesos controlados que simulen demora, salida excesiva, JSON incompleto, salida no exitosa y finalización nativa anómala. No provocar un fallo real de seguridad ni ejecutar muestras.
+2. Iniciar únicamente el intérprete del entorno y el módulo interno conocido, sin shell y sin construir comandos con datos de la muestra.
+3. Enviar bytes por stdin y leer stdout/stderr con límites independientes; aplicar el límite total de diez segundos sin ampliar el límite exterior.
+4. Terminar y recoger solo el hijo creado por esta invocación al fallar o interrumpirse. Verificar que no quedan procesos huérfanos; no usar limpiezas globales de Docker.
+5. Mantener separados el motor nativo y la recolección principal de evidencias. Si se reutiliza código de transporte, conservar las pruebas y contratos del launcher Docker.
+6. Evitar llamadas incompatibles a event loops anidados. Los dobles asíncronos de tests no deberán ejecutar una API síncrona de subproceso sobre un loop ya activo sin la separación correspondiente.
+
+Aceptación: timeout, límites y fallos del hijo se detectan y sanitizan; los resultados PE/strings sobreviven cuando el worker principal continúa operativo.
+
+### F. Integración del extractor y transición 0.3.0
+
+Archivos: nuevo extractor YARA, `analysis.py`, modelos/primitivas/colector, `runner.py`, `worker.py`, errores, versión del paquete y tests de regresión.
+
+1. Escribir pruebas de registro con las tres fuentes y orden PE -> strings -> YARA, incluyendo muestra de tipo desconocido, cero matches y fallo exclusivo de YARA.
+2. Añadir componentes `yara_rules`, `yara_scan` y `yara_evidence`; permitir `examined=null` únicamente donde el nuevo contrato reconoce un total desconocido, sin alterar los contadores existentes.
+3. Integrar `yara_context`, cuotas y cota global de evidencias. No aumentar el presupuesto de salida para evitar un fallo de tests.
+4. Validar la respuesta del hijo antes de incorporar cualquier match: identidad de muestra, catálogo, regla, patrón, intervalos y bytes. Un dato inconsistente invalida YARA, no se arregla por aproximación.
+5. Distinguir escaneo interrumpido, representación recortada y escaneo completo vacío. Los resultados descartados no consumen IDs ni dejan referencias pendientes.
+6. Actualizar coherentemente paquete, esquema, imagen esperada y comprobaciones del launcher a 0.3.0. Verificar que un worker o catálogo incompatible sea rechazado de forma identificable.
+7. Regenerar el JSON Schema activo, preservar los históricos y ejecutar las regresiones PE/strings. No considerar funcional una transición que deje algún consumidor esperando solo dos fuentes.
+
+Aceptación: informe 0.3.0 completo/partial/failed coherente, sin conclusiones de comportamiento añadidas por nombres de reglas.
+
+### G. Docker, CI y pruebas del paquete instalado
+
+Archivos: Compose, Dockerfile si requiere ajuste de recursos empaquetados, workflow existente, tests de integración y empaquetado.
+
+1. Construir `dissect-worker:0.3.0` con carga explícita y verificar su etiqueta en el contexto usado, conservando las imágenes anteriores.
+2. Comprobar el catálogo desde un wheel instalado y desde la imagen; no basta con que los archivos estén presentes en el checkout.
+3. Ejecutar el recorrido real CLI -> worker -> subproceso YARA -> JSON, con positivos, negativos y una representación limitada.
+4. Repetir las comprobaciones de red deshabilitada, usuario no root, raíz de solo lectura, capacidades, recursos y cleanup. El subproceso no justifica relajar controles.
+5. Adaptar la CI Windows/Linux existente a 0.3.0 sin publicar la rama ni atribuirle ejecuciones remotas que no hayan ocurrido. La autorización de push/PR se solicitará aparte.
+6. Si el usuario y el agente observan imágenes diferentes, registrar la discrepancia y los identificadores del motor. No darla por resuelta solo porque pase en una sesión.
+
+Aceptación: verificaciones locales observadas y resultados remotos, si se autorizan, claramente separados.
+
+### H. Demostración y documentación del producto
+
+Archivos: README, contrato de evidencias, guía de contribución, reglas del proyecto y generador/procedencia de fixtures existentes.
+
+1. Documentar las cuatro reglas, su significado exacto, límites y forma de añadir contenido mediante cambios revisados del catálogo; no habilitar reglas arbitrarias por CLI.
+2. Explicar que una coincidencia YARA es una evaluación de regla, no una prueba de ejecución ni un veredicto. Mostrar cómo localizar sus bytes y su fuente de regla.
+3. Generar nuevos fixtures sin sobrescribir archivos y ejecutar tres demostraciones reales: marcador de práctica coincidente, ausencia de coincidencias y más apariciones que la cuota conservada.
+4. Mostrar los IDs, offsets, hashes de reglas y estados obtenidos, sin usar JSON escrito a mano como prueba de funcionamiento.
+5. Guardar commits locales coherentes, revisar el diff y cerrar explicando qué puede hacer ahora el producto, el motivo/fundamento de cada cambio, qué habilita después y qué sigue pendiente.
+
+Comprobaciones finales previstas, usando `.bootstrap/Scripts/uv.exe` si uv no está en el PATH:
+
+```text
+uv run --frozen ruff format --check .
+uv run --frozen ruff check .
+uv run --frozen mypy src
+uv run --frozen mypy --platform linux src
+uv run --frozen pytest -m "not docker"
+uv run --frozen python -m dissect.evidence.schema --check
+uv build
+docker compose config --quiet
+docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .
+docker image inspect --format '{{.Id}}' dissect-worker:0.3.0
+uv run --frozen pytest -m docker
+```
+
+Criterio de cierre: contrato y consumidores integrados, pruebas ejecutadas con resultados observados, recursos empaquetados y demostración de los tres escenarios acordados: coincidencia, escaneo completo sin coincidencias y resultado incompleto. Esta aprobación no incluirá web, capa, FLOSS, LLM, publicación de paquetes, releases ni cambios de configuración global. No se presentará el proceso como review-loop independiente mientras no se haya autorizado y realizado esa revisión.
