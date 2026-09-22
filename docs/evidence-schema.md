@@ -1,8 +1,36 @@
 # Dissect: contrato de evidencias
 
-## Contrato activo 0.3.0
+## Contrato activo 0.4.0
 
-La Fase 1B añade YARA al contrato 0.2.0. La CLI, el paquete y la imagen esperada usan 0.3.0; los esquemas anteriores se conservan en `docs/schemas/`. El esquema activo continúa siendo `docs/evidence-schema.json`, generado desde los modelos. No hay conversión automática de informes ni fallback a un worker antiguo.
+La Fase 2 añade al contrato 0.3.0 una cuarta fuente, `decode`, y el tipo `decoded_string`. La CLI, el paquete y la imagen esperada usan 0.4.0; el esquema 0.3.0 se conserva en `docs/schemas/` junto a los anteriores. No hay conversión automática de informes ni fallback a un worker antiguo. Diseño, mediciones y límites: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
+
+`decoded_string` es la única evidencia con `confidence="inferred"`: afirma que unos bytes, transformados con un algoritmo y unos parámetros exactos, producen un texto. No afirma que el programa realice la transformación ni que el texto tenga significado. Campos:
+
+| Campo | Contenido |
+| --- | --- |
+| `component` | `decode_strings` (Base64/hex) o `decode_xor`. |
+| `location` | Dónde están los bytes codificados. Para Base64/hex coincide con la cadena fuente; para XOR es la región cifrada, de la misma longitud que el texto resultante. |
+| `transform` | `base64-strict-v1`, `hex-strict-v1` o `xor-repeating-v1`; solo XOR lleva `key_hex` (1–8 bytes, en su periodo mínimo, no nula, alineada con el inicio de `location`). |
+| `anchor` | Solo XOR: catálogo `dissect-xor-cribs-v2`, cadena de referencia y su desplazamiento en caracteres dentro del texto. |
+| `provenance.evidence_ids` | Base64/hex: exactamente la cadena fuente. XOR: vacío si la propia ancla verificó la clave; o la única decodificación XOR, verificada por sí misma, que estableció esa misma clave en otro punto de la muestra (reutilización de clave: permite descifrar anclas demasiado cortas para verificar una clave larga por sí solas). |
+| `data` | Mismas reglas de fidelidad que `string`: `text`, `raw_hex` del texto resultante, `characters`, `complete`. |
+
+El modelo rechaza combinaciones incoherentes: XOR sin ancla o con más de una cita, una clave reutilizada que no cite una decodificación XOR autoverificada con la misma clave, Base64/hex con clave o ancla, una cita que no sea la cadena ubicada en los mismos bytes, una ancla que no aparece en su desplazamiento, claves nulas o no canónicas, regiones fuera de la muestra y cuotas superadas por componente.
+
+**Reverificación en el host.** El launcher vuelve a derivar cada `decoded_string` desde el buffer original: Base64/hex desde los bytes de la cadena citada; XOR aplicando la clave a la región, comprobando que la ancla pertenece al catálogo, que su ventana no era ya texto, que la ancla puede verificar ese periodo de clave (o, si la clave es reutilizada, que la decodificación citada tiene la misma clave y se reproduce a su vez) y que un texto declarado completo no continúa más allá de sus límites. Una evidencia que no se reproduce invalida toda la respuesta (`invalid_worker_output`).
+
+Componentes y limitaciones de `decode`:
+
+| Componente | Revisa | Limitaciones propias |
+| --- | --- | --- |
+| `decode_strings` | Todas las cadenas extraídas y completas | `decode_strings_limit` (2.000 resultados) |
+| `decode_xor` | Todas las apariciones de los patrones del catálogo en los bytes | `decode_xor_limit` (256 resultados), `decode_xor_examined_limit` (200.000 apariciones examinadas), `decoded_length_limit` (texto recortado a 1.024 caracteres) |
+
+Los límites efectivos aparecen en `analysis.limits.decode`. Cero decodificaciones con cobertura completa es el caso habitual y no significa nada sobre la muestra. El estado global considera las cuatro fuentes con la regla existente.
+
+## Antecedente: contrato 0.3.0
+
+La Fase 1B añadió YARA al contrato 0.2.0. Su esquema histórico está en `docs/schemas/0.3.0.json`. Esta sección describe esa entrega; sus reglas sobre YARA siguen vigentes en 0.4.0.
 
 El informe incluye las fuentes `pe`, `strings`, `yara` y un `yara_context` tipado con catálogo, hashes de las fuentes y versiones realmente observadas. Una versión nativa que no se pudo obtener queda nula; no se sustituye por la versión esperada. El catálogo propio se distribuye como recurso del paquete y no depende del cwd.
 
@@ -12,7 +40,7 @@ Los componentes YARA son `yara_rules`, `yara_scan` y `yara_evidence`. `examined`
 
 YARA corre en un subproceso dentro del contenedor. Si falla o se interrumpe, no publica coincidencias; se conservan PE/strings si el padre sigue operativo. Si el scan termina pero la representación se acota, las omisiones se declaran en `limitations`, `instances_status` y `omitted_instances`. Cero coincidencias con cobertura completa no es un veredicto de seguridad.
 
-El estado global considera las tres fuentes: completo si todas completan, fallido si todas quedan bloqueadas y parcial en los demás casos. Los límites exteriores no se amplían. El diseño aprobado y el plan están en [Fase 1B](superpowers/specs/2026-09-20-yara-evidence-design.md).
+En 0.3.0 el estado global consideraba tres fuentes: completo si todas completan, fallido si todas quedan bloqueadas y parcial en los demás casos. Los límites exteriores no se amplían. El diseño aprobado y el plan están en [Fase 1B](superpowers/specs/2026-09-20-yara-evidence-design.md).
 
 ## Antecedente: contrato 0.2.0
 

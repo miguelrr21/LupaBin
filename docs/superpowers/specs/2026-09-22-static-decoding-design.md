@@ -1,6 +1,6 @@
 # Fase 2: decodificación estática acotada (Base64/hex/XOR)
 
-Estado: revisión 2 (2026-09-22). La revisión 1 proponía aplicar XOR sobre las cadenas ya extraídas y filtrar con un umbral de ambigüedad `K`; al ejecutarla sobre datos reales resultó estructuralmente errónea (sección 2.2). Esta revisión corrige el enfoque XOR con un método medido sobre 4.092 binarios reales (sección 8). El usuario pidió corregir el problema y continuar la implementación. El contrato ejecutable continúa en 0.3.0 hasta el bloque de integración (sección 11).
+Estado: revisión 2 (2026-09-22), implementada. La revisión 1 proponía aplicar XOR sobre las cadenas ya extraídas y filtrar con un umbral de ambigüedad `K`; al ejecutarla sobre datos reales resultó estructuralmente errónea (sección 2.2). Esta revisión corrige el enfoque XOR con un método medido sobre 4.092 binarios reales (sección 8). El usuario pidió corregir el problema y continuar la implementación. El contrato ejecutable es 0.4.0 (sección 11).
 
 ## 1. Propósito y límites del producto
 
@@ -30,6 +30,7 @@ La revisión 1 aplicaba XOR a las cadenas ya extraídas y aceptaba claves cuyo r
 
 - **Fuerza bruta de claves con puntuación de "parecido a texto"** (enfoque de xortool/bbcrack): exige una puntuación de plausibilidad, que el contrato prohíbe ("no se asignarán probabilidades... sin un método definido").
 - **Confirmar coincidencias débiles con una racha descifrada larga**: medido (sección 8), produce 402 falsos positivos en binarios benignos, porque las claves espurias son texto⊕texto y descifrar texto vecino con ellas sigue dando texto imprimible.
+- **Nivel "débil" con menos bytes verificados** (2–4 bytes no nulos), incluso exigiendo que la clave derivada tenga un byte ≥ 0x80 y que el texto descifrado se extienda: medido en 1.500 archivos (sección 8), entre 52 y 52.119 falsos positivos según la variante. Recurren claves idénticas en decenas de DLL distintas: son estructuras del formato (tablas de nombres), no azar. Un solo byte alto en la clave no basta, porque basta un byte extraño en la ventana.
 - **Modificador `xor` de YARA**: solo admite claves de un byte y acoplaría la decodificación al subproceso YARA.
 - **Encadenar transformaciones** (Base64 sobre un resultado XOR, etc.): ambigüedad combinatoria. Cada `decoded_string` deriva de exactamente una transformación.
 - **FLOSS/emulación**: descartados desde el contrato 0.1.0.
@@ -42,13 +43,13 @@ El extractor `decode` se ejecuta después de `strings` (`pe` → `strings` → `
 
 ### 3.1 Base64 estricto (`base64-strict-v1`)
 
-Se admite una cadena fuente con `complete=true` cuyo texto: tiene longitud múltiplo de 4 y **≥ 12 caracteres**; usa solo el alfabeto estándar con como máximo dos `=` finales; se decodifica con validación estricta; y **se vuelve a codificar exactamente al mismo texto** (rechaza bits de relleno no canónicos, que `base64.b64decode(validate=True)` de Python acepta, p. ej. `"aGVsbG9="`). El resultado debe ser ASCII imprimible con **≥ 4 caracteres distintos**.
+Se admite una cadena fuente con `complete=true` cuyo texto: tiene longitud múltiplo de 4 y **≥ 12 caracteres si termina en `=`, o ≥ 16 si no lleva relleno** (los identificadores de código nunca llevan `=`); usa solo el alfabeto estándar con como máximo dos `=` finales; se decodifica con validación estricta; y **se vuelve a codificar exactamente al mismo texto** (rechaza bits de relleno no canónicos, que `base64.b64decode(validate=True)` de Python acepta, p. ej. `"aGVsbG9="`). El resultado debe ser ASCII imprimible con **≥ 4 caracteres distintos**.
 
 ### 3.2 Hexadecimal estricto (`hex-strict-v1`)
 
-Longitud par **≥ 8**, solo `0-9a-fA-F`; resultado ASCII imprimible con **≥ 4 bytes** y **≥ 4 caracteres distintos**.
+Longitud par **≥ 8**, solo `0-9a-fA-F`, **y no formada solo por dígitos decimales** (un número como `2147483647` es hexadecimal válido); resultado ASCII imprimible con **≥ 4 bytes** y **≥ 4 caracteres distintos**.
 
-Los mínimos de 3.1 y 3.2 provienen de la medición de la sección 8: en 1.500 binarios benignos todos los falsos positivos Base64 tenían exactamente 8 caracteres (identificadores como `fileType`) y todos los hexadecimales eran relleno numérico repetitivo con salidas de ≤ 2 caracteres distintos (`44444444444444` → `DDDDDDD`).
+Los mínimos de 3.1 y 3.2 provienen de dos rondas de medición (sección 8). En la primera (1.500 binarios) todos los falsos positivos Base64 tenían 8 caracteres (identificadores como `fileType`) y todos los hexadecimales eran relleno repetitivo (`44444444444444` → `DDDDDDD`). En la segunda, con el corpus completo, quedaban un identificador de 12 letras sin relleno (`SystemEventW`) y ocho números decimales (`2147483647` → `!GH6G`), que motivan las dos reglas finales.
 
 ### 3.3 XOR anclado por diferenciales (`xor-repeating-v1`)
 
@@ -69,11 +70,15 @@ Procedimiento para cada crib (codificada en ASCII y en UTF-16LE) y cada retardo 
 
 **Por qué no hay umbral de ambigüedad.** La clave no se elige entre candidatas: se deriva de los bytes. Cada resultado es exacto y cualquiera puede reproducirlo con la región, la clave y la crib publicadas. El parámetro `K` de la revisión 1 desaparece.
 
-### 3.4 Catálogo de anclas `dissect-xor-cribs-v1`
+**Reutilización de clave.** Tras la primera pasada, cada clave de periodo ≥ 2 que alguna crib verificó por sí sola se busca en el resto de la muestra, para las cribs que *no* pueden verificar ese periodo solas (p. ej. `http://`, de 7 bytes, con una clave de 8). Se acepta una aparición solo si reproduce la crib completa bajo una clave **idéntica** (salvo la fase) a una ya verificada: una coincidencia casual exige alinear *n* bytes al azar (≤ 256⁻⁷ por posición para la crib más corta). Para no inundar la búsqueda, el diferencial con retardo *p* se usa solo si tiene ≥ 3 bytes no nulos; si no, se busca directamente el texto cifrado de la crib bajo cada rotación de la clave. Se reutilizan como máximo 8 claves distintas. La evidencia resultante **cita en `provenance` la decodificación que estableció la clave**, y el informe y el host comprueban que ambas claves son idénticas. Es el caso habitual en malware: las tablas de cadenas cifradas suelen compartir una sola clave.
+
+### 3.4 Catálogo de anclas `dissect-xor-cribs-v2`
 
 Cadenas neutrales frecuentes en texto de binarios Windows, elegidas por longitud (una crib de *n* bytes solo verifica claves de hasta ~*n*−5 bytes) y no por significado. Encontrarlas **no demuestra ninguna capacidad ni intención**, igual que la regla YARA de nombres de API no demuestra imports ni inyección.
 
 `http://`, `https://`, `This program cannot be run in DOS mode`, `kernel32.dll`, `ntdll.dll`, `advapi32.dll`, `user32.dll`, `ws2_32.dll`, `wininet.dll`, `Software\Microsoft\Windows\CurrentVersion`, `cmd.exe`, `powershell`, `LoadLibrary`, `GetProcAddress`, `VirtualAlloc`, `CreateProcess`, `CreateRemoteThread`, `WriteProcessMemory`, `URLDownloadToFile`, `InternetOpen`, `HttpSendRequest`, `ShellExecute`, `Mozilla/`, `Mozilla/5.0 (Windows NT `, `User-Agent: `, `\AppData\Roaming\`, `SeDebugPrivilege`, `-----BEGIN `.
+
+La versión 2 añade veinte anclas largas para que una cadena aislada pueda verificar claves de hasta 8 bytes: `GetModuleHandle`, `VirtualProtect`, `IsDebuggerPresent`, `CreateToolhelp32Snapshot`, `NtUnmapViewOfSection`, `InternetReadFile`, `HttpOpenRequest`, `RegSetValueEx`, `Content-Type: `, `Content-Length: `, `Accept-Language: `, `HTTP/1.1`, `powershell.exe`, `rundll32.exe`, `cmd.exe /c `, `schtasks /create`, `http://www.`, `https://www.`, `\Microsoft\Windows\` y `C:\Windows\System32`.
 
 El catálogo es código revisado. Un test fija su digest SHA-256 junto a su identificador de versión: cambiar una crib sin cambiar la versión hace fallar la suite. Un test verifica además que cada crib es ASCII imprimible y tiene al menos un retardo con patrón válido en ambas codificaciones.
 
@@ -91,13 +96,13 @@ Se versionan contrato, paquete e imagen como 0.4.0, conservando 0.1.0–0.3.0 en
 - `location`: dónde están **los bytes codificados** en el archivo. Para Base64/hex coincide con la cadena fuente; para XOR es la región cifrada.
 - `transform`: `name` y, solo para XOR, `key_hex` (1–8 bytes, periodo mínimo, no nula, alineada con el inicio de la región).
 - `anchor` (solo XOR): catálogo, crib y desplazamiento en caracteres de la crib dentro del texto.
-- `provenance.evidence_ids`: exactamente la cadena fuente para Base64/hex; vacío para XOR (los bytes y la región bastan, igual que una `string`).
+- `provenance.evidence_ids`: exactamente la cadena fuente para Base64/hex. Para XOR, vacío si la propia ancla verificó la clave; o bien la única decodificación XOR, verificada por sí misma, que estableció esa misma clave (reutilización).
 - `component`: `decode_strings` (Base64/hex) o `decode_xor`.
 - `data`: mismos campos y reglas de fidelidad que `StringData` sobre el texto resultante.
 
-El modelo rechaza combinaciones incoherentes (XOR sin ancla o con procedencia, Base64 con clave, crib que no aparece en el texto en su desplazamiento, longitud de región distinta del resultado XOR, clave no canónica).
+El modelo rechaza combinaciones incoherentes (XOR sin ancla o con más de una cita, Base64 con clave, crib que no aparece en el texto en su desplazamiento, longitud de región distinta del resultado XOR, clave no canónica). El informe completo comprueba además que una clave reutilizada cita una decodificación XOR que no cita a su vez nada y cuya clave es idéntica salvo la fase.
 
-**Reverificación en el host.** Como con las instancias YARA, el host no confía en el worker: vuelve a leer los bytes de cada `decoded_string` en el buffer original y comprueba que la transformación publicada produce exactamente el texto publicado. Una evidencia que no se reproduce invalida la respuesta.
+**Reverificación en el host.** Como con las instancias YARA, el host no confía en el worker: vuelve a leer los bytes de cada `decoded_string` en el buffer original y comprueba que la transformación publicada produce exactamente el texto publicado. Para una clave reutilizada verifica también la decodificación citada. Una evidencia que no se reproduce invalida la respuesta.
 
 ## 5. Reglas de publicación y abstención
 
@@ -123,12 +128,13 @@ Presupuestos del informe:
 | --- | --- |
 | Evidencias `decode_strings` | 2.000 |
 | Evidencias `decode_xor` | 256 |
-| Apariciones de patrón XOR examinadas | 200.000 |
+| Apariciones de patrón XOR examinadas (ambas pasadas) | 200.000 |
+| Claves distintas reutilizadas | 8 |
 | Caracteres por texto descifrado | 1.024 (el límite de cadenas existente) |
 
 Una muestra hostil puede contener millones de apariciones de un patrón para agotar la CPU. El tope de apariciones examinadas convierte ese caso en `decode_xor=partial` con su motivo, en vez de agotar el timeout. Los resultados se ordenan por `(offset, longitud, codificación, clave)` antes de aplicar el tope de evidencias, así que el subconjunto conservado es determinista.
 
-Coste medido: los 8 diferenciales sobre 20 MiB tardan 0,6 s con un pico de 84 MiB; la búsqueda completa cuesta ~0,11 s/MiB (~2,3 s en el peor caso de entrada).
+Coste medido con el catálogo v2: los 8 diferenciales sobre 20 MiB tardan 0,6 s con un pico de 84 MiB; la primera pasada completa sobre 20 MiB cuesta 2,7 s. La reutilización solo se ejecuta si hay claves verificadas (ninguna en los 4.516 archivos benignos, medido con el catálogo v2): con 20 MiB, 3,6 s en total con una clave y 5,7 s con ocho claves de periodos 2 a 8, examinando 7–37 apariciones. Una primera versión usaba el diferencial para todas las cribs y agotaba las 200.000 apariciones en datos aleatorios; de ahí el umbral de 3 bytes no nulos de 3.3.
 
 ## 8. Evidencia empírica
 
@@ -146,25 +152,48 @@ Medido el 2026-09-22 sobre los binarios de `C:\Windows\System32` (4.092 `.dll`/`
 | 5 bytes no nulos + ventana ya-texto | 4.092 | **0** |
 | Ídem + patrones débiles (3–4 bytes) confirmados por racha descifrada ≥ 16 | 4.092 | 402 (descartado) |
 | 5 bytes no nulos + ventana ya-texto, catálogo final de 28 cribs | 4.092 | **0** |
+| Motor definitivo (primera versión, 28 cribs) | 4.516 (todos los archivos) | **0** |
+| Nivel débil: 4 / 3 / 2 bytes no nulos + clave con byte ≥ 0x80 | 1.500 | 61 / 486 / 52.119 (descartado) |
+| Nivel débil + extensión del texto (3 bytes y +4 car. / 2 bytes y +8 car.) | 1.500 | 104 / 4.929 (descartado) |
+| Catálogo v2 (48 cribs) + reutilización de clave, motor definitivo | 4.516 (todos los archivos) | **0** |
 
 La regla de "fragmento de la crib en claro dentro de la ventana" resultó redundante con la de ventana ya-texto y no se incorpora.
 
-**Cobertura XOR** con el catálogo final: cadenas que contienen alguna crib, cifradas con claves aleatorias y plantadas en posiciones aleatorias de 60 DLL reales, 300 pruebas por celda:
+**Cobertura XOR** con el motor definitivo (catálogo v2 + reutilización; `tests/decode_eval.py recall`, semilla `dissect-decode-eval`, 150 pruebas por celda). Los textos son 43 cadenas realistas por categoría escritas sin mirar el catálogo; 10 de ellas (23 %) no contienen ninguna crib y se incluyen a propósito. Cada texto se cifra y se planta en una DLL real, solo o con una segunda cadena bajo la misma clave ("compartida", como en las tablas de cadenas reales). Cuenta como recuperada una región solapada con la clave exacta:
 
-| Clave | ASCII | UTF-16LE |
-| --- | --- | --- |
-| 1 byte, uniforme 1–255 | 79 % | 89 % |
-| 1 byte, ≥ 0x80 (medido con el catálogo inicial de 17 cribs) | 100 % | 100 % |
-| 2 bytes aleatorios | 90 % | 93 % |
-| 3 bytes | 85 % | 99 % |
-| 4 bytes | 81 % | 92 % |
-| 8 bytes | 50 % | 83 % |
+| Clave | ASCII, sola | ASCII, compartida | UTF-16LE, sola | UTF-16LE, compartida |
+| --- | --- | --- | --- | --- |
+| 1 byte, uniforme 1–255 | 62,0 % | 63,3 % | 67,3 % | 74,0 % |
+| 1 byte, ≥ 0x80 | 77,3 % | 78,7 % | 75,3 % | 76,7 % |
+| 2 bytes aleatorios | 68,7 % | 62,0 % | 72,0 % | 73,3 % |
+| 4 bytes | 56,0 % | 76,0 % | 78,0 % | 75,3 % |
+| 8 bytes | 33,3 % | 80,7 % | 57,3 % | 80,0 % |
+| 4 bytes ASCII (tipo contraseña) | 49,3 % | 74,0 % | 63,3 % | 70,7 % |
+| 8 bytes ASCII | 34,0 % | 68,0 % | 52,7 % | 71,3 % |
 
-La pérdida con claves de un byte coincide con los casos en que el texto cifrado sigue siendo texto (sección 5). La pérdida con claves largas proviene de cribs cortas (`http://`, `cmd.exe`) que no pueden verificar tantos bytes de clave. Estas cifras describen cadenas que contienen alguna crib; un texto cifrado sin crib no se encuentra.
+Por categoría, clave de 8 bytes y texto ASCII (el techo es la fracción de textos que contiene alguna crib; n = casos muestreados):
 
-**Base64/hex** en 1.500 archivos (1,1 M de cadenas examinadas con la revisión 1): 23 decodificaciones, todas ruido, que motivaron los mínimos de 3.1/3.2.
+| Categoría | Techo | Sola | Compartida |
+| --- | --- | --- | --- |
+| URL | 100 % | 0,0 % (n=31) | 100 % (n=31) |
+| HTTP | 100 % | 81,2 % (n=16) | 100 % (n=16) |
+| API | 100 % | 71,0 % (n=31) | 100 % (n=37) |
+| DLL | 100 % | 0,0 % (n=13) | 100 % (n=11) |
+| Comando | 67 % | 25,0 % (n=12) | 82,4 % (n=17) |
+| Ruta/registro | 43 % | 31,6 % (n=38) | 41,4 % (n=29) |
+| Sin ancla | 0 % | 0,0 % (n=9) | 0,0 % (n=9) |
 
-El repositorio incluye `tools/decode_eval.py` para repetir estas mediciones sobre cualquier directorio de binarios benignos que aporte quien evalúa; no forma parte del paquete ni de la CI.
+Con clave compartida la cobertura queda en el techo alcanzable (77 % de los textos contiene alguna crib). Con una cadena aislada, una crib de *n* bytes solo verifica claves de hasta ~*n*−5 bytes: `http://` no puede verificar sola una clave de 8, de ahí el 0 % de las URL aisladas. La pérdida con claves de un byte corresponde a los textos sin crib y a las claves que dejan el texto cifrado todavía legible (sección 5). Un texto cifrado sin crib no se encuentra. Estas cifras no son comparables con la tabla de la revisión anterior, que solo usaba textos con crib; las diferencias entre celdas vecinas de menos de ~5 puntos están dentro del ruido de muestreo.
+
+**Base64/hex.** Una decodificación en un binario benigno no es necesariamente un error: los binarios legítimos también contienen texto codificado. Cada resultado se clasificó a mano:
+
+| Ronda | Corpus | Ruido | Decodificaciones auténticas |
+| --- | --- | --- | --- |
+| Reglas de la revisión 1 | 1.500 archivos, 1,1 M de cadenas | 23 (identificadores de 8 letras, relleno repetitivo) | 0 |
+| Mínimos 12/8 y diversidad ≥ 4 | 4.516 archivos, 1,98 GB | 9: `SystemEventW` y ocho números decimales | 4: XML en hexadecimal dentro de `license.rtf` (2), Base64 doble de texto inglés en `globinputhost.dll`, Base64 de un patrón de relleno en `ntoskrnl.exe` |
+| Reglas finales (3.1/3.2), medido | ídem | **0** | las mismas 4 |
+
+El repositorio incluye `tests/decode_eval.py` (`uv run python -m tests.decode_eval`) para repetir estas mediciones sobre cualquier directorio de binarios benignos que aporte quien evalúa; no forma parte del paquete ni de la CI.
 
 ## 9. Pruebas y criterios de aceptación
 
@@ -194,7 +223,8 @@ No introduce capa, FLOSS, web, LLM ni puntuaciones. El motor de glosario sigue p
 Bloques pequeños, cada uno cerrado con `ruff`, `mypy`, suite completa y `schema --check` antes del siguiente, con commit propio:
 
 1. **Hecho**: tipos `Transform` y `DecodedStringEvidence` aislados del contrato 0.3.0.
-2. **Hecho, a endurecer**: Base64/hex sobre cadenas → mínimos y diversidad de la sección 3.
-3. **Sustituido**: XOR de un byte sobre cadenas (revisión 1) → reemplazado por el motor de la sección 3.3 con claves de 1–8 bytes, catálogo, presupuestos y reverificación; modelo actualizado (ancla, reglas por transformación, componente `decode_xor`).
-4. **Herramienta de evaluación** `tools/decode_eval.py` y repetición de las mediciones de la sección 8 con el motor definitivo.
-5. **Integración 0.4.0**: registro de la fuente, colector, límites, esquema, reverificación en el launcher, imagen, CI, documentación y demostración real.
+2. **Hecho**: Base64/hex sobre cadenas, con los mínimos y la diversidad de la sección 3 fijados por medición.
+3. **Hecho**: motor XOR de la sección 3.3 (claves de 1–8 bytes, catálogo, presupuestos, reverificación), que sustituye al XOR de un byte sobre cadenas de la revisión 1.
+4. **Hecho**: herramienta `tests/decode_eval.py` y mediciones de la sección 8 repetidas con el motor definitivo.
+5. **Hecho**: integración 0.4.0 — fuente `decode` en el registro, colector y límites (`analysis.limits.decode`), validación en el informe, reverificación en el launcher, esquema 0.3.0 preservado, imagen `dissect-worker:0.4.0`, CI, documentación, fixture `decode-demo` y pruebas en contenedor real (recorrido completo y una muestra hostil de un millón de patrones que termina en limitación declarada).
+6. **Hecho**: optimización medida — niveles de verificación más débiles probados y descartados por falsos positivos; reutilización de clave con cita a la decodificación que la estableció; catálogo v2 con 20 anclas largas; reglas finales de Base64/hex. Resultado en el corpus completo: 0 falsos positivos XOR, 0 decodificaciones Base64/hex espurias, y cobertura de claves de 8 bytes del 81 % con clave compartida.

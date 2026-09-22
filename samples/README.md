@@ -21,4 +21,10 @@ uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/p
 
 La Fase 1B incorpora `--scenario yara-limited`: parte del PE básico y añade veinte apariciones ASCII de `DISSECT PRACTICE` como datos. Con la cuota predeterminada de dieciséis instancias por regla, el informe indica cuatro omisiones. Para contrastar resultados YARA, `demo` contiene un marcador wide y `basic` no contiene los patrones suficientes para las cuatro reglas incluidas. Ninguno prueba capacidades maliciosas.
 
+La Fase 2 incorpora `--scenario decode-demo`: el PE básico seguido de seis textos de práctica codificados con la biblioteca estándar: uno en Base64, uno en hexadecimal y cuatro cifrados con XOR (clave de 1 byte, clave de 4 bytes, una cadena UTF-16LE con clave de 2 bytes y una URL que reutiliza la clave de 4 bytes; su ancla `http://` es demasiado corta para verificar esa clave por sí sola, así que solo se recupera por reutilización de clave). Los textos usan el dominio reservado `.invalid` y contienen cadenas del catálogo de anclas solo para que el método pueda verificarlos; cifrarlos no los convierte en comportamiento ni imita malware. Las claves usan bytes `>= 0x80` y cada texto cifrado va entre terminadores NUL cifrados, para que el texto descifrado termine exactamente en sus límites.
+
+```text
+uv run python -m tests.fixtures.pe_builder --scenario decode-demo --output samples/decode-demo.bin
+```
+
 El generador exige una ruta nueva y no sobrescribe archivos. Los archivos `.bin`, `.exe` y `.dll` están ignorados por Git. Para analizar el fixture, usa la CLI después de construir y verificar el worker Docker; no lo abras como programa.
