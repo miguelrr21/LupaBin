@@ -39,6 +39,7 @@ def _evidence(
     text = decoded.decode("ascii")
     return DecodedStringEvidence(
         id=evidence_id,
+        component="decode_strings",
         location=source.location,
         provenance=Provenance(evidence_ids=(source.id,)),
         transform=transform,
