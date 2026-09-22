@@ -23,6 +23,7 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 ## Contrato y desarrollo
 
 - Consultar `docs/evidence-schema.md` para el contrato activo 0.2.0 y sus antecedentes 0.1.0. El diseño y plan aprobados de la Fase 1A están en `docs/superpowers/specs/2026-09-20-static-evidence-design.md`; no confundir alcance previsto de fases posteriores con funcionalidad disponible.
+- La propuesta de la Fase 1B está en `docs/superpowers/specs/2026-09-20-yara-evidence-design.md`: el alcance está aceptado, pero el diseño escrito requiere revisión antes del plan de implementación. No presentar YARA como instalado o disponible por la existencia de ese documento.
 - La Fase 1A separa PE y strings, valida cobertura por componente y conserva bytes originales. No inferir fechas de compilación, empaquetado, ejecución o conexiones a partir de esos hechos. Las entropías citan secciones; las anomalías deben satisfacer su predicado sobre los campos citados.
 - Stack acordado: Python 3.12, uv, Pydantic v2, Typer y pefile para la primera entrega.
 - Mantener datos tipados, esquema versionado, IDs locales al informe, procedencia verificable y fallos por extractor explícitos.
