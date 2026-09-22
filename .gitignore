@@ -14,3 +14,7 @@ dist/
 *.exe
 *.dll
 *.bin
+
+# Agent skills tooling (local, per-machine)
+.agents/
+skills-lock.json
