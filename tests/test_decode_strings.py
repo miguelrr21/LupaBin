@@ -66,6 +66,21 @@ def test_base64_candidate_ignores_short_identifiers(identifier):
     assert base64_candidate(identifier) is None  # ...but below the 12-character minimum
 
 
+def test_unpadded_base64_needs_sixteen_characters():
+    # identifiers never carry "=": SystemEventW (12) decodes to b"K+-za/z{V"
+    assert base64.b64decode("SystemEventW", validate=True)
+    assert base64_candidate("SystemEventW") is None
+    assert base64_candidate(base64.b64encode(b"hello!123").decode()) is None  # 12, unpadded
+    assert base64_candidate("cGFzc3dvcmQ=") == b"password"  # 12, padded
+
+
+@pytest.mark.parametrize("number", ["2147483647", "2147483650", "49312658", "26622221"])
+def test_hex_candidate_ignores_decimal_numbers(number):
+    # every hex hit in 4,516 benign files that was noise came from a decimal number
+    assert all(0x20 <= b <= 0x7E for b in bytes.fromhex(number))
+    assert hex_candidate(number) is None
+
+
 def test_base64_candidate_rejects_non_canonical_padding():
     # validate=True still accepts padding bits that do not round-trip: this decodes
     # to b"hello world" but the canonical encoding of that is "aGVsbG8gd29ybGQ=".
