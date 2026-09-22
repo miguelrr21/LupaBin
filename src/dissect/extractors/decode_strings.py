@@ -8,9 +8,11 @@ from dissect.evidence.primitives import Provenance, Transform, TransformName
 
 # Method parameters of base64-strict-v1 / hex-strict-v1. Changing them changes the
 # algorithm, not a tunable limit: every value below was set from measurements on
-# benign binaries (design section 8), where all false positives were 8-character
-# identifiers decoded as Base64 or repetitive numeric filler decoded as hex.
+# benign binaries (design section 8). Identifiers (fileType, SystemEventW) are valid
+# unpadded Base64 and never carry "=", so unpadded text needs more length; decimal
+# numbers (2147483647) are valid hex, so digit-only text is not treated as hex.
 BASE64_MIN_CHARS = 12
+BASE64_UNPADDED_MIN_CHARS = 16
 HEX_MIN_CHARS = 8
 MIN_DECODED_BYTES = 4
 MIN_DISTINCT_CHARS = 4
@@ -28,7 +30,8 @@ def _readable(data: bytes) -> bool:
 
 
 def base64_candidate(text: str) -> bytes | None:
-    if len(text) < BASE64_MIN_CHARS or len(text) % 4 or not _BASE64_RE.fullmatch(text):
+    minimum = BASE64_MIN_CHARS if text.endswith("=") else BASE64_UNPADDED_MIN_CHARS
+    if len(text) < minimum or len(text) % 4 or not _BASE64_RE.fullmatch(text):
         return None
     try:
         decoded = base64.b64decode(text, validate=True)
@@ -43,6 +46,8 @@ def base64_candidate(text: str) -> bytes | None:
 
 def hex_candidate(text: str) -> bytes | None:
     if len(text) < HEX_MIN_CHARS or len(text) % 2 or not _HEX_RE.fullmatch(text):
+        return None
+    if text.isdigit():
         return None
     decoded = bytes.fromhex(text)
     return decoded if _readable(decoded) else None
