@@ -49,6 +49,7 @@ El repo ya está mapeado abajo. No listar recursivamente `src/` o `docs/` al emp
 - `docs/evidence-schema.md` — contrato activo 0.4.0 (Fase 2); `docs/schemas/0.1.0.json`, `0.2.0.json` y `0.3.0.json` son históricos.
 - `src/dissect/extractors/decode.py` (extractor y `verify_decodings` usada por el host), `decode_strings.py` (Base64/hex), `decode_xor.py` (motor XOR, catálogo de cribs, `verify`). `tests/decode_eval.py` repite las mediciones de la sección 8 del diseño.
 - `src/dissect/rules/` — catálogo YARA propio: `catalog.py` (carga/valida), `process.py` (lanza el subproceso), `models.py`, `yara/*.yar` + `manifest.json`. `src/dissect/yara_worker.py` es el entrypoint aislado del hijo.
+- `docs/roadmap.md` — **leer primero**: estado actual, pendientes, límites conocidos con cifras y el objetivo del usuario (máxima optimización y mínima tasa de error: ninguna mejora de cobertura se adopta si añade falsos positivos).
 - `docs/superpowers/specs/` — diseños aprobados por fase; leer solo el spec de la fase en la que se trabaja, no todas.
 - `docs/decisions/` — ADRs puntuales; consultar solo si la tarea toca esa decisión.
 - `tests/` — espeja `src/dissect/` módulo a módulo (`test_pe.py` ↔ `extractors/pe.py`, `test_evidence.py` ↔ `evidence/`, etc.); `tests/fixtures/pe_builder.py` genera los binarios sintéticos, `tests/integration/` son las pruebas `-m docker`.
