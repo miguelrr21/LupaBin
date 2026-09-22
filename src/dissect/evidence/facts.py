@@ -208,21 +208,49 @@ class DecodedStringData(Model):
         return self
 
 
+class XorAnchor(Model):
+    catalog: Literal["dissect-xor-cribs-v1"]
+    crib: Annotated[str, Field(min_length=5, max_length=64)]
+    crib_offset: NonNegative
+
+    @model_validator(mode="after")
+    def printable_crib(self) -> Self:
+        if any(not 32 <= ord(char) <= 126 for char in self.crib):
+            raise ValueError("crib outside the printable ASCII repertoire")
+        return self
+
+
 class DecodedStringEvidence(Model):
     id: EvidenceId
     source: Literal["decode"] = "decode"
-    component: Literal["decode_strings"] = "decode_strings"
+    component: Literal["decode_strings", "decode_xor"]
     kind: Literal["decoded_string"] = "decoded_string"
     location: Location
     confidence: Literal["inferred"] = "inferred"
-    provenance: Provenance
+    provenance: Provenance = Field(default_factory=Provenance)
     transform: Transform
+    anchor: XorAnchor | None = None
     data: DecodedStringData
 
     @model_validator(mode="after")
-    def derives_from_exactly_one_source_string(self) -> Self:
-        if len(self.provenance.evidence_ids) != 1:
-            raise ValueError("a decoded string derives from exactly one source string")
+    def coherent_with_transform(self) -> Self:
+        if self.location.offset is None or self.location.length is None:
+            raise ValueError("a decoded string must locate its encoded bytes")
+        if self.transform.name == "xor-repeating-v1":
+            if self.component != "decode_xor" or self.anchor is None:
+                raise ValueError("an XOR decoding belongs to decode_xor and needs its anchor")
+            if self.provenance.evidence_ids:
+                raise ValueError("an XOR decoding derives from raw bytes, not from other facts")
+            if self.location.length != len(self.data.raw_hex) // 2:
+                raise ValueError("XOR preserves length; region and decoded bytes must match")
+            end = self.anchor.crib_offset + len(self.anchor.crib)
+            if self.data.text[self.anchor.crib_offset : end] != self.anchor.crib:
+                raise ValueError("the anchor crib is not at its declared offset")
+        else:
+            if self.component != "decode_strings" or self.anchor is not None:
+                raise ValueError("a Base64/hex decoding belongs to decode_strings, without anchor")
+            if len(self.provenance.evidence_ids) != 1:
+                raise ValueError("a Base64/hex decoding derives from exactly one source string")
         return self
 
 
