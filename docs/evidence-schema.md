@@ -1,6 +1,46 @@
-# Dissect: diseño inicial y contrato de evidencias
+# Dissect: contrato de evidencias
 
-Estado: diseño y plan de implementación aprobados por el usuario el 20 de septiembre de 2026. Este documento no implica que todas las verificaciones se hayan ejecutado; consultar los resultados de la entrega.
+## Contrato activo 0.3.0
+
+La Fase 1B añade YARA al contrato 0.2.0. La CLI, el paquete y la imagen esperada usan 0.3.0; los esquemas anteriores se conservan en `docs/schemas/`. El esquema activo continúa siendo `docs/evidence-schema.json`, generado desde los modelos. No hay conversión automática de informes ni fallback a un worker antiguo.
+
+El informe incluye las fuentes `pe`, `strings`, `yara` y un `yara_context` tipado con catálogo, hashes de las fuentes y versiones realmente observadas. Una versión nativa que no se pudo obtener queda nula; no se sustituye por la versión esperada. El catálogo propio se distribuye como recurso del paquete y no depende del cwd.
+
+`yara_match` conserva identidad, revisión, licencia y descripción editorial de la regla, digest del catálogo, versiones e instancias de patrones. `location` es nulo exclusivamente para este tipo: los intervalos están en `data.instances`, con `offset`, `matched_length`, `captured_length`, `raw_hex` y `complete`. El padre valida esos bytes contra el buffer original. Las descripciones no son afirmaciones de comportamiento.
+
+Los componentes YARA son `yara_rules`, `yara_scan` y `yara_evidence`. `examined` puede ser nulo en componentes YARA incompletos cuando no hay un total conocido. Una cobertura completa debe concordar con el inventario y los resultados conservados. No se admiten matches de un escaneo interrumpido ni una cobertura completa con instancias recortadas. Los otros tipos conservan sus requisitos de ubicación y contadores.
+
+YARA corre en un subproceso dentro del contenedor. Si falla o se interrumpe, no publica coincidencias; se conservan PE/strings si el padre sigue operativo. Si el scan termina pero la representación se acota, las omisiones se declaran en `limitations`, `instances_status` y `omitted_instances`. Cero coincidencias con cobertura completa no es un veredicto de seguridad.
+
+El estado global considera las tres fuentes: completo si todas completan, fallido si todas quedan bloqueadas y parcial en los demás casos. Los límites exteriores no se amplían. El diseño aprobado y el plan están en [Fase 1B](superpowers/specs/2026-09-20-yara-evidence-design.md).
+
+## Antecedente: contrato 0.2.0
+
+La Fase 1A amplió el contrato inicial. Su esquema histórico está en `docs/schemas/0.2.0.json`, junto al de 0.1.0. Esta subsección describe la CLI y la imagen de aquella entrega, no las versiones activas.
+
+El diseño y los límites completos están en [Fase 1A](superpowers/specs/2026-09-20-static-evidence-design.md). El resto de este documento conserva el diseño histórico de la primera entrega; sus campos y reglas 0.1.0 no sustituyen los de esta sección.
+
+| Campo | Contrato 0.2.0 (histórico) |
+| --- | --- |
+| `schema_version` | Literal `0.2.0`; versiones distintas se rechazan. |
+| `sample` | Hashes, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. |
+| `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`. |
+| `extractor_runs` | Fuentes `pe`/`strings`, versión y componentes tipados con cobertura y contadores. |
+| `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
+| `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
+
+Cada evidencia tiene `id`, `source`, `component`, `kind`, payload tipado, intervalo real `location`, `confidence=observed` y referencias de procedencia. Las direcciones meramente declaradas se guardan en el payload, no como offsets comprobados. Los IDs son locales al informe y pueden cambiar entre versiones.
+
+Las entropías indican método, bytes medidos y sección de origen. El modelo verifica que sus intervalos coincidan; los tests verifican los cálculos. Las anomalías deben estar respaldadas por los valores de las cabeceras/secciones que citan, no solo por IDs existentes. Los exports conservan símbolos, nombres/ordinales y forwarders sin resolver DLLs. Las strings conservan el texto exacto y bytes, con repertorio ASCII imprimible explícito para ASCII/UTF-16LE.
+
+La cobertura de un componente es `complete`, `partial` o `blocked`. Un extractor completado puede tener cero hallazgos. El estado global es `completed` si ambos completan, `failed` si ambos quedan bloqueados y `partial` en los otros casos. Si falla la infraestructura antes de validar un informe, se emite un error separado; no se fabrica un informe. El análisis de bytes literales puede conservar resultados aunque falle PE, sin afirmar soporte de su formato.
+
+Un `completed` no es un veredicto de seguridad. El timestamp de cabecera es un entero declarado, no fecha de compilación acreditada; la entropía no demuestra empaquetado y una URL no demuestra una conexión. El JSON Schema comprueba estructura; las relaciones entre hechos también se validan mediante Pydantic. Ninguna de estas comprobaciones garantiza veracidad absoluta ante un parser comprometido.
+
+## Diseño histórico de la primera entrega (0.1.0)
+
+Estado histórico: diseño y plan aprobados por el usuario el 20 de septiembre de 2026. Las secciones siguientes se conservan como antecedentes; consultar arriba el contrato activo.
 
 ## Objetivo y alcance
 

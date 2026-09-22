@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from dissect.evidence.schema import schema_text
@@ -8,6 +9,14 @@ from dissect.evidence.schema import schema_text
 
 def test_generated_schema_is_current():
     assert Path("docs/evidence-schema.json").read_text(encoding="utf-8") == schema_text()
+
+
+@pytest.mark.parametrize("version", ["0.1.0", "0.2.0"])
+def test_historical_schema_is_preserved(version):
+    old = json.loads(Path(f"docs/schemas/{version}.json").read_text(encoding="utf-8"))
+    assert old["properties"]["schema_version"]["const"] == version
+    Draft202012Validator.check_schema(old)
+    assert old != json.loads(schema_text())
 
 
 def test_schema_is_valid():

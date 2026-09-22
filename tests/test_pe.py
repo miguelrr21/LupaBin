@@ -7,6 +7,16 @@ from dissect.evidence.models import Limits
 from tests.fixtures.pe_builder import build_pe
 
 
+def imports(report):
+    return [fact for fact in report.evidence if fact.kind == "import"]
+
+
+def coverage(report, component):
+    return next(
+        part.status for part in report.extractor_runs[0].components if part.name == component
+    )
+
+
 @pytest.mark.parametrize("bits", [32, 64])
 @pytest.mark.parametrize("delay", [False, True])
 @pytest.mark.parametrize("ordinal", [None, 0, 1])
@@ -14,9 +24,9 @@ def test_original_imports(bits, delay, ordinal):
     report = analyze_bytes(build_pe(bits=bits, delay=delay, ordinal=ordinal))
     assert report.analysis.status == "completed"
     assert report.sample.type == ("PE32" if bits == 32 else "PE32+")
-    assert len(report.evidence) == 1
-    fact = report.evidence[0]
-    assert fact.id == "E1"
+    assert len(imports(report)) == 1
+    fact = imports(report)[0]
+    assert fact.id in {item.id for item in report.evidence}
     assert fact.data.dll.text == "kernel32.dll"
     assert fact.data.table == ("delay" if delay else "normal")
     assert fact.data.ordinal == ordinal
@@ -25,13 +35,14 @@ def test_original_imports(bits, delay, ordinal):
     )
     assert fact.location.offset == 0x320
     assert fact.location.rva == 0x1120
+    assert fact.location.section.text == ".idata"
     assert fact.confidence == "observed"
 
 
 def test_non_ascii_names_are_not_replaced():
     report = analyze_bytes(build_pe(dll=b"\xff.dll", function=b"\xfefunction"))
     assert report.analysis.status == "completed"
-    fact = report.evidence[0]
+    fact = imports(report)[0]
     assert fact.data.dll.raw_hex == b"\xff.dll".hex()
     assert fact.data.dll.text is None
     assert fact.data.function.raw_hex == b"\xfefunction".hex()
@@ -40,18 +51,19 @@ def test_non_ascii_names_are_not_replaced():
 
 def test_no_import_table_is_not_a_safety_verdict():
     report = analyze_bytes(build_pe(imports=False))
-    assert report.evidence == ()
+    assert not imports(report)
     assert report.analysis.status == "completed"
-    assert report.extractor_runs[0].normal == "complete"
+    assert coverage(report, "imports_normal") == "complete"
     assert "verdict" not in report.model_dump()
 
 
 @pytest.mark.parametrize("data", [b"MZ" + b"\0" * 100, b"not a PE", build_pe()[:300]])
 def test_malformed_is_never_success(data):
     report = analyze_bytes(data)
-    assert report.analysis.status == "failed"
+    assert report.analysis.status == "partial"
     assert report.sample.type == "unknown"
-    assert report.evidence == ()
+    assert all(fact.kind == "string" for fact in report.evidence)
+    assert report.extractor_runs[0].status == "failed"
     assert report.extractor_errors
 
 
@@ -59,8 +71,8 @@ def test_bad_table_is_not_reported_as_absent():
     data = bytearray(build_pe())
     struct.pack_into("<I", data, 0x200, 0xF0000000)
     report = analyze_bytes(bytes(data))
-    assert report.analysis.status == "failed"
-    assert report.extractor_runs[0].normal == "partial"
+    assert report.analysis.status == "partial"
+    assert coverage(report, "imports_normal") == "partial"
     assert report.extractor_errors[0].code == "invalid_import_table"
 
 
@@ -69,7 +81,7 @@ def test_valid_evidence_survives_later_corrupt_thunk():
     struct.pack_into("<I", data, 0x324, 0xF0000000)
     report = analyze_bytes(bytes(data))
     assert report.analysis.status == "partial"
-    assert len(report.evidence) == 1
+    assert len(imports(report)) == 1
     assert report.extractor_errors
 
 
@@ -78,8 +90,8 @@ def test_limit_is_explicit():
     struct.pack_into("<I", data, 0x324, 0x1160)
     report = analyze_bytes(bytes(data), Limits(imports=1))
     assert report.analysis.status == "partial"
-    assert len(report.evidence) == 1
-    assert any(error.code == "import_limit" for error in report.extractor_errors)
+    assert len(imports(report)) == 1
+    assert any(reason.code == "import_limit" for reason in report.limitations)
 
 
 def test_pe_warning_prevents_complete_claim():
@@ -87,7 +99,7 @@ def test_pe_warning_prevents_complete_claim():
     struct.pack_into("<I", data, 0x98 + 16, 0)
     report = analyze_bytes(bytes(data))
     assert report.analysis.status == "partial"
-    assert any(error.code == "parser_warning" for error in report.extractor_errors)
+    assert any(reason.code == "parser_warning" for reason in report.limitations)
 
 
 def test_repeatable_facts():
@@ -103,12 +115,12 @@ def test_truncated_iat_prevents_complete_coverage():
     struct.pack_into("<I", data, 0x210, 0x1FFC)
     report = analyze_bytes(bytes(data))
     assert report.analysis.status == "partial"
-    assert report.extractor_runs[0].normal == "partial"
+    assert coverage(report, "imports_normal") == "partial"
 
 
 def test_bound_iat_without_lookup_is_not_interpreted_as_names():
     data = bytearray(build_pe())
     struct.pack_into("<II", data, 0x200, 0, 1)
     report = analyze_bytes(bytes(data))
-    assert report.analysis.status == "failed"
-    assert report.evidence == ()
+    assert report.analysis.status == "partial"
+    assert not imports(report)
