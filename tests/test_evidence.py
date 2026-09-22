@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from dissect.evidence.facts import ImportEvidence
+from dissect.evidence.facts import DecodedStringData, DecodedStringEvidence, ImportEvidence
 from dissect.evidence.models import (
     Analysis,
     ComponentRun,
@@ -15,7 +15,7 @@ from dissect.evidence.models import (
     Run,
     Sample,
 )
-from dissect.evidence.primitives import COMPONENTS
+from dissect.evidence.primitives import COMPONENTS, Provenance, Transform
 
 
 def report_dict():
@@ -171,3 +171,109 @@ def test_python_construction():
         ),
     )
     assert report.evidence[0].confidence == "observed"
+
+
+def test_existing_evidence_kinds_cannot_claim_inferred_confidence():
+    data = report_dict()
+    data["evidence"][0].update(confidence="inferred")
+    with pytest.raises(ValidationError):
+        validate(data)
+
+
+@pytest.mark.parametrize(
+    "transform",
+    [
+        dict(name="base64-strict-v1"),
+        dict(name="hex-strict-v1"),
+        dict(name="xor-repeating-v1", key_hex="2a"),
+        dict(name="xor-repeating-v1", key_hex="2a" * 8),
+    ],
+)
+def test_transform_accepts_valid_combinations(transform):
+    Transform(**transform)
+
+
+@pytest.mark.parametrize(
+    "transform",
+    [
+        dict(name="xor-repeating-v1"),
+        dict(name="base64-strict-v1", key_hex="2a"),
+        dict(name="hex-strict-v1", key_hex="2a"),
+        dict(name="xor-repeating-v1", key_hex="2a" * 9),
+        dict(name="xor-repeating-v1", key_hex=""),
+    ],
+)
+def test_transform_rejects_key_mismatched_with_its_name(transform):
+    with pytest.raises(ValidationError):
+        Transform(**transform)
+
+
+def decoded_string_data(**overrides):
+    defaults = dict(
+        encoding="ascii",
+        text="http://x",
+        raw_hex=b"http://x".hex(),
+        characters=8,
+        complete=True,
+        total_characters=8,
+    )
+    return DecodedStringData(**{**defaults, **overrides})
+
+
+def test_decoded_string_data_round_trips_bytes():
+    data = decoded_string_data()
+    assert bytes.fromhex(data.raw_hex).decode(data.encoding) == data.text
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        dict(text="different"),
+        dict(raw_hex="00" * 8),
+        dict(characters=7),
+        dict(complete=True, total_characters=7),
+        dict(complete=False, total_characters=8),
+        dict(text="\x01\x02\x03\x04"),
+    ],
+)
+def test_decoded_string_data_rejects_unfaithful_payloads(overrides):
+    with pytest.raises(ValidationError):
+        decoded_string_data(**overrides)
+
+
+def decoded_string_evidence(**overrides):
+    defaults = dict(
+        id="E9",
+        location=Location(offset=100, length=8),
+        provenance=Provenance(evidence_ids=("E1",)),
+        transform=Transform(name="hex-strict-v1"),
+        data=decoded_string_data(),
+    )
+    return DecodedStringEvidence(**{**defaults, **overrides})
+
+
+def test_decoded_string_evidence_round_trips():
+    evidence = decoded_string_evidence()
+    assert evidence.confidence == "inferred"
+    assert DecodedStringEvidence.model_validate_json(evidence.model_dump_json()) == evidence
+
+
+def test_decoded_string_evidence_requires_a_transform():
+    with pytest.raises(ValidationError):
+        DecodedStringEvidence(
+            id="E9",
+            location=Location(offset=100, length=8),
+            provenance=Provenance(evidence_ids=("E1",)),
+            data=decoded_string_data(),
+        )
+
+
+@pytest.mark.parametrize("evidence_ids", [(), ("E1", "E2")])
+def test_decoded_string_evidence_requires_exactly_one_source(evidence_ids):
+    with pytest.raises(ValidationError):
+        decoded_string_evidence(provenance=Provenance(evidence_ids=evidence_ids))
+
+
+def test_decoded_string_evidence_confidence_cannot_be_observed():
+    with pytest.raises(ValidationError):
+        decoded_string_evidence(confidence="observed")
