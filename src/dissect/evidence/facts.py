@@ -11,6 +11,7 @@ from dissect.evidence.primitives import (
     NonNegative,
     Provenance,
     Source,
+    Transform,
     UInt,
 )
 from dissect.evidence.yara import YaraMatchData
@@ -179,6 +180,50 @@ class ExportEvidence(Fact):
 class StringEvidence(Fact):
     kind: Literal["string"] = "string"
     data: StringData
+
+
+class DecodedStringData(Model):
+    encoding: Literal["ascii", "utf-16-le"]
+    repertoire: Literal["ascii-printable-v1"] = "ascii-printable-v1"
+    text: Annotated[str, Field(min_length=4, max_length=1024)]
+    raw_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2})+$", max_length=4096)]
+    characters: Annotated[int, Field(ge=4, le=1024)]
+    complete: bool
+    total_characters: NonNegative | None = None
+
+    @model_validator(mode="after")
+    def faithful(self) -> Self:
+        if any(not 32 <= ord(char) <= 126 for char in self.text):
+            raise ValueError("unsupported string repertoire")
+        if (
+            self.text.encode(self.encoding).hex() != self.raw_hex
+            or len(self.text) != self.characters
+        ):
+            raise ValueError("string differs from decoded bytes")
+        if self.complete and self.total_characters != self.characters:
+            raise ValueError("complete string requires its exact length")
+        if not self.complete and self.total_characters is not None:
+            if self.total_characters <= self.characters:
+                raise ValueError("truncated string cannot have a shorter total")
+        return self
+
+
+class DecodedStringEvidence(Model):
+    id: EvidenceId
+    source: Literal["decode"] = "decode"
+    component: Literal["decode_strings"] = "decode_strings"
+    kind: Literal["decoded_string"] = "decoded_string"
+    location: Location
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance
+    transform: Transform
+    data: DecodedStringData
+
+    @model_validator(mode="after")
+    def derives_from_exactly_one_source_string(self) -> Self:
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a decoded string derives from exactly one source string")
+        return self
 
 
 class AnomalyEvidence(Fact):
