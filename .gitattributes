@@ -1,0 +1,2 @@
+src/dissect/rules/yara/*.yar text eol=lf
+src/dissect/rules/yara/manifest.json text eol=lf

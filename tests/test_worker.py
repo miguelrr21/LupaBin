@@ -9,7 +9,9 @@ from tests.fixtures.pe_builder import build_pe
 def test_worker_round_trip():
     output, errors = io.BytesIO(), io.BytesIO()
     assert process(io.BytesIO(build_pe()), output, errors, Limits()) == 0
-    assert Report.model_validate_json(output.getvalue()).evidence[0].data.dll.text == "kernel32.dll"
+    report = Report.model_validate_json(output.getvalue())
+    fact = next(f for f in report.evidence if f.kind == "import")
+    assert fact.data.dll.text == "kernel32.dll"
     assert errors.getvalue() == b""
 
 
