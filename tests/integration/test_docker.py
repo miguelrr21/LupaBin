@@ -20,7 +20,7 @@ def require_docker():
         info = await client.run(("info", "--format", "{{.OSType}}"))
         assert info.code == 0 and info.stdout.strip() == b"linux", "Linux Docker is required"
         image = await client.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
-        assert image.code == 0, "Build dissect-worker:0.3.0 before integration tests"
+        assert image.code == 0, "Build dissect-worker:0.4.0 before integration tests"
 
     asyncio.run(check())
 
@@ -47,7 +47,7 @@ def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
     result = CliRunner().invoke(app, ["analyze", str(path), "--json"])
     assert result.exit_code == (3 if corrupt else 0)
     report = json.loads(result.stdout)
-    assert report["schema_version"] == "0.3.0"
+    assert report["schema_version"] == "0.4.0"
     kinds = {fact["kind"] for fact in report["evidence"]}
     assert {"pe_header", "section", "entropy", "string"} <= kinds
     assert ("header_anomaly" in kinds) == corrupt
@@ -56,6 +56,26 @@ def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
     if not corrupt:
         assert "export" in kinds
     assert result.stderr == ""
+
+
+def test_decodings_in_real_container_reverify_on_host():
+    from tests.fixtures.pe_builder import DECODE_DEMO, build_decode_demo
+
+    # run_isolated re-derives every decoding from the original bytes before returning
+    report = asyncio.run(run_isolated(build_decode_demo(), Limits(), DockerCLI()))
+    assert report.analysis.status == "completed"
+    texts = [f.data.text for f in report.evidence if f.kind == "decoded_string"]
+    assert texts == [item[1] for item in DECODE_DEMO]
+
+
+def test_xor_flood_becomes_a_declared_limit_in_real_container():
+    from tests.fixtures.pe_builder import xor_stream
+
+    data = xor_stream("http://", b"\xa5") * 1_000_000
+    report = asyncio.run(run_isolated(data, Limits(), DockerCLI()))
+    assert report.analysis.status == "partial"
+    codes = {r.code for r in report.limitations}
+    assert {"decode_xor_examined_limit", "decode_xor_limit"} <= codes
 
 
 def test_yara_limited_report_in_real_container():

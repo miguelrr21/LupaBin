@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 UInt = Annotated[int, Field(ge=0, le=0xFFFFFFFF)]
 NonNegative = Annotated[int, Field(ge=0)]
 EvidenceId = Annotated[str, Field(pattern=r"^E[1-9][0-9]*$", max_length=16)]
-Source = Literal["pe", "strings", "yara"]
+Source = Literal["pe", "strings", "yara", "decode"]
 Status = Literal["completed", "partial", "failed"]
 Component = Literal[
     "headers",
@@ -20,6 +20,8 @@ Component = Literal[
     "yara_rules",
     "yara_scan",
     "yara_evidence",
+    "decode_strings",
+    "decode_xor",
 ]
 COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "pe": (
@@ -33,6 +35,7 @@ COMPONENTS: dict[Source, tuple[Component, ...]] = {
     ),
     "strings": ("ascii", "utf16le"),
     "yara": ("yara_rules", "yara_scan", "yara_evidence"),
+    "decode": ("decode_strings", "decode_xor"),
 }
 
 
@@ -55,8 +58,15 @@ class YaraLimits(Model):
     stderr_bytes: Annotated[int, Field(gt=0, le=65536)] = 65536
 
 
+class DecodeLimits(Model):
+    strings: Annotated[int, Field(gt=0, le=2000)] = 2000
+    xor: Annotated[int, Field(gt=0, le=256)] = 256
+    xor_examined: Annotated[int, Field(gt=0, le=200000)] = 200000
+
+
 class Limits(Model):
     yara: YaraLimits = Field(default_factory=YaraLimits)
+    decode: DecodeLimits = Field(default_factory=DecodeLimits)
     input_bytes: Annotated[int, Field(gt=0, le=20971520)] = 20971520
     timeout_seconds: Annotated[int, Field(gt=0, le=30)] = 30
     memory_bytes: Literal[536870912] = 536870912

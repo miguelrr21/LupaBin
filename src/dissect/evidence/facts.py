@@ -286,7 +286,8 @@ Evidence = Annotated[
     | ExportEvidence
     | StringEvidence
     | AnomalyEvidence
-    | YaraEvidence,
+    | YaraEvidence
+    | DecodedStringEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -298,4 +299,5 @@ Payload = (
     | StringData
     | AnomalyData
     | YaraMatchData
+    | DecodedStringData
 )
