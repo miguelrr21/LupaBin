@@ -36,6 +36,21 @@ class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True, allow_inf_nan=False)
 
 
+class YaraLimits(Model):
+    rules: Annotated[int, Field(gt=0, le=32)] = 32
+    source_bytes: Annotated[int, Field(gt=0, le=16384)] = 16384
+    total_source_bytes: Annotated[int, Field(gt=0, le=262144)] = 262144
+    manifest_bytes: Annotated[int, Field(gt=0, le=65536)] = 65536
+    patterns_per_rule: Annotated[int, Field(gt=0, le=8)] = 8
+    scan_seconds: Annotated[int, Field(gt=0, le=5)] = 5
+    process_seconds: Annotated[int, Field(gt=0, le=10)] = 10
+    matches: Annotated[int, Field(gt=0, le=32)] = 32
+    instances: Annotated[int, Field(gt=0, le=16)] = 16
+    capture_bytes: Annotated[int, Field(gt=0, le=256)] = 256
+    output_bytes: Annotated[int, Field(gt=0, le=1048576)] = 1048576
+    stderr_bytes: Annotated[int, Field(gt=0, le=65536)] = 65536
+
+
 class Limits(Model):
     input_bytes: Annotated[int, Field(gt=0, le=20971520)] = 20971520
     timeout_seconds: Annotated[int, Field(gt=0, le=30)] = 30
