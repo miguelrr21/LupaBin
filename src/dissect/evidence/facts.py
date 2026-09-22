@@ -13,6 +13,7 @@ from dissect.evidence.primitives import (
     Source,
     UInt,
 )
+from dissect.evidence.yara import YaraMatchData
 
 
 class ImportData(Model):
@@ -185,6 +186,25 @@ class AnomalyEvidence(Fact):
     data: AnomalyData
 
 
+class YaraEvidence(Model):
+    id: EvidenceId
+    source: Literal["yara"] = "yara"
+    component: Literal["yara_evidence"] = "yara_evidence"
+    kind: Literal["yara_match"] = "yara_match"
+    location: None = None
+    confidence: Literal["observed"] = "observed"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: YaraMatchData
+
+    @model_validator(mode="after")
+    def no_invented_dependencies(self) -> Self:
+        if self.provenance.evidence_ids:
+            raise ValueError(
+                "YARA matches cite byte instances and rule sources, not unrelated facts"
+            )
+        return self
+
+
 Evidence = Annotated[
     ImportEvidence
     | HeaderEvidence
@@ -192,9 +212,17 @@ Evidence = Annotated[
     | EntropyEvidence
     | ExportEvidence
     | StringEvidence
-    | AnomalyEvidence,
+    | AnomalyEvidence
+    | YaraEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
-    ImportData | HeaderData | SectionData | EntropyData | ExportData | StringData | AnomalyData
+    ImportData
+    | HeaderData
+    | SectionData
+    | EntropyData
+    | ExportData
+    | StringData
+    | AnomalyData
+    | YaraMatchData
 )

@@ -93,13 +93,17 @@ def main():
     parser = argparse.ArgumentParser(description="Generate inert PE test data; never execute it.")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--bits", type=int, choices=(32, 64), default=32)
-    parser.add_argument("--scenario", choices=("basic", "demo", "corrupt"), default="basic")
+    parser.add_argument(
+        "--scenario", choices=("basic", "demo", "corrupt", "yara-limited"), default="basic"
+    )
     args = parser.parse_args()
     data = (
         build_pe(bits=args.bits)
-        if args.scenario == "basic"
+        if args.scenario in ("basic", "yara-limited")
         else build_demo(bits=args.bits, corrupt=args.scenario == "corrupt")
     )
+    if args.scenario == "yara-limited":
+        data += b"DISSECT PRACTICE\0" * 20
     with args.output.open("xb") as stream:
         stream.write(data)
 

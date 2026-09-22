@@ -107,6 +107,9 @@ def validate_matches(
 ) -> None:
     if context.catalog is None or len(matches) > limits.matches:
         raise ValueError("missing catalog or match quota exceeded")
+    identities = [(match.namespace, match.rule_id) for match in matches]
+    if len(identities) != len(set(identities)):
+        raise ValueError("duplicate rule match")
     inventory = {(rule.namespace, rule.rule_id): rule for rule in context.catalog.rules}
     for match in matches:
         definition = inventory.get((match.namespace, match.rule_id))
@@ -148,4 +151,6 @@ def validate_scan(
         raise ValueError("scan belongs to another input")
     if result.context.catalog != catalog:
         raise ValueError("scan belongs to another catalog")
+    if len(result.matches) + result.omitted_rules > len(catalog.rules):
+        raise ValueError("rule count exceeds catalog")
     validate_matches(result.matches, result.context, len(data), limits, data)

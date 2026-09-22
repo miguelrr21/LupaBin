@@ -7,6 +7,7 @@ from dissect.evidence.models import Analysis, Limits, Report, Sample
 from dissect.extractors.base import Extraction, Extractor
 from dissect.extractors.pe import PEExtractor
 from dissect.extractors.strings import StringsExtractor
+from dissect.extractors.yara import YaraExtractor
 from dissect.ingest.reader import from_bytes
 
 
@@ -26,7 +27,11 @@ def analyze_bytes(
     blob = from_bytes(data, effective)
     collector = Collector(effective)
     results = []
-    for extractor in extractors if extractors is not None else (PEExtractor(), StringsExtractor()):
+    for extractor in (
+        extractors
+        if extractors is not None
+        else (PEExtractor(), StringsExtractor(), YaraExtractor())
+    ):
         progress = Progress(extractor.source, extractor.version)
         start_count = len(collector.facts)
         try:
@@ -65,6 +70,14 @@ def analyze_bytes(
         sample=sample,
         evidence=tuple(collector.facts),
         extractor_runs=runs,
+        yara_context=next(
+            (
+                result.progress.yara_context
+                for result in results
+                if result.progress.source == "yara"
+            ),
+            None,
+        ),
         extractor_errors=tuple(error for result in results for error in result.progress.errors),
         limitations=tuple(reason for result in results for reason in result.progress.limitations),
     )
