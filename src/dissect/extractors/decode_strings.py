@@ -54,35 +54,40 @@ _DECODERS: dict[TransformName, Callable[[str], bytes | None]] = {
 }
 
 
-def _evidence(
-    source: StringEvidence, evidence_id: str, name: TransformName, decoded: bytes
-) -> DecodedStringEvidence:
+def decodings(source: StringEvidence) -> list[tuple[TransformName, bytes]]:
+    if not source.data.complete:
+        return []
+    return [
+        (name, decoded)
+        for name, decode in _DECODERS.items()
+        if (decoded := decode(source.data.text)) is not None
+    ]
+
+
+def decoded_data(decoded: bytes) -> DecodedStringData:
     text = decoded.decode("ascii")
-    return DecodedStringEvidence(
-        id=evidence_id,
-        component="decode_strings",
-        location=source.location,
-        provenance=Provenance(evidence_ids=(source.id,)),
-        transform=Transform(name=name),
-        data=DecodedStringData(
-            encoding="ascii",
-            text=text,
-            raw_hex=decoded.hex(),
-            characters=len(text),
-            complete=True,
-            total_characters=len(text),
-        ),
+    return DecodedStringData(
+        encoding="ascii",
+        text=text,
+        raw_hex=decoded.hex(),
+        characters=len(text),
+        complete=True,
+        total_characters=len(text),
     )
 
 
 def candidates(source: StringEvidence, next_id: Callable[[], str]) -> list[DecodedStringEvidence]:
-    if not source.data.complete:
-        return []
-    results = []
-    for name, decode in _DECODERS.items():
-        if (decoded := decode(source.data.text)) is not None:
-            results.append(_evidence(source, next_id(), name, decoded))
-    return results
+    return [
+        DecodedStringEvidence(
+            id=next_id(),
+            component="decode_strings",
+            location=source.location,
+            provenance=Provenance(evidence_ids=(source.id,)),
+            transform=Transform(name=name),
+            data=decoded_data(decoded),
+        )
+        for name, decoded in decodings(source)
+    ]
 
 
 def verify(evidence: DecodedStringEvidence, source: StringEvidence, data: bytes) -> None:

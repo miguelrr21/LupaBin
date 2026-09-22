@@ -7,10 +7,18 @@ from dissect.evidence.models import Limits, Report
 from tests.fixtures.pe_builder import build_demo, build_pe
 
 
-def test_default_pipeline_has_three_sources_and_yara_evidence():
+def yara_run(report):
+    return next(run for run in report.extractor_runs if run.source == "yara")
+
+
+def yara_payload(payload):
+    return next(run for run in payload["extractor_runs"] if run["source"] == "yara")
+
+
+def test_default_pipeline_has_four_sources_and_yara_evidence():
     report = analyze_bytes(build_demo())
-    assert report.schema_version == "0.3.0"
-    assert [run.source for run in report.extractor_runs] == ["pe", "strings", "yara"]
+    assert report.schema_version == "0.4.0"
+    assert [run.source for run in report.extractor_runs] == ["pe", "strings", "yara", "decode"]
     assert report.analysis.status == "completed"
     match = next(f for f in report.evidence if f.kind == "yara_match")
     assert match.location is None
@@ -22,7 +30,7 @@ def test_default_pipeline_has_three_sources_and_yara_evidence():
 
 def test_no_match_is_success_not_security_verdict():
     report = analyze_bytes(build_pe())
-    assert report.extractor_runs[-1].status == "completed"
+    assert yara_run(report).status == "completed"
     assert not any(f.kind == "yara_match" for f in report.evidence)
     assert report.yara_context.catalog
     assert "verdict" not in report.model_dump()
@@ -39,8 +47,8 @@ def test_native_failure_keeps_previous_extractors(monkeypatch):
     assert report.analysis.status == "partial"
     assert {"pe_header", "string", "import"} <= {f.kind for f in report.evidence}
     assert not any(f.kind == "yara_match" for f in report.evidence)
-    assert report.extractor_runs[-1].status == "failed"
-    assert all(part.examined is None for part in report.extractor_runs[-1].components)
+    assert yara_run(report).status == "failed"
+    assert all(part.examined is None for part in yara_run(report).components)
     assert report.yara_context.module_version is None
 
 
@@ -63,7 +71,7 @@ def test_limited_representation_is_partial():
 def test_interrupted_scan_cannot_publish_yara_matches():
     payload = json.loads(analyze_bytes(build_demo()).model_dump_json())
     payload["analysis"]["status"] = "partial"
-    run = payload["extractor_runs"][-1]
+    run = yara_payload(payload)
     run["status"] = "partial"
     run["components"][1]["status"] = "partial"
     payload["extractor_errors"].append(
@@ -75,7 +83,7 @@ def test_interrupted_scan_cannot_publish_yara_matches():
 
 def test_complete_scan_count_must_match_catalog_inventory():
     payload = json.loads(analyze_bytes(build_demo()).model_dump_json())
-    payload["extractor_runs"][-1]["components"][1]["examined"] = 0
+    yara_payload(payload)["components"][1]["examined"] = 0
     with pytest.raises(ValueError):
         Report.model_validate_json(json.dumps(payload))
 

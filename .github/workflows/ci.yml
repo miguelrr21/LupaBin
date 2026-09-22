@@ -49,5 +49,5 @@ jobs:
           version: "0.8.22"
       - run: uv sync --frozen
       - run: docker compose config --quiet
-      - run: docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .
+      - run: docker build --load -f docker/Dockerfile -t dissect-worker:0.4.0 .
       - run: uv run --frozen pytest -m docker
