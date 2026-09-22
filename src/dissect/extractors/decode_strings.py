@@ -4,37 +4,58 @@ import re
 from collections.abc import Callable
 
 from dissect.evidence.facts import DecodedStringData, DecodedStringEvidence, StringEvidence
-from dissect.evidence.primitives import Provenance, Transform
+from dissect.evidence.primitives import Provenance, Transform, TransformName
 
-_BASE64_RE = re.compile(r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$")
-_HEX_RE = re.compile(r"^(?:[0-9a-fA-F]{2})+$")
+# Method parameters of base64-strict-v1 / hex-strict-v1. Changing them changes the
+# algorithm, not a tunable limit: every value below was set from measurements on
+# benign binaries (design section 8), where all false positives were 8-character
+# identifiers decoded as Base64 or repetitive numeric filler decoded as hex.
+BASE64_MIN_CHARS = 12
+HEX_MIN_CHARS = 8
+MIN_DECODED_BYTES = 4
+MIN_DISTINCT_CHARS = 4
+
+_BASE64_RE = re.compile(r"(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?")
+_HEX_RE = re.compile(r"(?:[0-9a-fA-F]{2})+")
 
 
-def _printable(data: bytes) -> bool:
-    return len(data) >= 4 and all(0x20 <= byte <= 0x7E for byte in data)
+def _readable(data: bytes) -> bool:
+    return (
+        len(data) >= MIN_DECODED_BYTES
+        and all(0x20 <= byte <= 0x7E for byte in data)
+        and len(set(data)) >= MIN_DISTINCT_CHARS
+    )
 
 
 def base64_candidate(text: str) -> bytes | None:
-    if len(text) < 8 or len(text) % 4 != 0 or not _BASE64_RE.match(text):
+    if len(text) < BASE64_MIN_CHARS or len(text) % 4 or not _BASE64_RE.fullmatch(text):
         return None
     try:
         decoded = base64.b64decode(text, validate=True)
     except binascii.Error:
         return None
+    # validate=True still accepts non-zero padding bits ("aGVsbG9=" -> b"hello");
+    # only the canonical encoding of the decoded bytes is accepted.
     if base64.b64encode(decoded).decode("ascii") != text:
         return None
-    return decoded if _printable(decoded) else None
+    return decoded if _readable(decoded) else None
 
 
 def hex_candidate(text: str) -> bytes | None:
-    if len(text) < 8 or len(text) % 2 != 0 or not _HEX_RE.match(text):
+    if len(text) < HEX_MIN_CHARS or len(text) % 2 or not _HEX_RE.fullmatch(text):
         return None
     decoded = bytes.fromhex(text)
-    return decoded if _printable(decoded) else None
+    return decoded if _readable(decoded) else None
+
+
+_DECODERS: dict[TransformName, Callable[[str], bytes | None]] = {
+    "base64-strict-v1": base64_candidate,
+    "hex-strict-v1": hex_candidate,
+}
 
 
 def _evidence(
-    source: StringEvidence, evidence_id: str, transform: Transform, decoded: bytes
+    source: StringEvidence, evidence_id: str, name: TransformName, decoded: bytes
 ) -> DecodedStringEvidence:
     text = decoded.decode("ascii")
     return DecodedStringEvidence(
@@ -42,7 +63,7 @@ def _evidence(
         component="decode_strings",
         location=source.location,
         provenance=Provenance(evidence_ids=(source.id,)),
-        transform=transform,
+        transform=Transform(name=name),
         data=DecodedStringData(
             encoding="ascii",
             text=text,
@@ -57,10 +78,24 @@ def _evidence(
 def candidates(source: StringEvidence, next_id: Callable[[], str]) -> list[DecodedStringEvidence]:
     if not source.data.complete:
         return []
-    text = source.data.text
     results = []
-    if (decoded := base64_candidate(text)) is not None:
-        results.append(_evidence(source, next_id(), Transform(name="base64-strict-v1"), decoded))
-    if (decoded := hex_candidate(text)) is not None:
-        results.append(_evidence(source, next_id(), Transform(name="hex-strict-v1"), decoded))
+    for name, decode in _DECODERS.items():
+        if (decoded := decode(source.data.text)) is not None:
+            results.append(_evidence(source, next_id(), name, decoded))
     return results
+
+
+def verify(evidence: DecodedStringEvidence, source: StringEvidence, data: bytes) -> None:
+    decode = _DECODERS.get(evidence.transform.name)
+    if decode is None:
+        raise ValueError("not a Base64/hex decoding")
+    if evidence.provenance.evidence_ids != (source.id,) or evidence.location != source.location:
+        raise ValueError("decoding does not cite the string at its own location")
+    offset, length = source.location.offset, source.location.length
+    if offset is None or length is None or offset + length > len(data):
+        raise ValueError("source string lies outside the sample")
+    if data[offset : offset + length].hex() != source.data.raw_hex:
+        raise ValueError("source string differs from the sample bytes")
+    decoded = decode(source.data.text)
+    if decoded is None or decoded.hex() != evidence.data.raw_hex:
+        raise ValueError("the published decoding cannot be reproduced")
