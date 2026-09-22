@@ -4,7 +4,12 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from dissect.evidence.facts import DecodedStringData, DecodedStringEvidence, ImportEvidence
+from dissect.evidence.facts import (
+    DecodedStringData,
+    DecodedStringEvidence,
+    ImportEvidence,
+    XorAnchor,
+)
 from dissect.evidence.models import (
     Analysis,
     ComponentRun,
@@ -15,7 +20,7 @@ from dissect.evidence.models import (
     Run,
     Sample,
 )
-from dissect.evidence.primitives import COMPONENTS, Provenance, Transform
+from dissect.evidence.primitives import COMPONENTS, Provenance, Transform, minimal_period
 
 
 def report_dict():
@@ -186,7 +191,8 @@ def test_existing_evidence_kinds_cannot_claim_inferred_confidence():
         dict(name="base64-strict-v1"),
         dict(name="hex-strict-v1"),
         dict(name="xor-repeating-v1", key_hex="2a"),
-        dict(name="xor-repeating-v1", key_hex="2a" * 8),
+        dict(name="xor-repeating-v1", key_hex="0102030405060708"),
+        dict(name="xor-repeating-v1", key_hex="00ff"),
     ],
 )
 def test_transform_accepts_valid_combinations(transform):
@@ -199,13 +205,33 @@ def test_transform_accepts_valid_combinations(transform):
         dict(name="xor-repeating-v1"),
         dict(name="base64-strict-v1", key_hex="2a"),
         dict(name="hex-strict-v1", key_hex="2a"),
-        dict(name="xor-repeating-v1", key_hex="2a" * 9),
+        dict(name="xor-repeating-v1", key_hex="0102030405060708" + "09"),
         dict(name="xor-repeating-v1", key_hex=""),
+        # identity key: would "decode" plain text into itself
+        dict(name="xor-repeating-v1", key_hex="00"),
+        dict(name="xor-repeating-v1", key_hex="0000"),
+        # non-canonical: the same decoding as the 1-byte key 2a
+        dict(name="xor-repeating-v1", key_hex="2a" * 8),
+        dict(name="xor-repeating-v1", key_hex="abcdabcd"),
     ],
 )
-def test_transform_rejects_key_mismatched_with_its_name(transform):
+def test_transform_rejects_keys_that_are_missing_identity_or_not_minimal(transform):
     with pytest.raises(ValidationError):
         Transform(**transform)
+
+
+@pytest.mark.parametrize(
+    "key,period",
+    [
+        (b"\x2a", b"\x2a"),
+        (b"\x2a" * 8, b"\x2a"),
+        (b"abab", b"ab"),
+        (b"abcabc", b"abc"),
+        (b"abca", b"abca"),
+    ],
+)
+def test_minimal_period(key, period):
+    assert minimal_period(key) == period
 
 
 def decoded_string_data(**overrides):
@@ -244,7 +270,8 @@ def test_decoded_string_data_rejects_unfaithful_payloads(overrides):
 def decoded_string_evidence(**overrides):
     defaults = dict(
         id="E9",
-        location=Location(offset=100, length=8),
+        component="decode_strings",
+        location=Location(offset=100, length=16),
         provenance=Provenance(evidence_ids=("E1",)),
         transform=Transform(name="hex-strict-v1"),
         data=decoded_string_data(),
@@ -252,8 +279,21 @@ def decoded_string_evidence(**overrides):
     return DecodedStringEvidence(**{**defaults, **overrides})
 
 
-def test_decoded_string_evidence_round_trips():
-    evidence = decoded_string_evidence()
+def xor_evidence(**overrides):
+    defaults = dict(
+        id="E9",
+        component="decode_xor",
+        location=Location(offset=100, length=8),
+        transform=Transform(name="xor-repeating-v1", key_hex="a5"),
+        anchor=XorAnchor(catalog="dissect-xor-cribs-v1", crib="http://", crib_offset=0),
+        data=decoded_string_data(),
+    )
+    return DecodedStringEvidence(**{**defaults, **overrides})
+
+
+@pytest.mark.parametrize("factory", [decoded_string_evidence, xor_evidence])
+def test_decoded_string_evidence_round_trips(factory):
+    evidence = factory()
     assert evidence.confidence == "inferred"
     assert DecodedStringEvidence.model_validate_json(evidence.model_dump_json()) == evidence
 
@@ -262,6 +302,7 @@ def test_decoded_string_evidence_requires_a_transform():
     with pytest.raises(ValidationError):
         DecodedStringEvidence(
             id="E9",
+            component="decode_strings",
             location=Location(offset=100, length=8),
             provenance=Provenance(evidence_ids=("E1",)),
             data=decoded_string_data(),
@@ -269,11 +310,49 @@ def test_decoded_string_evidence_requires_a_transform():
 
 
 @pytest.mark.parametrize("evidence_ids", [(), ("E1", "E2")])
-def test_decoded_string_evidence_requires_exactly_one_source(evidence_ids):
+def test_text_decoding_requires_exactly_one_source(evidence_ids):
     with pytest.raises(ValidationError):
         decoded_string_evidence(provenance=Provenance(evidence_ids=evidence_ids))
 
 
-def test_decoded_string_evidence_confidence_cannot_be_observed():
+@pytest.mark.parametrize("factory", [decoded_string_evidence, xor_evidence])
+def test_decoded_string_evidence_confidence_cannot_be_observed(factory):
     with pytest.raises(ValidationError):
-        decoded_string_evidence(confidence="observed")
+        factory(confidence="observed")
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        dict(component="decode_xor"),
+        dict(anchor=XorAnchor(catalog="dissect-xor-cribs-v1", crib="http://", crib_offset=0)),
+        dict(location=Location()),
+    ],
+)
+def test_text_decoding_rejects_xor_only_fields(overrides):
+    with pytest.raises(ValidationError):
+        decoded_string_evidence(**overrides)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        dict(component="decode_strings"),
+        dict(anchor=None),
+        dict(provenance=Provenance(evidence_ids=("E1",))),
+        dict(location=Location(offset=100, length=9)),
+        dict(location=Location(offset=100)),
+        dict(anchor=XorAnchor(catalog="dissect-xor-cribs-v1", crib="http://", crib_offset=1)),
+        dict(anchor=XorAnchor(catalog="dissect-xor-cribs-v1", crib="https://", crib_offset=0)),
+    ],
+)
+def test_xor_decoding_rejects_incoherent_fields(overrides):
+    with pytest.raises(ValidationError):
+        xor_evidence(**overrides)
+
+
+def test_xor_anchor_rejects_unknown_catalog_and_unprintable_crib():
+    with pytest.raises(ValidationError):
+        XorAnchor(catalog="other", crib="http://", crib_offset=0)
+    with pytest.raises(ValidationError):
+        XorAnchor(catalog="dissect-xor-cribs-v1", crib="http\x00//", crib_offset=0)

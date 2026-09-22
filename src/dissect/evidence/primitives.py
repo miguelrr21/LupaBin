@@ -117,6 +117,13 @@ class Location(Model):
 TransformName = Literal["base64-strict-v1", "hex-strict-v1", "xor-repeating-v1"]
 
 
+def minimal_period(key: bytes) -> bytes:
+    for period in range(1, len(key) + 1):
+        if len(key) % period == 0 and key == key[:period] * (len(key) // period):
+            return key[:period]
+    return key
+
+
 class Transform(Model):
     name: TransformName
     key_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2}){1,8}$")] | None = None
@@ -125,6 +132,12 @@ class Transform(Model):
     def key_matches_transform(self) -> Self:
         if (self.name == "xor-repeating-v1") != (self.key_hex is not None):
             raise ValueError("xor-repeating-v1 requires a key; other transforms carry none")
+        if self.key_hex is not None:
+            key = bytes.fromhex(self.key_hex)
+            if not any(key):
+                raise ValueError("an all-zero XOR key is the identity, not a decoding")
+            if minimal_period(key) != key:
+                raise ValueError("an XOR key must be published in its minimal period")
         return self
 
 
