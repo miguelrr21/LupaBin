@@ -12,6 +12,7 @@ dependencies = [
     "pefile==2024.8.26",
     "pydantic==2.11.7",
     "typer==0.16.1",
+    "yara-python==4.5.4",
 ]
 
 [project.scripts]

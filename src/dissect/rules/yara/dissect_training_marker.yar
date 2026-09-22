@@ -1,0 +1,1 @@
+rule dissect_training_marker { strings: $marker = "DISSECT PRACTICE" ascii wide condition: $marker }

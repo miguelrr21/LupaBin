@@ -1,0 +1,1 @@
+rule dissect_debug_marker_pair { strings: $signature = "RSDS" ascii $extension = ".pdb" ascii condition: all of them }
