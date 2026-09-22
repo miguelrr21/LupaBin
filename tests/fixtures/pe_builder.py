@@ -102,6 +102,9 @@ DECODE_DEMO = (
     ("xor", "https://training.invalid/decode/xor-1", b"\xa5", "ascii"),
     ("xor", "User-Agent: DissectTraining/1.0", b"\x9e\xc3\x81\xf7", "ascii"),
     ("xor", "kernel32.dll!DissectTraining", b"\xb7\xd2", "utf-16-le"),
+    # "http://" is too short to verify a 4-byte key by itself: this one is only
+    # recoverable because the User-Agent above established the same key
+    ("xor", "http://training.invalid/decode/reuse", b"\x9e\xc3\x81\xf7", "ascii"),
 )
 
 

@@ -134,6 +134,12 @@ def minimal_period(key: bytes) -> bytes:
     return key
 
 
+def canonical_key(key: bytes) -> bytes:
+    """The same repeating key regardless of phase: minimal period, least rotation."""
+    period = minimal_period(key)
+    return min(period[shift:] + period[:shift] for shift in range(len(period)))
+
+
 class Transform(Model):
     name: TransformName
     key_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2}){1,8}$")] | None = None

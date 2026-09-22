@@ -59,20 +59,28 @@ class DecodeExtractor:
             progress.issue("decode_xor", "decode_xor_examined_limit", limit=True)
         if result.hit_limit:
             progress.issue("decode_xor", "decode_xor_limit", limit=True)
-        for hit in result.hits:
+        # self-verified hits first, so a reused key can cite the decoding that set it
+        ordered = sorted(result.hits, key=lambda hit: hit.verified_by is not None)
+        for hit in ordered:
             built = decode_xor.parts(hit)
+            refs = () if hit.verified_by is None else (_xor_key(hit.verified_by),)
             if not collector.add(
-                f"decode:xor:{hit.start}:{hit.end}:{hit.encoding}:{hit.key.hex()}",
+                _xor_key(hit),
                 progress,
                 "decode_xor",
                 built.data,
                 built.location,
+                refs=refs,
                 extra={"transform": built.transform, "anchor": built.anchor},
             ):
                 return
             if not hit.complete:
                 progress.issue("decode_xor", "decoded_length_limit", limit=True)
         progress.complete("decode_xor")
+
+
+def _xor_key(hit: decode_xor.XorHit) -> str:
+    return f"decode:xor:{hit.start}:{hit.end}:{hit.encoding}:{hit.key.hex()}"
 
 
 def verify_decodings(evidence: Sequence[Evidence], data: bytes) -> None:
@@ -82,7 +90,13 @@ def verify_decodings(evidence: Sequence[Evidence], data: bytes) -> None:
         if not isinstance(fact, DecodedStringEvidence):
             continue
         if fact.transform.name == "xor-repeating-v1":
-            decode_xor.verify(fact, data)
+            verifier: DecodedStringEvidence | None = None
+            if fact.provenance.evidence_ids:
+                cited_xor = facts.get(fact.provenance.evidence_ids[0])
+                if not isinstance(cited_xor, DecodedStringEvidence):
+                    raise ValueError("a reused XOR key must cite an XOR decoding")
+                verifier = cited_xor
+            decode_xor.verify(fact, data, verifier)
             continue
         cited = facts.get(fact.provenance.evidence_ids[0])
         if not isinstance(cited, StringEvidence):
