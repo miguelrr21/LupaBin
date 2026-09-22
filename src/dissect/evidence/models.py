@@ -42,13 +42,17 @@ ErrorCode = (
         "evidence_budget",
         "dependency_omitted",
         "output_limit",
+        "decode_strings_limit",
+        "decode_xor_limit",
+        "decode_xor_examined_limit",
+        "decoded_length_limit",
     ]
     | YaraReason
 )
 
 
 class Analysis(Model):
-    version: Literal["0.3.0"] = "0.3.0"
+    version: Literal["0.4.0"] = "0.4.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -113,11 +117,11 @@ class ExtractorError(Model):
 
 
 class Report(Model):
-    schema_version: Literal["0.3.0"] = "0.3.0"
+    schema_version: Literal["0.4.0"] = "0.4.0"
     analysis: Analysis
     sample: Sample
-    evidence: Annotated[tuple[Evidence, ...], Field(max_length=20353)] = ()
-    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=3)]
+    evidence: Annotated[tuple[Evidence, ...], Field(max_length=22609)] = ()
+    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=4)]
     yara_context: YaraContext | None = None
     extractor_errors: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
     limitations: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
@@ -144,6 +148,14 @@ class Report(Model):
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
+        decoded: Counter[str] = Counter(
+            fact.component for fact in self.evidence if fact.kind == "decoded_string"
+        )
+        if (
+            decoded["decode_strings"] > limits.decode.strings
+            or decoded["decode_xor"] > limits.decode.xor
+        ):
+            raise ValueError("decoded evidence exceeds effective quota")
         reasons = self.extractor_errors + self.limitations
         reason_parts = {(reason.source, reason.component) for reason in reasons}
         for reason in reasons:
@@ -204,6 +216,22 @@ class Report(Model):
                 raise ValueError("evidence has no successful or partial source")
             if fact.kind == "yara_match":
                 degrees[fact.id] = 0
+                continue
+            if fact.kind == "decoded_string":
+                span = fact.location
+                if span.offset is None or span.length is None:
+                    raise ValueError("a decoding must locate its encoded bytes")
+                if span.offset + span.length > self.sample.size:
+                    raise ValueError("evidence location exceeds sample bounds")
+                if fact.data.characters > limits.string_characters:
+                    raise ValueError("decoded text exceeds character limit")
+                refs = fact.provenance.evidence_ids
+                degrees[fact.id] = len(refs)
+                for ref in refs:
+                    cited = facts.get(ref)
+                    if cited is None or cited.kind != "string" or cited.location != span:
+                        raise ValueError("a decoding must cite the string at its own location")
+                    children[ref].append(fact.id)
                 continue
             if fact.source != ("strings" if fact.kind == "string" else "pe"):
                 raise ValueError("evidence source disagrees with kind")

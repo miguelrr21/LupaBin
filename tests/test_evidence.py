@@ -25,7 +25,7 @@ from dissect.evidence.primitives import COMPONENTS, Provenance, Transform, minim
 
 def report_dict():
     return {
-        "schema_version": "0.3.0",
+        "schema_version": "0.4.0",
         "analysis": {
             "started_at": "2026-09-20T12:00:00Z",
             "finished_at": "2026-09-20T12:00:01Z",
@@ -81,6 +81,7 @@ def test_round_trip():
         lambda d: d.update(schema_version="9.0.0"),
         lambda d: d.update(schema_version="0.1.0"),
         lambda d: d.update(schema_version="0.2.0"),
+        lambda d: d.update(schema_version="0.3.0"),
         lambda d: d.update(verdict="safe"),
         lambda d: d["sample"].update(path="C:/private/sample.exe"),
         lambda d: d["sample"].update(size=-1),

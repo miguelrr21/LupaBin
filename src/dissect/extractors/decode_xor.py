@@ -10,7 +10,7 @@ bytes, never chosen among candidates. Design: docs/superpowers/specs/
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from dissect.evidence.facts import DecodedStringData, DecodedStringEvidence, XorAnchor
 from dissect.evidence.primitives import Location, Transform, minimal_period
@@ -271,14 +271,16 @@ def scan(
     return XorScan(tuple(hits), examined, examined_limit, hit_limit)
 
 
-def evidence(hit: XorHit, evidence_id: str) -> DecodedStringEvidence:
+class XorParts(NamedTuple):
+    data: DecodedStringData
+    location: Location
+    transform: Transform
+    anchor: XorAnchor
+
+
+def parts(hit: XorHit) -> XorParts:
     text = hit.plaintext.decode(hit.encoding)
-    return DecodedStringEvidence(
-        id=evidence_id,
-        component="decode_xor",
-        location=Location(offset=hit.start, length=hit.end - hit.start),
-        transform=Transform(name="xor-repeating-v1", key_hex=hit.key.hex()),
-        anchor=XorAnchor(catalog=CATALOG_ID, crib=hit.crib, crib_offset=hit.crib_offset),
+    return XorParts(
         data=DecodedStringData(
             encoding=hit.encoding,
             text=text,
@@ -287,6 +289,21 @@ def evidence(hit: XorHit, evidence_id: str) -> DecodedStringEvidence:
             complete=hit.complete,
             total_characters=len(text) if hit.complete else None,
         ),
+        location=Location(offset=hit.start, length=hit.end - hit.start),
+        transform=Transform(name="xor-repeating-v1", key_hex=hit.key.hex()),
+        anchor=XorAnchor(catalog=CATALOG_ID, crib=hit.crib, crib_offset=hit.crib_offset),
+    )
+
+
+def evidence(hit: XorHit, evidence_id: str) -> DecodedStringEvidence:
+    built = parts(hit)
+    return DecodedStringEvidence(
+        id=evidence_id,
+        component="decode_xor",
+        location=built.location,
+        transform=built.transform,
+        anchor=built.anchor,
+        data=built.data,
     )
 
 

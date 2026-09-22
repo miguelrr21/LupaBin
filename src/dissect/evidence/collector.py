@@ -1,9 +1,11 @@
 from collections import Counter
+from collections.abc import Mapping
 
 from pydantic import TypeAdapter
 
 from dissect.evidence.facts import (
     AnomalyData,
+    DecodedStringData,
     EntropyData,
     Evidence,
     ExportData,
@@ -34,6 +36,7 @@ KINDS = {
     StringData: "string",
     AnomalyData: "header_anomaly",
     YaraMatchData: "yara_match",
+    DecodedStringData: "decoded_string",
 }
 
 
@@ -106,6 +109,7 @@ class Collector:
             "header_anomaly": limits.anomalies,
             "string": limits.strings,
             "yara_match": limits.yara.matches,
+            "decoded_string": limits.decode.strings + limits.decode.xor,
         }
 
     def add(
@@ -116,6 +120,7 @@ class Collector:
         data: Payload,
         location: Location | None,
         refs: tuple[str, ...] = (),
+        extra: Mapping[str, object] | None = None,
     ) -> bool:
         if key in self.ids:
             raise ValueError("duplicate internal fact key")
@@ -142,6 +147,7 @@ class Collector:
                 "data": data,
                 "location": location,
                 "provenance": Provenance(evidence_ids=tuple(self.ids[ref] for ref in refs)),
+                **(extra or {}),
             }
         )
         size = len(fact.model_dump_json().encode("utf-8")) + 1
