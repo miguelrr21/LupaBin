@@ -114,5 +114,19 @@ class Location(Model):
         return self
 
 
+TransformName = Literal["base64-strict-v1", "hex-strict-v1", "xor-repeating-v1"]
+
+
+class Transform(Model):
+    name: TransformName
+    key_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2}){1,8}$")] | None = None
+
+    @model_validator(mode="after")
+    def key_matches_transform(self) -> Self:
+        if (self.name == "xor-repeating-v1") != (self.key_hex is not None):
+            raise ValueError("xor-repeating-v1 requires a key; other transforms carry none")
+        return self
+
+
 class Provenance(Model):
     evidence_ids: Annotated[tuple[EvidenceId, ...], Field(max_length=32)] = ()
