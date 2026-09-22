@@ -28,6 +28,16 @@ Los extractores devuelven datos verificables y no asignan IDs globales ni usan e
 
 Justifica dependencias nuevas y usa versiones publicadas al menos siete días antes. Conserva el lockfile. No publiques versiones ni hagas push sin autorización del responsable.
 
+## Reglas YARA propias
+
+El catálogo está en `src/dissect/rules/yara/`. Cada archivo contiene una regla; su ID, namespace y nombre de archivo deben coincidir con el manifiesto. Las reglas de esta fase solo usan literales, ASCII/wide y condiciones sencillas: no includes, módulos, variables externas, dependencias entre reglas, regex, XOR/Base64 ni reglas privadas/globales.
+
+Para proponer una regla, añade su entrada de manifiesto con revisión, descripción neutral, IDs de patrones y licencia Apache-2.0; incorpora positivos, negativos y casos de límite sintéticos. Conserva UTF-8 y finales LF: no se normalizan bytes silenciosamente durante el análisis. Cambiar fuentes o metadatos cambia el digest del catálogo. La revisión y el hash no son un veredicto de malware ni una firma de autenticidad.
+
+No publiques una regla que afirme ejecución o una familia solo por encontrar nombres de APIs. Las descripciones son metadatos editoriales, no nuevos hechos sobre la muestra. Compilar sin warnings no sustituye la revisión de su significado.
+
+Después de un cambio aprobado, reconstruye la imagen y comprueba los tests YARA y `uv run --frozen python -m tests.check_yara_distribution` tras `uv build`. Un wheel que omita el catálogo no es una entrega válida. No hay carga de reglas externas por CLI en esta fase.
+
 ## Contenido educativo
 
 El motor de glosario y capacidades pertenece a una fase posterior. Todavía no existe una ruta funcional para añadir capacidades mediante YAML; no se promete que un archivo de contenido aislado vaya a aparecer en el informe. Cuando se implemente, las contribuciones deberán incluir fuentes verificables, niveles de explicación y una separación explícita entre teoría y hechos de la muestra.
