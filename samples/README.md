@@ -19,4 +19,6 @@ uv run python -m tests.fixtures.pe_builder --scenario demo --output samples/phas
 uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/phase1a-partial.bin
 ```
 
+La Fase 1B incorpora `--scenario yara-limited`: parte del PE básico y añade veinte apariciones ASCII de `DISSECT PRACTICE` como datos. Con la cuota predeterminada de dieciséis instancias por regla, el informe indica cuatro omisiones. Para contrastar resultados YARA, `demo` contiene un marcador wide y `basic` no contiene los patrones suficientes para las cuatro reglas incluidas. Ninguno prueba capacidades maliciosas.
+
 El generador exige una ruta nueva y no sobrescribe archivos. Los archivos `.bin`, `.exe` y `.dll` están ignorados por Git. Para analizar el fixture, usa la CLI después de construir y verificar el worker Docker; no lo abras como programa.
