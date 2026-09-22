@@ -9,16 +9,22 @@ bytes, never chosen among candidates. Design: docs/superpowers/specs/
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, NamedTuple
 
 from dissect.evidence.facts import DecodedStringData, DecodedStringEvidence, XorAnchor
-from dissect.evidence.primitives import Location, Transform, minimal_period
+from dissect.evidence.primitives import (
+    Location,
+    Provenance,
+    Transform,
+    canonical_key,
+    minimal_period,
+)
 
 Encoding = Literal["ascii", "utf-16-le"]
 ENCODINGS: tuple[Encoding, ...] = ("ascii", "utf-16-le")
 
-CATALOG_ID: Literal["dissect-xor-cribs-v1"] = "dissect-xor-cribs-v1"
+CATALOG_ID: Literal["dissect-xor-cribs-v2"] = "dissect-xor-cribs-v2"
 # Neutral anchors chosen for length, not meaning: finding one says nothing about
 # capability or intent. Changing this tuple requires a new CATALOG_ID and digest.
 CRIBS: tuple[str, ...] = (
@@ -50,13 +56,41 @@ CRIBS: tuple[str, ...] = (
     "\\AppData\\Roaming\\",
     "SeDebugPrivilege",
     "-----BEGIN ",
+    # v2: longer anchors, so that single strings can verify keys of up to 8 bytes
+    "GetModuleHandle",
+    "VirtualProtect",
+    "IsDebuggerPresent",
+    "CreateToolhelp32Snapshot",
+    "NtUnmapViewOfSection",
+    "InternetReadFile",
+    "HttpOpenRequest",
+    "RegSetValueEx",
+    "Content-Type: ",
+    "Content-Length: ",
+    "Accept-Language: ",
+    "HTTP/1.1",
+    "powershell.exe",
+    "rundll32.exe",
+    "cmd.exe /c ",
+    "schtasks /create",
+    "http://www.",
+    "https://www.",
+    "\\Microsoft\\Windows\\",
+    "C:\\Windows\\System32",
 )
-CATALOG_SHA256 = "478c295913a45a14232b175bdb77a8a5691f21846053f283b3a453411a0197a9"
+CATALOG_SHA256 = "f096f766792268443f6f1b5551c7f313a07c687918613c789e22bc84eea3111f"
 
 MAX_KEY_LENGTH = 8
+# Distinct keys (period >= 2) whose reuse is searched after the first pass; each one
+# costs a pass over the sample, so the count is bounded.
+MAX_REUSE_KEYS = 8
 # A zero in a differential matches any run of repeated bytes (padding, alignment),
 # so only non-zero differential bytes count as verification.
 MIN_VERIFIED_BYTES = 5
+# Under a reused key the key equality verifies the match; the differential only has to
+# be selective enough not to flood the search (about one random hit per 16 MiB). Below
+# this, the exact ciphertext of the crib under each key rotation is searched instead.
+_REUSE_SELECTIVE_BYTES = 3
 # Windows whose bytes are already text are rejected: text XOR text produces the
 # small differentials that collide with crib differentials (design section 8).
 _TEXTLIKE = bytes(range(0x20, 0x7F)) + b"\x00\t\n\r"
@@ -116,6 +150,12 @@ PLANS: tuple[Plan, ...] = tuple(
     )
 )
 
+COVERAGE: dict[tuple[int, Encoding], frozenset[int]] = {
+    (index, encoding): covered_periods(crib, encoding)
+    for index, crib in enumerate(CRIBS)
+    for encoding in ENCODINGS
+}
+
 
 def lag_xor(data: bytes, lag: int) -> bytes:
     size = len(data) - lag
@@ -128,13 +168,6 @@ def lag_xor(data: bytes, lag: int) -> bytes:
 
 
 @dataclass(frozen=True)
-class _Candidate:
-    offset: int
-    plan: Plan
-    key: bytes  # minimal period, aligned to offset
-
-
-@dataclass(frozen=True)
 class XorHit:
     start: int
     end: int
@@ -144,6 +177,17 @@ class XorHit:
     crib_offset: int  # in characters of the decoded text
     complete: bool
     plaintext: bytes
+    # None: the anchor itself verified the key. Otherwise the self-verified hit that
+    # established this exact key elsewhere in the sample (key reuse).
+    verified_by: "XorHit | None" = None
+
+
+@dataclass(frozen=True)
+class _Candidate:
+    offset: int
+    plan: Plan
+    key: bytes  # minimal period, aligned to offset
+    verified_by: XorHit | None = None
 
 
 @dataclass(frozen=True)
@@ -225,50 +269,133 @@ def _extend(data: bytes, candidate: _Candidate, max_chars: int) -> XorHit:
         crib_offset=left,
         complete=complete,
         plaintext=plaintext,
+        verified_by=candidate.verified_by,
     )
 
 
-def scan(
-    data: bytes, *, max_hits: int = 256, max_examined: int = 200_000, max_chars: int = 1024
-) -> XorScan:
-    if max_chars < 64:
-        raise ValueError("max_chars must leave room for the longest crib")
+class _Budget:
+    def __init__(self, limit: int) -> None:
+        self.limit, self.examined, self.exhausted = limit, 0, False
+
+    def take(self) -> bool:
+        if self.examined >= self.limit:
+            self.exhausted = True
+            return False
+        self.examined += 1
+        return True
+
+
+def _self_verified(data: bytes, budget: _Budget) -> list[_Candidate]:
     candidates: list[_Candidate] = []
-    examined = 0
-    examined_limit = False
     lag, diff = 0, b""
     for plan in PLANS:
         if plan.lag != lag:
             lag, diff = plan.lag, b""
             diff = lag_xor(data, lag)
         position = diff.find(plan.pattern)
-        while position != -1:
-            if examined >= max_examined:
-                examined_limit = True
-                break
-            examined += 1
+        while position != -1 and budget.take():
             if (candidate := _candidate(data, position, plan)) is not None:
                 candidates.append(candidate)
             position = diff.find(plan.pattern, position + 1)
-        if examined_limit:
+        if budget.exhausted:
             break
-    del diff
+    return candidates
+
+
+def _reused(data: bytes, verifiers: dict[bytes, XorHit], budget: _Budget) -> list[_Candidate]:
+    """Anchors too short to verify a key by themselves, under a key verified elsewhere.
+
+    A match must reproduce the whole crib under a key identical (up to phase) to one a
+    self-verified hit established, so a coincidence needs len(crib) random bytes to
+    align: 256**-7 or less per position for the shortest crib.
+    """
+    candidates: list[_Candidate] = []
+    periods = sorted({len(key) for key in verifiers})
+    for period in periods:
+        table = {key: hit for key, hit in verifiers.items() if len(key) == period}
+        diff = lag_xor(data, period)
+        for index, crib in enumerate(CRIBS):
+            for encoding in ENCODINGS:
+                if period in COVERAGE[index, encoding]:
+                    continue  # the anchor verifies this period on its own (first pass)
+                encoded = crib.encode(encoding)
+                pattern = bytes(a ^ b for a, b in zip(encoded, encoded[period:], strict=False))
+                if sum(1 for byte in pattern if byte) >= _REUSE_SELECTIVE_BYTES:
+                    plan = Plan(index, encoding, encoded, period, pattern)
+                    position = diff.find(pattern)
+                    while position != -1 and budget.take():
+                        if (candidate := _candidate(data, position, plan)) is not None:
+                            verifier = table.get(canonical_key(candidate.key))
+                            if verifier is not None and len(candidate.key) == period:
+                                candidates.append(replace(candidate, verified_by=verifier))
+                        position = diff.find(pattern, position + 1)
+                    continue
+                for key, verifier in table.items():
+                    for shift in range(period):
+                        rotated = key[shift:] + key[:shift]
+                        pattern = bytes(b ^ rotated[j % period] for j, b in enumerate(encoded))
+                        plan = Plan(index, encoding, encoded, period, pattern)
+                        position = data.find(pattern)
+                        while position != -1 and budget.take():
+                            window = data[position : position + len(encoded)]
+                            if window.translate(None, _TEXTLIKE):
+                                candidates.append(_Candidate(position, plan, rotated, verifier))
+                            position = data.find(pattern, position + 1)
+            if budget.exhausted:
+                return candidates
+    return candidates
+
+
+def _accept(
+    data: bytes,
+    candidates: list[_Candidate],
+    hits: list[XorHit],
+    max_hits: int,
+    max_chars: int,
+) -> bool:
+    """Extend uncovered candidates into hits in offset order; True if the cap cut some."""
     candidates.sort(key=lambda c: (c.offset, c.plan.crib_index, ENCODINGS.index(c.plan.encoding)))
-    hits: list[XorHit] = []
+    existing = sorted(hits, key=lambda h: h.start)
+    pointer = 0
     active: list[XorHit] = []
-    hit_limit = False
     for candidate in candidates:
+        while pointer < len(existing) and existing[pointer].start <= candidate.offset:
+            active.append(existing[pointer])
+            pointer += 1
         active = [hit for hit in active if hit.end > candidate.offset]
         if _covered(candidate, active):
             continue
         if len(hits) >= max_hits:
-            hit_limit = True
-            break
+            return True
         hit = _extend(data, candidate, max_chars)
         hits.append(hit)
         active.append(hit)
+    return False
+
+
+def scan(
+    data: bytes,
+    *,
+    max_hits: int = 256,
+    max_examined: int = 200_000,
+    max_chars: int = 1024,
+    reuse_keys: int = MAX_REUSE_KEYS,
+) -> XorScan:
+    if max_chars < 64:
+        raise ValueError("max_chars must leave room for the longest crib")
+    budget = _Budget(max_examined)
+    hits: list[XorHit] = []
+    hit_limit = _accept(data, _self_verified(data, budget), hits, max_hits, max_chars)
+    verifiers: dict[bytes, XorHit] = {}
+    for hit in sorted(hits, key=lambda h: h.start):
+        if len(hit.key) >= 2:  # every crib already verifies 1-byte keys on its own
+            verifiers.setdefault(canonical_key(hit.key), hit)
+    verifiers = dict(list(verifiers.items())[:reuse_keys])
+    if verifiers and not budget.exhausted and not hit_limit:
+        reused = _reused(data, verifiers, budget)
+        hit_limit = _accept(data, reused, hits, max_hits, max_chars)
     hits.sort(key=lambda h: (h.start, h.end, ENCODINGS.index(h.encoding), h.key))
-    return XorScan(tuple(hits), examined, examined_limit, hit_limit)
+    return XorScan(tuple(hits), budget.examined, budget.exhausted, hit_limit)
 
 
 class XorParts(NamedTuple):
@@ -295,19 +422,33 @@ def parts(hit: XorHit) -> XorParts:
     )
 
 
-def evidence(hit: XorHit, evidence_id: str) -> DecodedStringEvidence:
+def evidence(
+    hit: XorHit, evidence_id: str, verified_by_id: str | None = None
+) -> DecodedStringEvidence:
+    if (hit.verified_by is None) != (verified_by_id is None):
+        raise ValueError("a reused key must cite the evidence that verified it")
     built = parts(hit)
     return DecodedStringEvidence(
         id=evidence_id,
         component="decode_xor",
         location=built.location,
+        provenance=Provenance(evidence_ids=(verified_by_id,) if verified_by_id else ()),
         transform=built.transform,
         anchor=built.anchor,
         data=built.data,
     )
 
 
-def verify(evidence: DecodedStringEvidence, data: bytes) -> None:
+def verify(
+    evidence: DecodedStringEvidence,
+    data: bytes,
+    verifier: DecodedStringEvidence | None = None,
+) -> None:
+    """Re-derive a published XOR decoding from the original bytes; raise if it differs.
+
+    A decoding that cites another one reuses its key: the cited decoding must itself be
+    self-verified with the same key, and the anchor then need not verify the period.
+    """
     anchor, key_hex = evidence.anchor, evidence.transform.key_hex
     if evidence.transform.name != "xor-repeating-v1" or anchor is None or key_hex is None:
         raise ValueError("not an XOR decoding")
@@ -318,7 +459,18 @@ def verify(evidence: DecodedStringEvidence, data: bytes) -> None:
         raise ValueError("region lies outside the sample")
     key = bytes.fromhex(key_hex)
     encoding = evidence.data.encoding
-    if len(key) not in covered_periods(anchor.crib, encoding):
+    if evidence.provenance.evidence_ids:
+        cited_key = verifier.transform.key_hex if verifier is not None else None
+        if (
+            verifier is None
+            or verifier.provenance.evidence_ids
+            or evidence.provenance.evidence_ids != (verifier.id,)
+            or cited_key is None
+            or canonical_key(bytes.fromhex(cited_key)) != canonical_key(key)
+        ):
+            raise ValueError("a reused key must come from a self-verified decoding")
+        verify(verifier, data)
+    elif len(key) not in covered_periods(anchor.crib, encoding):
         raise ValueError("this crib cannot verify a key of that period")
     region = data[offset : offset + length]
     decoded = bytes(byte ^ key[i % len(key)] for i, byte in enumerate(region))

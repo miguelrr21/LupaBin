@@ -5,6 +5,7 @@ import pytest
 from dissect.evidence.facts import DecodedStringData, DecodedStringEvidence, XorAnchor
 from dissect.evidence.primitives import Location, Transform, minimal_period
 from dissect.extractors import decode_xor as x
+from tests.fixtures.pe_builder import xor_stream
 
 LONG = "This program cannot be run in DOS mode."  # contains a crib verifying periods 1-8
 
@@ -311,3 +312,93 @@ def test_verify_rejects_a_textual_anchor_window():
     )
     with pytest.raises(ValueError, match="plain text"):
         x.verify(forged, data)
+
+
+# --- key reuse ---------------------------------------------------------------
+
+LONG_ANCHOR = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"  # verifies periods 1-8
+SHORT = "http://attacker.invalid/gate.php?id="  # "http://" verifies only periods 1-2
+
+
+def two_strings(first, second, key_a, key_b):
+    data = bytearray(noise(6000, 21))
+    a = xor_stream(first, key_a)
+    b = xor_stream(second, key_b)
+    data[1000 : 1000 + len(a)] = a
+    data[3000 : 3000 + len(b)] = b
+    return bytes(data)
+
+
+def test_short_anchor_is_recovered_under_a_key_verified_elsewhere():
+    key = high_key(8, seed=31)
+    hits = x.scan(two_strings(LONG_ANCHOR, SHORT, key, key)).hits
+    verifier, reused = hits
+    assert verifier.verified_by is None and verifier.plaintext.decode() == LONG_ANCHOR
+    assert reused.verified_by == verifier
+    assert reused.plaintext.decode() == SHORT
+    assert x.canonical_key(reused.key) == x.canonical_key(verifier.key)
+
+
+def test_short_anchor_alone_cannot_verify_a_long_key():
+    key = high_key(8, seed=31)
+    data = bytearray(noise(6000, 21))
+    b = xor_stream(SHORT, key)
+    data[3000 : 3000 + len(b)] = b
+    assert x.scan(bytes(data)).hits == ()
+
+
+def test_reuse_requires_the_exact_same_key():
+    hits = x.scan(two_strings(LONG_ANCHOR, SHORT, high_key(8, 31), high_key(8, 32))).hits
+    assert [h.plaintext.decode() for h in hits] == [LONG_ANCHOR]
+
+
+def test_reuse_can_be_disabled():
+    key = high_key(8, seed=31)
+    hits = x.scan(two_strings(LONG_ANCHOR, SHORT, key, key), reuse_keys=0).hits
+    assert [h.plaintext.decode() for h in hits] == [LONG_ANCHOR]
+
+
+def test_reuse_works_for_anchors_longer_than_the_period_too():
+    # "kernel32.dll" verifies periods up to 7 alone; with 8 it needs the reused key
+    key = high_key(8, seed=33)
+    hits = x.scan(two_strings(LONG_ANCHOR, "kernel32.dll", key, key)).hits
+    assert [h.plaintext.decode() for h in hits] == [LONG_ANCHOR, "kernel32.dll"]
+    assert hits[1].verified_by == hits[0]
+
+
+def reused_evidence():
+    key = high_key(8, seed=31)
+    data = two_strings(LONG_ANCHOR, SHORT, key, key)
+    verifier_hit, reused_hit = x.scan(data).hits
+    verifier = x.evidence(verifier_hit, "E1")
+    return x.evidence(reused_hit, "E2", verified_by_id="E1"), verifier, data
+
+
+def test_reused_evidence_cites_and_verifies_against_its_verifier():
+    reused, verifier, data = reused_evidence()
+    assert reused.provenance.evidence_ids == ("E1",)
+    x.verify(reused, data, verifier)
+
+
+def test_reused_evidence_without_its_verifier_is_rejected():
+    reused, _, data = reused_evidence()
+    with pytest.raises(ValueError, match="self-verified"):
+        x.verify(reused, data)
+
+
+def test_reused_evidence_citing_a_different_key_is_rejected():
+    reused, verifier, data = reused_evidence()
+    other = verifier.model_copy(
+        update={"transform": verifier.transform.model_copy(update={"key_hex": "0102030405060708"})}
+    )
+    with pytest.raises(ValueError, match="self-verified"):
+        x.verify(reused, data, other)
+
+
+def test_evidence_requires_a_citation_exactly_for_reused_keys():
+    key = high_key(8, seed=31)
+    verifier_hit, reused_hit = x.scan(two_strings(LONG_ANCHOR, SHORT, key, key)).hits
+    with pytest.raises(ValueError):
+        x.evidence(reused_hit, "E2")
+    with pytest.raises(ValueError):
+        x.evidence(verifier_hit, "E1", verified_by_id="E9")

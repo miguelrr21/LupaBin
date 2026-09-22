@@ -20,6 +20,7 @@ EXPECTED = [
     # the 4-byte key is published rotated to the region start (after the NUL pad)
     ("decode_xor", "xor-repeating-v1", "c381f79e", "User-Agent: DissectTraining/1.0"),
     ("decode_xor", "xor-repeating-v1", "b7d2", "kernel32.dll!DissectTraining"),
+    ("decode_xor", "xor-repeating-v1", "c381f79e", "http://training.invalid/decode/reuse"),
 ]
 
 
@@ -56,8 +57,13 @@ def test_text_decodings_cite_the_string_holding_their_bytes():
             assert facts[ref].kind == "string"
             assert facts[ref].location == fact.location
         else:
-            assert fact.provenance.evidence_ids == ()
-            assert fact.anchor.catalog == "dissect-xor-cribs-v1"
+            assert fact.anchor.catalog == "dissect-xor-cribs-v2"
+            if fact.anchor.crib == "http://":  # reused key: cites the decoding that set it
+                [ref] = fact.provenance.evidence_ids
+                assert facts[ref].transform.key_hex == fact.transform.key_hex
+                assert facts[ref].provenance.evidence_ids == ()
+            else:
+                assert fact.provenance.evidence_ids == ()
 
 
 def test_decode_runs_last_and_its_ids_follow_earlier_sources():
@@ -214,3 +220,33 @@ def test_runner_rejects_decodings_that_do_not_reproduce(tamper):
 def test_runner_accepts_genuine_decodings():
     report = asyncio.run(run_isolated(build_decode_demo(), Limits(), FakeDocker()))
     assert len(decoded(report)) == len(EXPECTED)
+
+
+def reused(data):
+    return next(f for f in data["evidence"] if f.get("anchor") and f["anchor"]["crib"] == "http://")
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        # cites a Base64 decoding instead of the XOR decoding that set the key
+        lambda d: reused(d).update(provenance={"evidence_ids": [first(d, "decode_strings")["id"]]}),
+        # cites an XOR decoding with a different key (the 1-byte a5 one)
+        lambda d: reused(d).update(
+            provenance={
+                "evidence_ids": [
+                    next(
+                        f["id"]
+                        for f in d["evidence"]
+                        if f.get("transform", {}).get("key_hex") == "a5"
+                    )
+                ]
+            }
+        ),
+    ],
+)
+def test_report_rejects_reused_keys_citing_the_wrong_decoding(tamper):
+    data = payload()
+    tamper(data)
+    with pytest.raises(ValueError, match="reused XOR key must cite the decoding that set it"):
+        Report.model_validate_json(json.dumps(data))
