@@ -17,34 +17,38 @@ from dissect.evidence.primitives import Limits as Limits
 from dissect.evidence.primitives import Location as Location
 from dissect.evidence.primitives import Name as Name
 from dissect.evidence.relations import validate_anomaly
+from dissect.evidence.yara import YaraContext, YaraReason, validate_matches
 
 Coverage = Literal["complete", "partial", "blocked"]
-ErrorCode = Literal[
-    "invalid_pe",
-    "unsupported_format",
-    "extractor_failure",
-    "parser_warning",
-    "invalid_import_table",
-    "invalid_export_table",
-    "invalid_section_table",
-    "unsafe_mapping",
-    "import_limit",
-    "descriptor_limit",
-    "export_limit",
-    "export_name_limit",
-    "section_limit",
-    "string_limit",
-    "string_length_limit",
-    "entropy_limit",
-    "anomaly_limit",
-    "evidence_budget",
-    "dependency_omitted",
-    "output_limit",
-]
+ErrorCode = (
+    Literal[
+        "invalid_pe",
+        "unsupported_format",
+        "extractor_failure",
+        "parser_warning",
+        "invalid_import_table",
+        "invalid_export_table",
+        "invalid_section_table",
+        "unsafe_mapping",
+        "import_limit",
+        "descriptor_limit",
+        "export_limit",
+        "export_name_limit",
+        "section_limit",
+        "string_limit",
+        "string_length_limit",
+        "entropy_limit",
+        "anomaly_limit",
+        "evidence_budget",
+        "dependency_omitted",
+        "output_limit",
+    ]
+    | YaraReason
+)
 
 
 class Analysis(Model):
-    version: Literal["0.2.0"] = "0.2.0"
+    version: Literal["0.3.0"] = "0.3.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -67,7 +71,7 @@ class Sample(Model):
 class ComponentRun(Model):
     name: Component
     status: Coverage
-    examined: NonNegative = 0
+    examined: NonNegative | None = 0
     evidence_count: NonNegative = 0
 
 
@@ -92,6 +96,11 @@ class Run(Model):
             raise ValueError("unexpected component coverage")
         if self.status != aggregate(tuple(part.status for part in self.components)):
             raise ValueError("extractor status disagrees with coverage")
+        if any(
+            part.examined is None and (self.source != "yara" or part.status == "complete")
+            for part in self.components
+        ):
+            raise ValueError("unknown examined count is only valid for incomplete YARA components")
         if self.evidence_count != sum(part.evidence_count for part in self.components):
             raise ValueError("extractor evidence count disagrees with components")
         return self
@@ -104,11 +113,12 @@ class ExtractorError(Model):
 
 
 class Report(Model):
-    schema_version: Literal["0.2.0"] = "0.2.0"
+    schema_version: Literal["0.3.0"] = "0.3.0"
     analysis: Analysis
     sample: Sample
-    evidence: Annotated[tuple[Evidence, ...], Field(max_length=20321)] = ()
-    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=2)]
+    evidence: Annotated[tuple[Evidence, ...], Field(max_length=20353)] = ()
+    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=3)]
+    yara_context: YaraContext | None = None
     extractor_errors: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
     limitations: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
 
@@ -130,6 +140,7 @@ class Report(Model):
             "export": limits.exports,
             "string": limits.strings,
             "header_anomaly": limits.anomalies,
+            "yara_match": limits.yara.matches,
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
@@ -155,11 +166,45 @@ class Report(Model):
         )
         if self.analysis.status != expected:
             raise ValueError("global status disagrees with coverage")
+        if ("yara" in runs) != (self.yara_context is not None):
+            raise ValueError("YARA coverage requires its own context")
+        yara_matches = tuple(fact.data for fact in self.evidence if fact.kind == "yara_match")
+        if self.yara_context is not None:
+            context = self.yara_context
+            if runs["yara"].status == "completed" and (
+                context.catalog is None
+                or context.package_version is None
+                or context.module_version is None
+            ):
+                raise ValueError("completed YARA scan requires observed catalog and versions")
+            parts: dict[str, ComponentRun] = {part.name: part for part in runs["yara"].components}
+            if context.catalog is not None:
+                if len(context.catalog.rules) > limits.yara.rules:
+                    raise ValueError("catalog exceeds rule quota")
+                for name in ("yara_rules", "yara_scan"):
+                    part = parts[name]
+                    if part.status == "complete" and part.examined != len(context.catalog.rules):
+                        raise ValueError("complete YARA coverage disagrees with catalog size")
+                validate_matches(yara_matches, context, self.sample.size, limits.yara)
+            elif yara_matches or parts["yara_rules"].status == "complete":
+                raise ValueError("YARA evidence or compiled rules cannot lack a catalog")
+            if yara_matches and any(
+                parts[name].status != "complete" for name in ("yara_rules", "yara_scan")
+            ):
+                raise ValueError("interrupted YARA scans cannot publish matches")
+            if parts["yara_evidence"].status == "complete":
+                if any(match.instances_status != "complete" for match in yara_matches):
+                    raise ValueError("limited YARA instances cannot claim complete coverage")
+                if parts["yara_evidence"].examined != len(yara_matches):
+                    raise ValueError("complete YARA reporting disagrees with retained matches")
         degrees: dict[str, int] = {}
         children: dict[str, list[str]] = {key: [] for key in facts}
         for fact in self.evidence:
             if fact.source not in runs or runs[fact.source].status == "failed":
                 raise ValueError("evidence has no successful or partial source")
+            if fact.kind == "yara_match":
+                degrees[fact.id] = 0
+                continue
             if fact.source != ("strings" if fact.kind == "string" else "pe"):
                 raise ValueError("evidence source disagrees with kind")
             expected_component = {

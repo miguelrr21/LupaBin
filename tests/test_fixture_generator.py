@@ -17,3 +17,12 @@ def test_generator_never_overwrites_existing_file(tmp_path, monkeypatch):
     with pytest.raises(FileExistsError):
         main()
     assert path.read_bytes() == b"preserve"
+
+
+def test_yara_limited_fixture_is_reproducible(tmp_path, monkeypatch):
+    path = tmp_path / "limited.bin"
+    monkeypatch.setattr(
+        "sys.argv", ["pe_builder", "--scenario", "yara-limited", "--output", str(path)]
+    )
+    main()
+    assert path.read_bytes() == build_pe() + b"DISSECT PRACTICE\0" * 20

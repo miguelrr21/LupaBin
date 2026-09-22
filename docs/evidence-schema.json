@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.2.0",
-          "default": "0.2.0",
+          "const": "0.3.0",
+          "default": "0.3.0",
           "title": "Version",
           "type": "string"
         }
@@ -91,7 +91,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -126,7 +129,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -142,6 +146,57 @@
       "title": "AnomalyEvidence",
       "type": "object"
     },
+    "CatalogInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_id": {
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "title": "Catalog Id",
+          "type": "string"
+        },
+        "format_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Format Version",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "revision": {
+          "maxLength": 32,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/RuleInfo"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Rules",
+          "type": "array"
+        },
+        "ruleset_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Ruleset Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog_id",
+        "revision",
+        "manifest_sha256",
+        "ruleset_sha256",
+        "rules"
+      ],
+      "title": "CatalogInfo",
+      "type": "object"
+    },
     "ComponentRun": {
       "additionalProperties": false,
       "properties": {
@@ -152,10 +207,17 @@
           "type": "integer"
         },
         "examined": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "default": 0,
-          "minimum": 0,
-          "title": "Examined",
-          "type": "integer"
+          "title": "Examined"
         },
         "name": {
           "enum": [
@@ -167,7 +229,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Name",
           "type": "string"
@@ -231,7 +296,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -266,7 +334,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -364,7 +433,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -399,7 +471,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -419,30 +492,53 @@
       "additionalProperties": false,
       "properties": {
         "code": {
-          "enum": [
-            "invalid_pe",
-            "unsupported_format",
-            "extractor_failure",
-            "parser_warning",
-            "invalid_import_table",
-            "invalid_export_table",
-            "invalid_section_table",
-            "unsafe_mapping",
-            "import_limit",
-            "descriptor_limit",
-            "export_limit",
-            "export_name_limit",
-            "section_limit",
-            "string_limit",
-            "string_length_limit",
-            "entropy_limit",
-            "anomaly_limit",
-            "evidence_budget",
-            "dependency_omitted",
-            "output_limit"
+          "anyOf": [
+            {
+              "enum": [
+                "invalid_pe",
+                "unsupported_format",
+                "extractor_failure",
+                "parser_warning",
+                "invalid_import_table",
+                "invalid_export_table",
+                "invalid_section_table",
+                "unsafe_mapping",
+                "import_limit",
+                "descriptor_limit",
+                "export_limit",
+                "export_name_limit",
+                "section_limit",
+                "string_limit",
+                "string_length_limit",
+                "entropy_limit",
+                "anomaly_limit",
+                "evidence_budget",
+                "dependency_omitted",
+                "output_limit"
+              ],
+              "type": "string"
+            },
+            {
+              "enum": [
+                "yara_catalog_invalid",
+                "yara_unavailable",
+                "yara_compile_error",
+                "yara_scan_error",
+                "yara_timeout",
+                "yara_policy_violation",
+                "yara_warning",
+                "yara_process_failure",
+                "yara_output_limit",
+                "yara_result_invalid",
+                "yara_instance_limit",
+                "yara_data_limit",
+                "yara_match_limit",
+                "yara_catalog_mismatch"
+              ],
+              "type": "string"
+            }
           ],
-          "title": "Code",
-          "type": "string"
+          "title": "Code"
         },
         "component": {
           "enum": [
@@ -454,7 +550,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -462,7 +561,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -577,7 +677,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -612,7 +715,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -688,7 +792,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -723,7 +830,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -843,6 +951,9 @@
           "maximum": 30,
           "title": "Timeout Seconds",
           "type": "integer"
+        },
+        "yara": {
+          "$ref": "#/$defs/YaraLimits"
         }
       },
       "title": "Limits",
@@ -953,6 +1064,74 @@
       "title": "Provenance",
       "type": "object"
     },
+    "RuleInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "filename": {
+          "maxLength": 132,
+          "pattern": "^[a-z][a-z0-9_]*\\.yar$",
+          "title": "Filename",
+          "type": "string"
+        },
+        "license": {
+          "const": "Apache-2.0",
+          "title": "License",
+          "type": "string"
+        },
+        "namespace": {
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "pattern_ids": {
+          "items": {
+            "maxLength": 128,
+            "pattern": "^\\$[a-zA-Z_][a-zA-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Pattern Ids",
+          "type": "array"
+        },
+        "revision": {
+          "maxLength": 32,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "rule_id": {
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "namespace",
+        "filename",
+        "revision",
+        "pattern_ids",
+        "description",
+        "license",
+        "source_sha256"
+      ],
+      "title": "RuleInfo",
+      "type": "object"
+    },
     "Run": {
       "additionalProperties": false,
       "properties": {
@@ -972,7 +1151,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -1147,7 +1327,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -1182,7 +1365,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -1274,7 +1458,10 @@
             "exports",
             "anomalies",
             "ascii",
-            "utf16le"
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -1309,7 +1496,8 @@
         "source": {
           "enum": [
             "pe",
-            "strings"
+            "strings",
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -1323,6 +1511,363 @@
         "data"
       ],
       "title": "StringEvidence",
+      "type": "object"
+    },
+    "YaraContext": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "module_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Module Version"
+        },
+        "package_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Package Version"
+        }
+      },
+      "title": "YaraContext",
+      "type": "object"
+    },
+    "YaraEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "const": "yara_evidence",
+          "default": "yara_evidence",
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/YaraMatchData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "yara_match",
+          "default": "yara_match",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "default": null,
+          "title": "Location",
+          "type": "null"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "const": "yara",
+          "default": "yara",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "data"
+      ],
+      "title": "YaraEvidence",
+      "type": "object"
+    },
+    "YaraInstance": {
+      "additionalProperties": false,
+      "properties": {
+        "captured_length": {
+          "exclusiveMinimum": 0,
+          "maximum": 256,
+          "title": "Captured Length",
+          "type": "integer"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "matched_length": {
+          "exclusiveMinimum": 0,
+          "maximum": 20971520,
+          "title": "Matched Length",
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "raw_hex": {
+          "maxLength": 512,
+          "pattern": "^(?:[a-f0-9]{2})+$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "string_id": {
+          "maxLength": 128,
+          "pattern": "^\\$[a-zA-Z_][a-zA-Z0-9_]*$",
+          "title": "String Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "string_id",
+        "offset",
+        "matched_length",
+        "captured_length",
+        "raw_hex",
+        "complete"
+      ],
+      "title": "YaraInstance",
+      "type": "object"
+    },
+    "YaraLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "capture_bytes": {
+          "default": 256,
+          "exclusiveMinimum": 0,
+          "maximum": 256,
+          "title": "Capture Bytes",
+          "type": "integer"
+        },
+        "instances": {
+          "default": 16,
+          "exclusiveMinimum": 0,
+          "maximum": 16,
+          "title": "Instances",
+          "type": "integer"
+        },
+        "manifest_bytes": {
+          "default": 65536,
+          "exclusiveMinimum": 0,
+          "maximum": 65536,
+          "title": "Manifest Bytes",
+          "type": "integer"
+        },
+        "matches": {
+          "default": 32,
+          "exclusiveMinimum": 0,
+          "maximum": 32,
+          "title": "Matches",
+          "type": "integer"
+        },
+        "output_bytes": {
+          "default": 1048576,
+          "exclusiveMinimum": 0,
+          "maximum": 1048576,
+          "title": "Output Bytes",
+          "type": "integer"
+        },
+        "patterns_per_rule": {
+          "default": 8,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Patterns Per Rule",
+          "type": "integer"
+        },
+        "process_seconds": {
+          "default": 10,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Process Seconds",
+          "type": "integer"
+        },
+        "rules": {
+          "default": 32,
+          "exclusiveMinimum": 0,
+          "maximum": 32,
+          "title": "Rules",
+          "type": "integer"
+        },
+        "scan_seconds": {
+          "default": 5,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Scan Seconds",
+          "type": "integer"
+        },
+        "source_bytes": {
+          "default": 16384,
+          "exclusiveMinimum": 0,
+          "maximum": 16384,
+          "title": "Source Bytes",
+          "type": "integer"
+        },
+        "stderr_bytes": {
+          "default": 65536,
+          "exclusiveMinimum": 0,
+          "maximum": 65536,
+          "title": "Stderr Bytes",
+          "type": "integer"
+        },
+        "total_source_bytes": {
+          "default": 262144,
+          "exclusiveMinimum": 0,
+          "maximum": 262144,
+          "title": "Total Source Bytes",
+          "type": "integer"
+        }
+      },
+      "title": "YaraLimits",
+      "type": "object"
+    },
+    "YaraMatchData": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "filename": {
+          "maxLength": 132,
+          "pattern": "^[a-z][a-z0-9_]*\\.yar$",
+          "title": "Filename",
+          "type": "string"
+        },
+        "instances": {
+          "items": {
+            "$ref": "#/$defs/YaraInstance"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Instances",
+          "type": "array"
+        },
+        "instances_status": {
+          "enum": [
+            "complete",
+            "partial"
+          ],
+          "title": "Instances Status",
+          "type": "string"
+        },
+        "license": {
+          "const": "Apache-2.0",
+          "title": "License",
+          "type": "string"
+        },
+        "module_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Module Version",
+          "type": "string"
+        },
+        "namespace": {
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "omitted_instances": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Omitted Instances"
+        },
+        "package_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Package Version",
+          "type": "string"
+        },
+        "pattern_ids": {
+          "items": {
+            "maxLength": 128,
+            "pattern": "^\\$[a-zA-Z_][a-zA-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Pattern Ids",
+          "type": "array"
+        },
+        "revision": {
+          "maxLength": 32,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "rule_id": {
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "ruleset_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Ruleset Sha256",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "namespace",
+        "filename",
+        "revision",
+        "pattern_ids",
+        "description",
+        "license",
+        "source_sha256",
+        "ruleset_sha256",
+        "package_version",
+        "module_version",
+        "instances",
+        "instances_status",
+        "omitted_instances"
+      ],
+      "title": "YaraMatchData",
       "type": "object"
     }
   },
@@ -1342,7 +1887,8 @@
             "import": "#/$defs/ImportEvidence",
             "pe_header": "#/$defs/HeaderEvidence",
             "section": "#/$defs/SectionEvidence",
-            "string": "#/$defs/StringEvidence"
+            "string": "#/$defs/StringEvidence",
+            "yara_match": "#/$defs/YaraEvidence"
           },
           "propertyName": "kind"
         },
@@ -1367,10 +1913,13 @@
           },
           {
             "$ref": "#/$defs/AnomalyEvidence"
+          },
+          {
+            "$ref": "#/$defs/YaraEvidence"
           }
         ]
       },
-      "maxItems": 20321,
+      "maxItems": 20353,
       "title": "Evidence",
       "type": "array"
     },
@@ -1387,7 +1936,7 @@
       "items": {
         "$ref": "#/$defs/Run"
       },
-      "maxItems": 2,
+      "maxItems": 3,
       "minItems": 1,
       "title": "Extractor Runs",
       "type": "array"
@@ -1405,10 +1954,21 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.2.0",
-      "default": "0.2.0",
+      "const": "0.3.0",
+      "default": "0.3.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "yara_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/YaraContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

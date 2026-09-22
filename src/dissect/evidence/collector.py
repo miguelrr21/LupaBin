@@ -22,6 +22,7 @@ from dissect.evidence.models import (
     aggregate,
 )
 from dissect.evidence.primitives import COMPONENTS, Component, Limits, Location, Provenance, Source
+from dissect.evidence.yara import YaraContext, YaraMatchData
 
 ADAPTER: TypeAdapter[Evidence] = TypeAdapter(Evidence)
 KINDS = {
@@ -32,6 +33,7 @@ KINDS = {
     ExportData: "export",
     StringData: "string",
     AnomalyData: "header_anomaly",
+    YaraMatchData: "yara_match",
 }
 
 
@@ -41,6 +43,10 @@ class Progress:
         self.version = version
         self.states: dict[Component, Coverage] = {name: "blocked" for name in COMPONENTS[source]}
         self.examined: Counter[Component] = Counter()
+        self.unknown_examined: set[Component] = (
+            set(COMPONENTS[source]) if source == "yara" else set()
+        )
+        self.yara_context: YaraContext | None = YaraContext() if source == "yara" else None
         self.counts: Counter[Component] = Counter()
         self.errors: list[ExtractorError] = []
         self.limitations: list[ExtractorError] = []
@@ -70,7 +76,7 @@ class Progress:
             ComponentRun(
                 name=name,
                 status=self.states[name],
-                examined=self.examined[name],
+                examined=None if name in self.unknown_examined else self.examined[name],
                 evidence_count=self.counts[name],
             )
             for name in COMPONENTS[self.source]
@@ -99,6 +105,7 @@ class Collector:
             "export": limits.exports,
             "header_anomaly": limits.anomalies,
             "string": limits.strings,
+            "yara_match": limits.yara.matches,
         }
 
     def add(
@@ -107,7 +114,7 @@ class Collector:
         progress: Progress,
         component: Component,
         data: Payload,
-        location: Location,
+        location: Location | None,
         refs: tuple[str, ...] = (),
     ) -> bool:
         if key in self.ids:
@@ -122,6 +129,7 @@ class Collector:
                 "export": "export_limit",
                 "string": "string_limit",
                 "header_anomaly": "anomaly_limit",
+                "yara_match": "yara_match_limit",
             }
             progress.issue(component, codes.get(kind, "evidence_budget"), limit=True)
             return False
