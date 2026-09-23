@@ -145,8 +145,8 @@ Responde a "qué funciones importadas llama el código y desde dónde", sin argu
 
 | Límite | Valor | Motivo medido |
 | --- | --- | --- |
-| Instrucciones decodificadas | 4.000.000 | Peor caso sintético de 20 MiB dentro del tiempo del worker (sección 9.4) |
-| Llamadas examinadas | 262.144 | Clasificar una llamada cuesta varias veces más que decodificar una instrucción; sin este límite, 20 MiB de llamadas tardaban 29–38 s |
+| Instrucciones decodificadas | 4.000.000 (8.000.000 desde la sección 9.5) | Peor caso sintético de 20 MiB dentro del tiempo del worker (sección 9.4) |
+| Llamadas examinadas | 262.144 (1.048.576 desde la sección 9.5) | Clasificar una llamada cuesta varias veces más que decodificar una instrucción; sin este límite, 20 MiB de llamadas tardaban 29–38 s |
 | Puntos de partida | 262.144 | Acota la lista de `.pdata`, que un archivo manipulado puede declarar enorme |
 | Llamadas publicadas | 4.096 | Cabe en el presupuesto de bytes del informe (unos 330 bytes por hecho) |
 
