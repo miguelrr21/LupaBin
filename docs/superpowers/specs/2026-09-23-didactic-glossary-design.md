@@ -153,6 +153,22 @@ El umbral de entropía (7,2) es un parámetro didáctico ("cerca del máximo de 
 
 Son reglas deterministas que resumen varios hechos citándolos todos. Por ejemplo, "3 imports pertenecen a la familia *memoria de otros procesos* (lista curada v1)". La pertenencia a una familia sale de una lista revisada y versionada, igual que las cribs, y se explica como "estos nombres aparecen en la lista", nunca como "la muestra inyecta código". No hay puntuaciones ni veredictos, y una agrupación vacía no se muestra como "no hace X".
 
+**Implementado (2026-09-23): lista `dissect-api-families-v1`**, con nueve familias de nombres exactos (variantes A y W incluidas), digest fijado por un test y una entrada de glosario por familia. Cada entrada cita entre 4 y 7 páginas de Microsoft Learn, comprobadas una a una: 48 páginas existen y mencionan su función. La regla `imports.family@1` cita todos los imports de la familia y publica su prevalencia benigna, medida sobre 55.035 binarios PE (System32, Program Files y Program Files (x86)) como la fracción que importa por nombre al menos una función de la familia:
+
+| Familia | Binarios benignos que la importan |
+| --- | --- |
+| Carga dinámica de bibliotecas | 34,8 % |
+| Comprobación de depuradores | 32,2 % (sobre todo `IsDebuggerPresent`, del runtime de C de Microsoft) |
+| Registro de Windows | 10,6 % |
+| Creación de procesos | 4,8 % |
+| Memoria de otros procesos | 3,7 % |
+| Criptografía | 3,0 % |
+| Sockets de red | 2,1 % (los imports por ordinal de ws2_32 no se cuentan) |
+| Servicios de Windows | 1,7 % |
+| HTTP y descargas | 1,0 % |
+
+La cifra es el contrapeso didáctico: enseña que estas funciones aparecen en software legítimo y que una familia no es un veredicto. Cambiar las listas exige una nueva versión y repetir la medición.
+
 ### 6.4 Validador
 
 Antes de renderizar, `validate(explanation, report, glossary)`:

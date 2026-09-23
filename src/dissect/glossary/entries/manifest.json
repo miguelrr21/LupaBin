@@ -9,6 +9,51 @@
    "sha256": "e1c3b98e0f7feb23224def8ec1679784aff1ecf2a440b344a3dd53a59c9d66ef"
   },
   {
+   "id": "api.family.crypto",
+   "filename": "api.family.crypto.toml",
+   "sha256": "76a279605f5751efb7145598c3b6eded04c6bfc470fd5f6890f178068a3788f9"
+  },
+  {
+   "id": "api.family.debugger_checks",
+   "filename": "api.family.debugger_checks.toml",
+   "sha256": "421cc796c84d90b0d4a450aeef31e29f44748513e624b741cf023f446563e742"
+  },
+  {
+   "id": "api.family.dynamic_loading",
+   "filename": "api.family.dynamic_loading.toml",
+   "sha256": "c16c2a6ae9cdc6702f6d5b8cb91d363d94e1175f70f3690d1b6cce9751414841"
+  },
+  {
+   "id": "api.family.http",
+   "filename": "api.family.http.toml",
+   "sha256": "0c9aa1efa2fc005b0e1d79965262aa641a7cbc23e22f3df31f035d39c1214c56"
+  },
+  {
+   "id": "api.family.process_creation",
+   "filename": "api.family.process_creation.toml",
+   "sha256": "fad334873d38d3018619c4ed124379cd93526a884286dfbaab44a15b015ecf09"
+  },
+  {
+   "id": "api.family.process_memory",
+   "filename": "api.family.process_memory.toml",
+   "sha256": "1eeccac06805b55a8b9b73dbb91b9e39cb2ea9f1039a2f8ed72def547a5b843e"
+  },
+  {
+   "id": "api.family.registry",
+   "filename": "api.family.registry.toml",
+   "sha256": "ec4a32a5c6b5431cd192069d811263d575ee5a51676709cf9d467d3b5a067aef"
+  },
+  {
+   "id": "api.family.services",
+   "filename": "api.family.services.toml",
+   "sha256": "e2cf10f9475e9e95b2cb85a06e9d9744301e799ccc55cbb12297eb283994a048"
+  },
+  {
+   "id": "api.family.sockets",
+   "filename": "api.family.sockets.toml",
+   "sha256": "533db7f59630ceb2aeef7c4c0d20583decb632af227a74b01110f48663795009"
+  },
+  {
    "id": "decode.base64",
    "filename": "decode.base64.toml",
    "sha256": "45992d0b41b7ae84ba5b22c5adca48cdc09d094994d49ba65d42ea70ea7dee99"

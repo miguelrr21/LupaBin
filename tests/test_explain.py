@@ -234,3 +234,29 @@ def test_high_entropy_note_needs_both_the_value_and_enough_bytes(reports):
     small = analyze_bytes(high_entropy(size=0x200))
     assert "entropy.high@1" not in rules_used(explain(small, GLOSSARY))
     assert "entropy.high@1" not in rules_used(explain(reports["demo"], GLOSSARY))
+
+
+def test_api_families_are_pinned_disjoint_measured_and_documented():
+    from dissect.explain.families import (
+        FAMILIES,
+        FAMILIES_SHA256,
+        PREVALENCE,
+        families_digest,
+    )
+
+    assert families_digest() == FAMILIES_SHA256, "new FAMILIES_ID, digest and measurement"
+    names = [name for _, members in FAMILIES.values() for name in members]
+    assert len(names) == len(set(names))
+    assert set(PREVALENCE) == set(FAMILIES)
+    assert {f"api.family.{family}" for family in FAMILIES} <= GLOSSARY.entries.keys()
+
+
+def test_family_items_cite_the_whole_family_and_its_benign_prevalence(reports):
+    report = reports["runtime"]
+    explanation = explain(report, GLOSSARY)
+    index = first(explanation, "imports.family@1")
+    item = explanation.items[index]
+    assert item.slots["functions"] == ("GetProcAddress",)
+    assert "34,8 %" in item.statement
+    assert item.glossary_ids == ("api.family.dynamic_loading", "pe.imports")
+    assert "imports.family@1" not in rules_used(explain(reports["demo"], GLOSSARY))
