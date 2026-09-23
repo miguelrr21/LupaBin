@@ -154,7 +154,11 @@
                 "decode_strings_limit",
                 "decode_xor_limit",
                 "decode_xor_examined_limit",
-                "decoded_length_limit"
+                "decoded_length_limit",
+                "unsupported_architecture",
+                "code_instruction_limit",
+                "code_entry_limit",
+                "api_call_limit"
               ],
               "type": "string"
             },
@@ -201,7 +205,9 @@
                 "yara_scan",
                 "yara_evidence",
                 "decode_strings",
-                "decode_xor"
+                "decode_xor",
+                "disassembly",
+                "api_calls"
               ],
               "type": "string"
             },
@@ -234,7 +240,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"

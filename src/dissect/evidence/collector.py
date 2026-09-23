@@ -5,6 +5,7 @@ from pydantic import TypeAdapter
 
 from dissect.evidence.facts import (
     AnomalyData,
+    ApiCallData,
     DecodedStringData,
     EntropyData,
     Evidence,
@@ -37,6 +38,7 @@ KINDS = {
     AnomalyData: "header_anomaly",
     YaraMatchData: "yara_match",
     DecodedStringData: "decoded_string",
+    ApiCallData: "api_call",
 }
 
 
@@ -110,7 +112,10 @@ class Collector:
             "string": limits.strings,
             "yara_match": limits.yara.matches,
             "decoded_string": limits.decode.strings + limits.decode.xor,
+            "api_call": limits.code.calls,
         }
+        # Coverage of extractors that already ran, for those that depend on them.
+        self.coverage: dict[tuple[Source, Component], Coverage] = {}
 
     def add(
         self,
@@ -135,6 +140,7 @@ class Collector:
                 "string": "string_limit",
                 "header_anomaly": "anomaly_limit",
                 "yara_match": "yara_match_limit",
+                "api_call": "api_call_limit",
             }
             progress.issue(component, codes.get(kind, "evidence_budget"), limit=True)
             return False

@@ -24,17 +24,19 @@ def regions(layout: Layout) -> list[Region]:
     ]
 
 
-def entries(layout: Layout, exports: Iterable[int], max_functions: int) -> list[int]:
+def entries(layout: Layout, exports: Iterable[int], limit: int) -> tuple[list[int], bool]:
     """Entry point, exported code, TLS callbacks and, in x64, `.pdata` function starts.
 
-    Unreadable TLS or exception tables add no entries; they never invent any.
+    Returns at most `limit` distinct entries and whether any were left out. Unreadable
+    TLS or exception tables add no entries; they never invent any.
     """
     found = [layout.header.entry_point_rva] if layout.header.entry_point_rva else []
     found += exports
     found += _tls_callbacks(layout)
     if layout.bits == 64:
-        found += _function_starts(layout, max_functions)
-    return list(dict.fromkeys(found))
+        found += _function_starts(layout, limit + 1)
+    unique = list(dict.fromkeys(found))
+    return unique[:limit], len(unique) > limit
 
 
 def _directory(layout: Layout, index: int) -> tuple[int, int]:
