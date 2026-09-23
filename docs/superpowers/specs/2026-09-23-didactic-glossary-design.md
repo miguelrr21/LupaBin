@@ -66,13 +66,13 @@ flowchart LR
 
 ### 5.1 Formato
 
-Una entrada por archivo en `src/dissect/glossary/entries/*.toml`, más un `manifest.json` con el digest SHA-256 de cada archivo y del conjunto, igual que el catálogo YARA de la Fase 1B. Un test impide cambiar una entrada sin actualizar el manifiesto y su revisión.
+Una entrada por archivo en `src/dissect/glossary/entries/*.toml`, más un `manifest.json` con el digest SHA-256 de cada archivo y del conjunto, igual que el catálogo YARA de la Fase 1B. El cargador rechaza una entrada cuyo digest no coincide con el manifiesto, así que todo cambio de contenido exige volver a fijarlo de forma explícita (`python -m dissect.glossary.catalog --write <revisión>`). Todas las entradas son conocimiento general: no llevan campo de nivel.
 
 ```toml
 id = "pe.section.permissions"
 title = "Permisos de una sección"
 revision = "1.0.0"
-level = "general"
+lang = "es"
 summary = "Cada sección declara si su contenido se puede leer, escribir o ejecutar una vez cargado en memoria."
 body = """..."""
 not_proven = "Los permisos declarados no demuestran que el programa escriba o ejecute esa región."
