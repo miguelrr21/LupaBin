@@ -157,14 +157,27 @@ COVERAGE: dict[tuple[int, Encoding], frozenset[int]] = {
 }
 
 
+class Differentials:
+    """data[i] ^ data[i + lag] for any lag, from one big-integer copy of the sample.
+
+    Converting the sample once and deriving each lag with a shift, a mask and a XOR is
+    cheaper than converting two slices per lag, and the result is the same bytes.
+    """
+
+    def __init__(self, data: bytes) -> None:
+        self.size = len(data)
+        self.number = int.from_bytes(data, "big")
+
+    def lag(self, lag: int) -> bytes:
+        size = self.size - lag
+        if size <= 0:
+            return b""
+        low = self.number & ((1 << (8 * size)) - 1)
+        return ((self.number >> (8 * lag)) ^ low).to_bytes(size, "big")
+
+
 def lag_xor(data: bytes, lag: int) -> bytes:
-    size = len(data) - lag
-    if size <= 0:
-        return b""
-    view = memoryview(data)
-    left = int.from_bytes(view[:size], "big")
-    right = int.from_bytes(view[lag:], "big")
-    return (left ^ right).to_bytes(size, "big")
+    return Differentials(data).lag(lag)
 
 
 @dataclass(frozen=True)
@@ -285,13 +298,13 @@ class _Budget:
         return True
 
 
-def _self_verified(data: bytes, budget: _Budget) -> list[_Candidate]:
+def _self_verified(data: bytes, differentials: Differentials, budget: _Budget) -> list[_Candidate]:
     candidates: list[_Candidate] = []
     lag, diff = 0, b""
     for plan in PLANS:
         if plan.lag != lag:
             lag, diff = plan.lag, b""
-            diff = lag_xor(data, lag)
+            diff = differentials.lag(lag)
         position = diff.find(plan.pattern)
         while position != -1 and budget.take():
             if (candidate := _candidate(data, position, plan)) is not None:
@@ -302,7 +315,12 @@ def _self_verified(data: bytes, budget: _Budget) -> list[_Candidate]:
     return candidates
 
 
-def _reused(data: bytes, verifiers: dict[bytes, XorHit], budget: _Budget) -> list[_Candidate]:
+def _reused(
+    data: bytes,
+    differentials: Differentials,
+    verifiers: dict[bytes, XorHit],
+    budget: _Budget,
+) -> list[_Candidate]:
     """Anchors too short to verify a key by themselves, under a key verified elsewhere.
 
     A match must reproduce the whole crib under a key identical (up to phase) to one a
@@ -313,7 +331,7 @@ def _reused(data: bytes, verifiers: dict[bytes, XorHit], budget: _Budget) -> lis
     periods = sorted({len(key) for key in verifiers})
     for period in periods:
         table = {key: hit for key, hit in verifiers.items() if len(key) == period}
-        diff = lag_xor(data, period)
+        diff = differentials.lag(period)
         for index, crib in enumerate(CRIBS):
             for encoding in ENCODINGS:
                 if period in COVERAGE[index, encoding]:
@@ -384,15 +402,18 @@ def scan(
     if max_chars < 64:
         raise ValueError("max_chars must leave room for the longest crib")
     budget = _Budget(max_examined)
+    differentials = Differentials(data)
     hits: list[XorHit] = []
-    hit_limit = _accept(data, _self_verified(data, budget), hits, max_hits, max_chars)
+    hit_limit = _accept(
+        data, _self_verified(data, differentials, budget), hits, max_hits, max_chars
+    )
     verifiers: dict[bytes, XorHit] = {}
     for hit in sorted(hits, key=lambda h: h.start):
         if len(hit.key) >= 2:  # every crib already verifies 1-byte keys on its own
             verifiers.setdefault(canonical_key(hit.key), hit)
     verifiers = dict(list(verifiers.items())[:reuse_keys])
     if verifiers and not budget.exhausted and not hit_limit:
-        reused = _reused(data, verifiers, budget)
+        reused = _reused(data, differentials, verifiers, budget)
         hit_limit = _accept(data, reused, hits, max_hits, max_chars)
     hits.sort(key=lambda h: (h.start, h.end, ENCODINGS.index(h.encoding), h.key))
     return XorScan(tuple(hits), budget.examined, budget.exhausted, hit_limit)
