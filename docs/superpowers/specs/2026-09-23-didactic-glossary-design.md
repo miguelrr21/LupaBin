@@ -168,7 +168,7 @@ Una explicación que no pasa la validación no se muestra. La regla de la Fase 1
 
 Orden fijo: (1) qué es la muestra (hashes, tamaño, tipo); (2) **qué no se pudo analizar**; (3) hechos observados por tema; (4) inferencias, separadas y marcadas; (5) glosario de los términos usados, con sus fuentes.
 
-- **Seguridad del texto**: toda cadena procedente de la muestra (nombres de sección, imports, cadenas, textos decodificados) pasa por un escapado que sustituye los caracteres de control C0/C1, ESC, DEL y los caracteres Unicode de control de dirección (bidi) por secuencias visibles (`\x1b`, `‮`), y se presenta entre comillas angulares. Una muestra no puede alterar la terminal ni el orden visual del texto. Hay tests con secuencias ANSI, OSC 8 (hipervínculos de terminal) y bidi.
+- **Seguridad del texto**: toda cadena procedente de la muestra (nombres de sección, imports, cadenas, textos decodificados) pasa por un escapado que sustituye los caracteres de control C0/C1, ESC, DEL y los caracteres Unicode de control de dirección (bidi) por secuencias visibles (`\x1b`, `\u202e`), y se presenta entre comillas angulares. Una muestra no puede alterar la terminal ni el orden visual del texto. Hay tests con secuencias ANSI, OSC 8 (hipervínculos de terminal) y bidi.
 - **Markdown**: las cadenas de la muestra van en bloques de código con una valla más larga que cualquier racha de acentos graves que contengan, para que no puedan inyectar enlaces, imágenes ni HTML.
 - **CLI**: `dissect analyze muestra` muestra el informe legible; `--json` emite el JSON validado actual; `--markdown` emite Markdown. `dissect explain informe.json` valida un informe guardado (sin volver a analizar la muestra) y lo explica. Los códigos de salida no cambian.
 
