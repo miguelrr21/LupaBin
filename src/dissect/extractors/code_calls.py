@@ -16,6 +16,7 @@ class Call:
     size: int
     slot: int
     helper: tuple[int, int] | None  # (rva, size): the thunk's jmp or the register load
+    start: int  # RVA where the call's linear stretch starts (code_disasm.walk)
 
 
 class CallFinder:
@@ -50,8 +51,10 @@ class CallFinder:
     def dropped(self) -> bool:
         return self.found > self.quota
 
-    def visit(self, data: bytearray, offset: int, rva: int, size: int, previous: int) -> None:
-        call = self._classify(data, offset, rva, size, previous)
+    def visit(
+        self, data: bytearray, offset: int, rva: int, size: int, previous: int, start: int
+    ) -> None:
+        call = self._classify(data, offset, rva, size, previous, start)
         if call is None:
             return
         self.found += 1
@@ -61,7 +64,7 @@ class CallFinder:
             self.repeated.append(call)
 
     def _classify(
-        self, data: bytearray, offset: int, rva: int, size: int, previous: int
+        self, data: bytearray, offset: int, rva: int, size: int, previous: int, start: int
     ) -> Call | None:
         bits, base = self.bits, self.base
         raw = bytes(data[offset : offset + size])
@@ -75,11 +78,11 @@ class CallFinder:
                 if slot is not None:
                     if slot not in self.slots:
                         return None
-                    return Call("thunk", rva, size, slot, (target, stub_size))
+                    return Call("thunk", rva, size, slot, (target, stub_size), start)
             return None
         slot = call_forms.memory_slot(raw, rva, bits, base, call_forms.CALL)
         if slot is not None:
-            return Call("direct", rva, size, slot, None) if slot in self.slots else None
+            return Call("direct", rva, size, slot, None, start) if slot in self.slots else None
         register = call_forms.register_call(raw, bits)
         if register is None or not previous:
             return None
@@ -87,4 +90,4 @@ class CallFinder:
         load = call_forms.register_load(before, rva - previous, bits, base)
         if load is None or load[0] != register or load[1] not in self.slots:
             return None
-        return Call("register", rva, size, load[1], (rva - previous, previous))
+        return Call("register", rva, size, load[1], (rva - previous, previous), start)
