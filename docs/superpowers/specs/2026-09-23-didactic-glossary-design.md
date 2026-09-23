@@ -1,6 +1,6 @@
 # Fase 3: explicaciones didácticas y glosario con fuentes
 
-Estado: revisión 1 (2026-09-23), propuesta de diseño antes de escribir código. El alcance procede de la hoja de ruta ("Motor de glosario y capacidades didácticas, con contenido de fuentes verificables") y del diseño de la Fase 1A, que fijaba este orden: "las plantillas didácticas con citas; después podrán llegar los renderers y la web". El usuario pidió además que la arquitectura prevea un LLM barato y opcional para "verificar mejor en caso de duda". Aquí se diseña ese punto de extensión (sección 9), pero no se implementa.
+Estado: revisión 1 (2026-09-23), implementada en la rama `feat/didactic-glossary` (los diez bloques de la sección 10, cada uno con su commit), sin publicar todavía. El alcance procede de la hoja de ruta ("Motor de glosario y capacidades didácticas, con contenido de fuentes verificables") y del diseño de la Fase 1A, que fijaba este orden: "las plantillas didácticas con citas; después podrán llegar los renderers y la web". El usuario pidió además que la arquitectura prevea un LLM barato y opcional para "verificar mejor en caso de duda". Aquí se diseña ese punto de extensión (sección 9), pero no se implementa.
 
 ## 1. Propósito
 
