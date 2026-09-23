@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dissect.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
+    CallArgumentEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -111,6 +112,12 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
             calls.setdefault(fact.provenance.evidence_ids[0], []).append(fact)
     for import_id, group in calls.items():
         yield "code.calls@1", (facts[import_id], *group)
+    values: dict[str, list[Evidence]] = {}
+    for fact in evidence:
+        if isinstance(fact, CallArgumentEvidence):
+            values.setdefault(fact.provenance.evidence_ids[0], []).append(fact)
+    for call_id, group in values.items():
+        yield "code.arguments@1", (facts[call_id], *group)
     called: dict[str, list[Evidence]] = {family: [] for family in FAMILIES}
     for fact in evidence:
         if isinstance(fact, ApiCallEvidence):
