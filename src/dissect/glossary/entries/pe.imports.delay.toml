@@ -1,0 +1,12 @@
+id = "pe.imports.delay"
+title = "Imports retardados"
+revision = "1.0.0"
+lang = "es"
+summary = "Un import retardado (delay-load) es una función de una DLL que no se carga al arrancar el programa, sino la primera vez que el programa la llama."
+body = "El enlazador de Microsoft permite marcar DLL como de carga retardada. Una función auxiliar añadida al programa carga la DLL y resuelve la función bajo demanda, llamando por su cuenta a LoadLibrary y GetProcAddress.\n\nSe usa para acelerar el arranque o para no depender de DLL que quizá no se necesiten. Tienen su propia tabla en el PE, separada de la tabla de imports normal."
+not_proven = "Un import retardado no demuestra que la DLL llegue a cargarse ni que la función se llame."
+related = ["pe.imports"]
+sources = [
+  { title = "Linker support for delay-loaded DLLs", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/build/reference/linker-support-for-delay-loaded-dlls", verified_on = 2026-09-23 },
+  { title = "PE Format: Delay-Load Import Tables (Image Only)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#delay-load-import-tables-image-only", verified_on = 2026-09-23 },
+]

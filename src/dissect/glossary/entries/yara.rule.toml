@@ -1,0 +1,11 @@
+id = "yara.rule"
+title = "Regla YARA"
+revision = "1.0.0"
+lang = "es"
+summary = "YARA es una herramienta que busca patrones en archivos. Una regla define unas cadenas o secuencias de bytes y una condición que dice cuándo la regla coincide."
+body = "Una regla tiene normalmente dos partes: la definición de cadenas (los patrones que se buscan) y la condición (la lógica que decide si hay coincidencia). La condición es obligatoria; las cadenas no.\n\nDissect solo evalúa su propio catálogo revisado de reglas, dentro del worker aislado. No acepta reglas arbitrarias ni descarga reglas externas."
+not_proven = "Una regla describe un patrón de bytes; no identifica por sí misma una familia de malware ni un comportamiento."
+related = ["yara.match"]
+sources = [
+  { title = "Writing YARA rules", publisher = "Documentación oficial de YARA", url = "https://yara.readthedocs.io/en/stable/writingrules.html", verified_on = 2026-09-23 },
+]

@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def entry(id="a.b", related="[]", url="https://example.invalid/a"):
 
 def catalog(tmp_path, *entries):
     target = tmp_path / "entries"
-    target.mkdir()
+    target.mkdir(parents=True)
     for text in entries:
         name = text.split('"')[1]
         (target / f"{name}.toml").write_bytes(text.encode("utf-8"))
@@ -52,6 +53,37 @@ def test_repository_glossary_is_independent_of_current_directory(tmp_path, monke
     expected = load_glossary().info
     monkeypatch.chdir(tmp_path)
     assert load_glossary().info == expected
+
+
+def github_slug(heading):
+    text = re.sub(r"[^\w\- ]", "", heading.strip().lower())
+    return text.replace(" ", "-")
+
+
+def test_project_document_sources_point_to_existing_headings():
+    repository = Path(__file__).parents[1]
+    documents = {
+        source.document
+        for entry in load_glossary().entries.values()
+        for source in entry.sources
+        if source.document
+    }
+    for document in documents:
+        path, anchor = document.split("#")
+        headings = [
+            line.lstrip("#").strip()
+            for line in (repository / path).read_text("utf-8").splitlines()
+            if line.startswith("#")
+        ]
+        assert anchor in {github_slug(h) for h in headings}, document
+
+
+def test_a_source_needs_exactly_one_location(tmp_path):
+    both = entry().replace('url = "', 'document = "docs/a.md#b", url = "')
+    neither = entry().replace('url = "https://example.invalid/a", ', "")
+    for text in (both, neither):
+        with pytest.raises(GlossaryError):
+            load_glossary(root=catalog(tmp_path / str(len(text)), text))
 
 
 def test_minimal_catalog_loads(tmp_path):

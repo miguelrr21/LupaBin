@@ -99,11 +99,13 @@ Reglas del catálogo:
 - **Imports y exports**: tabla de imports, imports retardados, importación por ordinal, exports y forwarders.
 - **Cadenas**: cadenas ASCII y UTF-16LE.
 - **Anomalías**: una entrada por cada código de anomalía de la Fase 1A.
-- **YARA**: qué es una regla y qué significa una coincidencia, más una entrada por cada regla del catálogo propio (las cuatro actuales).
+- **YARA**: qué es una regla y qué significa una coincidencia. Cada regla del catálogo propio se explica con la descripción revisada de su manifiesto, que ya incluye lo que no demuestra, para no mantener dos textos de la misma regla.
 - **Decodificación**: Base64, hexadecimal, XOR de clave repetida, crib, reutilización de clave y la diferencia entre `observed` e `inferred`.
 - **Integridad del informe**: SHA-256, MD5 (con sus colisiones conocidas), análisis parcial y limitaciones.
 
-Fuentes previstas: la especificación PE de Microsoft Learn, la documentación oficial de YARA, RFC 4648 (Base64 y hexadecimal), RFC 2781 (UTF-16), FIPS 180-4 (SHA-256), RFC 1321 y RFC 6151 (MD5 y su seguridad) y Shannon (1948). Cada URL se comprueba al escribir la entrada.
+Fuentes previstas: la especificación PE de Microsoft Learn, la documentación oficial de YARA, RFC 4648 (Base64 y hexadecimal), RFC 2781 (UTF-16), FIPS 180-4 (SHA-256), RFC 1321 y RFC 6151 (MD5 y su seguridad) y Shannon (1948). Cada URL se comprueba al escribir la entrada. Los conceptos que define el propio Dissect (niveles de confianza, crib, reutilización de clave, cobertura) citan su documento del proyecto con ruta y ancla (`document = "docs/…#ancla"`), porque el repositorio es privado y una URL de GitHub no sería verificable para el lector. Un test comprueba que cada ancla existe.
+
+Estado (2026-09-23): 29 entradas. Las 27 fuentes externas responden y sus anclas existen (`tests/check_glossary_sources.py`).
 
 ### 5.3 APIs curadas
 
