@@ -65,7 +65,7 @@ Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossa
 
 ## Qué aporta VirusTotal (opcional)
 
-Con una clave de API en la variable de entorno `VT_API_KEY`, Dissect puede añadir los resultados de VirusTotal como **fuente externa, no verificada por Dissect**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
+Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), Dissect puede añadir los resultados de VirusTotal como **fuente externa, no verificada por Dissect**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
 
 ```text
 uv run --frozen dissect analyze "ruta/al/archivo.exe" --virustotal
