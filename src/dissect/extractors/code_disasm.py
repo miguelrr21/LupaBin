@@ -17,7 +17,7 @@ import struct
 import time
 from array import array
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import capstone
 from capstone import CS_ARCH_X86, CS_MODE_32, CS_MODE_64, Cs
@@ -50,8 +50,8 @@ _LIMIT = 0xFFFFFFFF
 _CLOCK_EVERY = 4096
 
 # visit(region bytes, offset of the call, its RVA, its size, size of the instruction
-# right before it in the same run or 0)
-Visitor = Callable[[bytearray, int, int, int, int], None]
+# right before it in the same run or 0, RVA where the call's linear stretch starts)
+Visitor = Callable[[bytearray, int, int, int, int, int], None]
 
 
 @dataclass(frozen=True)
@@ -66,6 +66,29 @@ class Region:
         return self.rva + len(self.data)
 
 
+@dataclass(frozen=True)
+class Targets:
+    """Where another path can enter the walked code, one byte per byte of each region.
+
+    Marked: every entry point, every constant branch or call target, including those
+    still pending when a budget stopped the walk, and every point where a run reached
+    code another run had already decoded. Code the walk never reached, or reaches only
+    through indirection, can enter elsewhere: that is a limit of the walk.
+    """
+
+    starts: list[int]
+    marks: list[bytearray]
+
+    def last(self, start: int, end: int) -> int | None:
+        """The last marked RVA in (start, end], within the region holding `start`."""
+        index = bisect.bisect_right(self.starts, start) - 1
+        if index < 0:
+            return None
+        base, marks = self.starts[index], self.marks[index]
+        found = marks.rfind(1, max(0, start - base + 1), max(0, end - base + 1))
+        return None if found < 0 else base + found
+
+
 @dataclass
 class Walk:
     instructions: int = 0
@@ -73,6 +96,7 @@ class Walk:
     limit: bool = False  # the instruction budget stopped the walk
     call_limit: bool = False  # the call budget stopped the walk
     time_limit: bool = False  # the deadline stopped the walk
+    targets: Targets = field(default_factory=lambda: Targets([], []))
 
 
 def _target(operand: bytes) -> int | None:
@@ -104,7 +128,9 @@ def walk(
 ) -> Walk:
     """Decode every instruction reachable from `entries` without resolving indirection.
 
-    Every `call` is passed to `visit`; its target, when constant, is walked too.
+    Every `call` is passed to `visit` with the start of its linear stretch: the start
+    of the run, or the instruction after the run's previous call, since a call leaves
+    no argument register or stack slot known. Its target, when constant, is walked too.
     Stops after `budget` instructions or `call_budget` calls, whichever comes first:
     classifying a call costs several times more than decoding an instruction.
     Also stops when `time.monotonic()` passes `deadline`, checked every
@@ -119,13 +145,14 @@ def walk(
     starts = [region.rva for region in regions]
     ends = [region.end for region in regions]
     decoded = [bytearray(len(region.data)) for region in regions]
+    entered = [bytearray(len(region.data)) for region in regions]
     bases = [
         ctypes.addressof((ctypes.c_char * len(region.data)).from_buffer(region.data))
         if region.data
         else 0
         for region in regions
     ]
-    result = Walk()
+    result = Walk(targets=Targets(starts, entered))
     instructions = calls = 0
     pending = array("I", reversed([entry for entry in entries if 0 <= entry < _LIMIT]))
     insn = ctypes.POINTER(capstone._cs_insn)()
@@ -136,11 +163,14 @@ def walk(
         if index < 0 or address >= ends[index]:
             continue
         region, marks, base = regions[index], decoded[index], bases[index]
+        joins = entered[index]
         rva, data, length = region.rva, region.data, len(region.data)
         position = address - rva
+        joins[position] = 1
         if marks[position]:
             continue
         previous = 0
+        stretch = address
         running = True
         while running and position < length:
             count = disasm(
@@ -159,15 +189,16 @@ def walk(
                 release(insn, count)
             for record in range(0, count * _RECORD, _RECORD):
                 if marks[position]:
-                    running = False  # the rest of this run was already decoded
+                    joins[position] = 1  # this run enters code decoded by another
+                    running = False
                     break
                 if instructions >= budget:
                     result.instructions, result.calls, result.limit = instructions, calls, True
-                    return result
+                    return _drained(result, pending, entered)
                 if not instructions % _CLOCK_EVERY and time.monotonic() > deadline:
                     result.instructions, result.calls = instructions, calls
                     result.time_limit = True
-                    return result
+                    return _drained(result, pending, entered)
                 ident, size = head(batch, record)
                 marks[position] = 1
                 instructions += 1
@@ -185,9 +216,10 @@ def walk(
                         if calls >= call_budget:
                             result.instructions, result.calls = instructions, calls
                             result.call_limit = True
-                            return result
+                            return _drained(result, pending, entered)
                         calls += 1
-                        visit(data, position, rva + position, size, previous)
+                        visit(data, position, rva + position, size, previous, stretch)
+                        stretch = rva + position + size
                     elif role != _BRANCH:
                         running = False
                         break
@@ -197,4 +229,14 @@ def walk(
                 if count < _BATCH:
                     running = False  # an undecodable byte or the end of the section
     result.instructions, result.calls = instructions, calls
+    return result
+
+
+def _drained(result: Walk, pending: array[int], entered: list[bytearray]) -> Walk:
+    """Marks the targets a budget left pending: they are entries all the same."""
+    starts = result.targets.starts
+    for address in pending:
+        index = bisect.bisect_right(starts, address) - 1
+        if index >= 0 and address - starts[index] < len(entered[index]):
+            entered[index][address - starts[index]] = 1
     return result
