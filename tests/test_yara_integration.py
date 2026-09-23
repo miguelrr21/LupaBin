@@ -15,10 +15,16 @@ def yara_payload(payload):
     return next(run for run in payload["extractor_runs"] if run["source"] == "yara")
 
 
-def test_default_pipeline_has_four_sources_and_yara_evidence():
+def test_default_pipeline_has_five_sources_and_yara_evidence():
     report = analyze_bytes(build_demo())
     assert report.schema_version == "0.5.0"
-    assert [run.source for run in report.extractor_runs] == ["pe", "strings", "yara", "decode"]
+    assert [run.source for run in report.extractor_runs] == [
+        "pe",
+        "strings",
+        "yara",
+        "decode",
+        "code",
+    ]
     assert report.analysis.status == "completed"
     match = next(f for f in report.evidence if f.kind == "yara_match")
     assert match.location is None

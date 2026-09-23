@@ -7,6 +7,7 @@ SOURCES: dict[Source, str] = {
     "strings": "Cadenas",
     "yara": "Reglas YARA",
     "decode": "Decodificación",
+    "code": "Código",
 }
 
 COMPONENTS: dict[Component, str] = {
@@ -24,6 +25,8 @@ COMPONENTS: dict[Component, str] = {
     "yara_evidence": "coincidencias",
     "decode_strings": "Base64 y hexadecimal",
     "decode_xor": "XOR",
+    "disassembly": "recorrido del código",
+    "api_calls": "llamadas a funciones importadas",
 }
 
 STATUSES = {
@@ -79,6 +82,16 @@ MESSAGES: dict[str, str] = {
     "decoded_length_limit": (
         "Algún texto decodificado superaba el máximo de caracteres y se conservó recortado."
     ),
+    "unsupported_architecture": (
+        "El código no es x86 ni x64, las únicas arquitecturas que Dissect sabe recorrer."
+    ),
+    "code_instruction_limit": (
+        "Se alcanzó el máximo de instrucciones recorridas: parte del código no se revisó."
+    ),
+    "code_entry_limit": (
+        "Se alcanzó el máximo de puntos de partida del recorrido: parte del código no se revisó."
+    ),
+    "api_call_limit": ("Se alcanzó el máximo de llamadas conservadas: hay más que no aparecen."),
     "yara_catalog_invalid": (
         "El catálogo de reglas no superó su validación, así que no se evaluó ninguna regla."
     ),

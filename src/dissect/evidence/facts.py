@@ -258,6 +258,57 @@ class DecodedStringEvidence(Model):
         return self
 
 
+InstructionHex = Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2}){1,15}$")]
+
+
+class Instruction(Model):
+    """An instruction a claim rests on: where it is in the file and in the image."""
+
+    offset: NonNegative
+    rva: UInt
+    raw_hex: InstructionHex
+
+
+class ApiCallData(Model):
+    # Which canonical form (evidence/call_forms.py) reaches the import's slot.
+    via: Literal["direct", "thunk", "register"]
+    raw_hex: InstructionHex
+    # The thunk's `jmp [slot]` or the `mov reg, [slot]` right before the call.
+    helper: Instruction | None = None
+
+    @model_validator(mode="after")
+    def helper_matches_via(self) -> Self:
+        if (self.via == "direct") != (self.helper is None):
+            raise ValueError("only thunk and register calls rest on a helper instruction")
+        return self
+
+
+class ApiCallEvidence(Model):
+    id: EvidenceId
+    source: Literal["code"] = "code"
+    component: Literal["api_calls"] = "api_calls"
+    kind: Literal["api_call"] = "api_call"
+    location: Location
+    confidence: Literal["observed"] = "observed"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: ApiCallData
+
+    @model_validator(mode="after")
+    def locates_its_instruction(self) -> Self:
+        where = self.location
+        if where.offset is None or where.rva is None or where.length is None:
+            raise ValueError("a call must locate its instruction in the file and the image")
+        if where.length != len(self.data.raw_hex) // 2:
+            raise ValueError("call location disagrees with its bytes")
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a call cites exactly the import it reaches")
+        helper = self.data.helper
+        if self.data.via == "register" and helper is not None:
+            if helper.rva + len(helper.raw_hex) // 2 != where.rva:
+                raise ValueError("a register load must be the instruction right before the call")
+        return self
+
+
 class AnomalyEvidence(Fact):
     kind: Literal["header_anomaly"] = "header_anomaly"
     data: AnomalyData
@@ -291,7 +342,8 @@ Evidence = Annotated[
     | StringEvidence
     | AnomalyEvidence
     | YaraEvidence
-    | DecodedStringEvidence,
+    | DecodedStringEvidence
+    | ApiCallEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -304,4 +356,5 @@ Payload = (
     | AnomalyData
     | YaraMatchData
     | DecodedStringData
+    | ApiCallData
 )

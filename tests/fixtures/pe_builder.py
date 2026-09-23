@@ -123,6 +123,49 @@ def build_decode_demo(*, bits=32):
     return build_pe(bits=bits) + bytes(overlay) + b"\xcc" * 16
 
 
+# Inert training code: each of the three canonical forms calls the fixture's only
+# import (kernel32!ExitProcess, IAT slot 0x1140) once, then returns.
+CODE_RVA = 0x2000
+THUNK_RVA = 0x2020
+
+
+def code_demo_bytes(bits=32):
+    def rel(source, target, size):
+        return struct.pack("<i", target - (source + size))
+
+    slot = 0x1140
+    code = bytearray(b"\xcc" * 0x200)
+    if bits == 32:
+        absolute = struct.pack("<I", 0x400000 + slot)
+        body = b"\xff\x15" + absolute  # call [slot]
+        body += b"\xe8" + rel(CODE_RVA + len(body), THUNK_RVA, 5)  # call thunk
+        body += b"\x8b\x35" + absolute + b"\xff\xd6"  # mov esi, [slot]; call esi
+        thunk = b"\xff\x25" + absolute  # jmp [slot]
+    else:
+        body = b"\x48\xff\x15" + rel(CODE_RVA, slot, 7)  # call [rip+slot]
+        body += b"\xe8" + rel(CODE_RVA + len(body), THUNK_RVA, 5)
+        body += b"\x48\x8b\x35" + rel(CODE_RVA + len(body), slot, 7) + b"\xff\xd6"
+        thunk = b"\xff\x25" + rel(THUNK_RVA, slot, 6)
+    body += b"\xc3"
+    code[: len(body)] = body
+    code[THUNK_RVA - CODE_RVA : THUNK_RVA - CODE_RVA + len(thunk)] = thunk
+    return bytes(code)
+
+
+def build_code_demo(*, bits=32):
+    """build_pe plus an executable .text section whose entry point calls the import."""
+    data = bytearray(build_pe(bits=bits)) + code_demo_bytes(bits)
+    opt = 0x98
+    section = opt + (224 if bits == 32 else 240) + 40
+    struct.pack_into("<H", data, 0x86, 2)
+    struct.pack_into("<I", data, opt + 16, CODE_RVA)
+    struct.pack_into("<I", data, opt + 56, 0x3000)
+    data[section : section + 8] = b".text\0\0\0"
+    struct.pack_into("<IIII", data, section + 8, 0x200, CODE_RVA, 0x200, 0x1200)
+    struct.pack_into("<I", data, section + 36, 0x60000020)
+    return bytes(data)
+
+
 def main():
     import argparse
     from pathlib import Path
@@ -132,11 +175,13 @@ def main():
     parser.add_argument("--bits", type=int, choices=(32, 64), default=32)
     parser.add_argument(
         "--scenario",
-        choices=("basic", "demo", "corrupt", "yara-limited", "decode-demo"),
+        choices=("basic", "demo", "corrupt", "yara-limited", "decode-demo", "code-demo"),
         default="basic",
     )
     args = parser.parse_args()
-    if args.scenario == "decode-demo":
+    if args.scenario == "code-demo":
+        data = build_code_demo(bits=args.bits)
+    elif args.scenario == "decode-demo":
         data = build_decode_demo(bits=args.bits)
     elif args.scenario in ("basic", "yara-limited"):
         data = build_pe(bits=args.bits)
