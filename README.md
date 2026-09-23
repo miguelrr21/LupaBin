@@ -63,6 +63,21 @@ El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, ti
 
 Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md).
 
+## Qué aporta VirusTotal (opcional)
+
+Con una clave de API en la variable de entorno `VT_API_KEY`, Dissect puede añadir los resultados de VirusTotal como **fuente externa, no verificada por Dissect**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
+
+```text
+uv run --frozen dissect analyze "ruta/al/archivo.exe" --virustotal
+uv run --frozen dissect virustotal --sha256 <sha256> --format json
+```
+
+- Por defecto solo se envía el SHA-256, nunca el archivo. `--upload-to-virustotal` lo sube solo si VirusTotal no lo conoce, con el nombre genérico `sample`. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: no subas archivos internos o confidenciales.
+- Todo ocurre en el host: el worker sigue sin red. Una etiqueta es la opinión de un motor, y el comportamiento se observó en los sandboxes de VirusTotal, no en tu equipo. "VirusTotal no conoce este archivo" no dice nada sobre su peligrosidad.
+- La API pública admite 500 consultas al día y 4 por minuto, y no puede usarse en productos o servicios comerciales.
+
+Diseño: [integración con VirusTotal](docs/superpowers/specs/2026-09-23-virustotal-design.md).
+
 ## Salida y abstención
 
 La salida `--json` es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.

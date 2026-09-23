@@ -1,0 +1,335 @@
+import json
+
+import pytest
+
+from dissect.virustotal.client import (
+    MAX_RESPONSE,
+    HttpRequest,
+    HttpResponse,
+    VirusTotalError,
+    consult,
+    urllib_transport,
+)
+from dissect.virustotal.models import MAX_ITEMS, VirusTotalReport
+
+SHA = "a" * 64
+KEY = {"VT_API_KEY": "test-key-not-real"}
+FILE = {
+    "data": {
+        "id": SHA,
+        "type": "file",
+        "attributes": {
+            "last_analysis_stats": {"malicious": 2, "suspicious": 1, "undetected": 60},
+            "last_analysis_results": {
+                "EngineB": {"category": "malicious", "result": "Training.Sample"},
+                "EngineA": {"category": "suspicious", "result": None},
+                "EngineC": {"category": "undetected", "result": None},
+            },
+            "meaningful_name": "practice.exe",
+            "names": ["practice.exe", "sample.bin"],
+            "type_description": "Win32 EXE",
+            "first_submission_date": 1758585600,
+            "last_analysis_date": 1758672000,
+            "reputation": -3,
+            "total_votes": {"harmless": 0, "malicious": 1},
+            "tags": ["peexe"],
+            "sandbox_verdicts": {
+                "SandboxX": {
+                    "category": "suspicious",
+                    "confidence": 70,
+                    "sandbox_name": "SandboxX",
+                    "malware_classification": ["UNKNOWN"],
+                }
+            },
+            "unexpected_field": {"ignored": True},
+        },
+    }
+}
+BEHAVIOUR = {
+    "data": {
+        "processes_created": ["C:\\Windows\\System32\\cmd.exe /c echo training"],
+        "command_executions": ["cmd.exe /c echo training"],
+        "files_written": ["C:\\Users\\user\\AppData\\Local\\Temp\\training.tmp"],
+        "registry_keys_set": [{"key": "HKCU\\Software\\Training", "value": "1"}, "bad"],
+        "dns_lookups": [{"hostname": "training.invalid", "resolved_ips": ["192.0.2.1"]}],
+        "ip_traffic": [
+            {
+                "destination_ip": "192.0.2.1",
+                "destination_port": 443,
+                "transport_layer_protocol": "TCP",
+            }
+        ],
+        "http_conversations": [{"url": "https://training.invalid/", "request_method": "GET"}],
+        "mutexes_created": ["Training_Mutex"],
+        "mitre_attack_techniques": [
+            {
+                "id": "T1059",
+                "signature_description": "Runs a command shell",
+                "severity": "IMPACT_SEVERITY_LOW",
+            }
+        ],
+    }
+}
+
+
+class Fake:
+    """Scripted transport: (method, path) -> list of responses, recording requests."""
+
+    def __init__(self, routes):
+        self.routes = {key: list(value) for key, value in routes.items()}
+        self.requests: list[HttpRequest] = []
+
+    def __call__(self, request):
+        self.requests.append(request)
+        queue = self.routes[(request.method, request.path.split("?")[0])]
+        status, payload = queue.pop(0) if len(queue) > 1 else queue[0]
+        body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        return HttpResponse(status, body)
+
+
+def lookup_routes(file=(200, FILE), behaviour=(200, BEHAVIOUR)):
+    return {
+        ("GET", f"/files/{SHA}"): [file],
+        ("GET", f"/files/{SHA}/behaviour_summary"): [behaviour],
+    }
+
+
+def test_hash_lookup_reads_verdicts_and_behaviour_and_only_sends_the_hash():
+    fake = Fake(lookup_routes())
+    report = consult(SHA, b"MZ bytes that must not leave", transport=fake, environ=KEY)
+    assert report.status == "found" and report.problem is None and not report.uploaded
+    assert report.stats == {"malicious": 2, "suspicious": 1, "undetected": 60}
+    assert [(d.engine, d.category) for d in report.detections] == [
+        ("EngineA", "suspicious"),
+        ("EngineB", "malicious"),
+    ]
+    assert report.first_submission.year == 2025
+    assert report.behaviour.command_executions == ("cmd.exe /c echo training",)
+    assert report.behaviour.registry_keys_set[0].key == "HKCU\\Software\\Training"
+    assert report.behaviour.omitted == 1  # the malformed registry entry
+    assert [t.id for t in report.behaviour.mitre_attack_techniques] == ["T1059"]
+    assert all(r.method == "GET" and r.body is None for r in fake.requests)
+    assert all(r.headers["x-apikey"] == "test-key-not-real" for r in fake.requests)
+    assert VirusTotalReport.model_validate_json(report.model_dump_json()) == report
+
+
+def test_unknown_file_is_not_uploaded_without_the_explicit_option():
+    fake = Fake(lookup_routes(file=(404, {"error": {"code": "NotFoundError"}})))
+    report = consult(SHA, b"data", transport=fake, environ=KEY)
+    assert report.status == "not_found"
+    assert [r.method for r in fake.requests] == ["GET"]
+
+
+def test_explicit_upload_sends_a_generic_name_and_waits_for_the_analysis():
+    routes = lookup_routes()
+    routes[("GET", f"/files/{SHA}")] = [(404, {}), (200, FILE)]
+    routes[("POST", "/files")] = [(200, {"data": {"type": "analysis", "id": "abc=="}})]
+    routes[("GET", "/analyses/abc==")] = [
+        (200, {"data": {"attributes": {"status": "queued"}}}),
+        (200, {"data": {"attributes": {"status": "completed"}}}),
+    ]
+    fake, sleeps = Fake(routes), []
+    report = consult(
+        SHA, b"MZtraining", upload=True, transport=fake, sleep=sleeps.append, environ=KEY
+    )
+    assert report.status == "found" and report.uploaded
+    post = next(r for r in fake.requests if r.method == "POST")
+    assert b'filename="sample"' in post.body and b"MZtraining" in post.body
+    assert post.headers["content-type"].startswith("multipart/form-data; boundary=")
+    assert sleeps and all(s >= 15 for s in sleeps)  # respects 4 requests per minute
+
+
+def test_upload_that_does_not_finish_in_time_is_reported_as_queued():
+    routes = lookup_routes(file=(404, {}))
+    routes[("POST", "/files")] = [(200, {"data": {"id": "abc=="}})]
+    routes[("GET", "/analyses/abc==")] = [(200, {"data": {"attributes": {"status": "queued"}}})]
+    report = consult(
+        SHA, b"x", upload=True, transport=Fake(routes), sleep=lambda s: None, environ=KEY
+    )
+    assert report.status == "queued" and report.uploaded
+
+
+@pytest.mark.parametrize(
+    "status,problem",
+    [(401, "auth_failed"), (403, "auth_failed"), (429, "quota_exceeded"), (503, "network_error")],
+)
+def test_http_failures_become_declared_problems(status, problem):
+    report = consult(SHA, transport=Fake(lookup_routes(file=(status, {}))), environ=KEY)
+    assert (report.status, report.problem) == ("unavailable", problem)
+
+
+def test_missing_key_never_calls_the_api():
+    fake = Fake(lookup_routes())
+    report = consult(SHA, transport=fake, environ={})
+    assert (report.status, report.problem) == ("unavailable", "key_missing")
+    assert fake.requests == []
+
+
+def test_behaviour_failure_keeps_the_verdicts():
+    report = consult(SHA, transport=Fake(lookup_routes(behaviour=(429, {}))), environ=KEY)
+    assert report.status == "found" and report.problem == "quota_exceeded"
+    assert report.stats and report.behaviour.empty()
+
+
+@pytest.mark.parametrize(
+    "payload", [b"not json", {"data": []}, {"data": {"attributes": "x"}}, [1, 2]]
+)
+def test_malformed_responses_are_rejected_not_guessed(payload):
+    report = consult(SHA, transport=Fake(lookup_routes(file=(200, payload))), environ=KEY)
+    assert (report.status, report.problem) == ("unavailable", "invalid_response")
+
+
+def test_wrong_types_are_dropped_and_lists_are_bounded():
+    attributes = FILE["data"]["attributes"] | {
+        "last_analysis_stats": {"malicious": "2", "undetected": -1, "harmless": True},
+        "names": ["x" * 5000, 7, None] + [f"n{i}" for i in range(40)],
+        "first_submission_date": "yesterday",
+    }
+    behaviour = {"data": {"files_written": [f"f{i}" for i in range(MAX_ITEMS + 25)]}}
+    routes = lookup_routes(
+        file=(200, {"data": {"attributes": attributes}}), behaviour=(200, behaviour)
+    )
+    report = consult(SHA, transport=Fake(routes), environ=KEY)
+    assert report.stats == {}
+    assert len(report.names) == 20 and len(report.names[0]) == 2048
+    assert report.first_submission is None
+    assert len(report.behaviour.files_written) == MAX_ITEMS and report.behaviour.omitted == 25
+
+
+def test_the_key_never_appears_in_the_report():
+    report = consult(SHA, transport=Fake(lookup_routes()), environ=KEY)
+    assert "test-key-not-real" not in report.model_dump_json()
+
+
+def test_real_transport_refuses_paths_outside_the_api_and_oversized_answers(monkeypatch):
+    with pytest.raises(VirusTotalError):
+        urllib_transport(HttpRequest("GET", "https://evil.invalid/"))
+
+    class Big:
+        status = 200
+
+        def read(self, size):
+            return b"x" * size
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class Opener:
+        def open(self, request, timeout):
+            assert request.full_url.startswith("https://www.virustotal.com/api/v3/")
+            return Big()
+
+    monkeypatch.setattr("urllib.request.build_opener", lambda *handlers: Opener())
+    with pytest.raises(VirusTotalError) as error:
+        urllib_transport(HttpRequest("GET", f"/files/{SHA}"))
+    assert error.value.problem == "too_large"
+    assert MAX_RESPONSE < 16 * 1024 * 1024
+
+
+# --- CLI and rendering --------------------------------------------------------------
+
+from typer.testing import CliRunner  # noqa: E402
+
+from dissect.analysis import analyze_bytes  # noqa: E402
+from dissect.cli import app  # noqa: E402
+from dissect.virustotal import client as vt_client  # noqa: E402
+from tests.fixtures.pe_builder import build_pe  # noqa: E402
+
+runner = CliRunner()
+HOSTILE = "\x1b[2J`[x](https://evil.invalid)`"
+
+
+def patch(monkeypatch, file=(200, FILE), behaviour=(200, BEHAVIOUR), environ=KEY):
+    real = vt_client.consult
+    calls = []
+
+    def fake(sha256, data=None, *, upload=False, **_):
+        routes = {
+            ("GET", f"/files/{sha256}"): [file],
+            ("GET", f"/files/{sha256}/behaviour_summary"): [behaviour],
+        }
+        calls.append((sha256, upload))
+        return real(sha256, data, upload=upload, transport=Fake(routes), environ=environ)
+
+    monkeypatch.setattr("dissect.cli.virustotal_client.consult", fake)
+    monkeypatch.setattr(
+        "dissect.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
+    )
+    return calls
+
+
+def sample(tmp_path):
+    path = tmp_path / "sample.bin"
+    path.write_bytes(build_pe())
+    return path
+
+
+def test_analyze_adds_an_attributed_external_section(tmp_path, monkeypatch):
+    hostile = json.loads(json.dumps(FILE))
+    hostile["data"]["attributes"]["meaningful_name"] = HOSTILE
+    calls = patch(monkeypatch, file=(200, hostile))
+    for flag in ([], ["--markdown"]):
+        result = runner.invoke(app, ["analyze", str(sample(tmp_path)), "--virustotal", *flag])
+        assert result.exit_code == 0
+        assert "Fuente externa: VirusTotal (no verificada por Dissect)" in result.stdout
+        assert "\x1b" not in result.stdout and "test-key-not-real" not in result.stdout
+        assert "2 de 63 lo marcan como malicioso" in result.stdout
+    assert all(upload is False for _, upload in calls)
+
+
+def test_analyze_without_the_option_never_consults(tmp_path, monkeypatch):
+    calls = patch(monkeypatch)
+    result = runner.invoke(app, ["analyze", str(sample(tmp_path))])
+    assert result.exit_code == 0 and calls == []
+    assert "VirusTotal" not in result.stdout
+
+
+def test_json_report_and_virustotal_are_not_mixed(tmp_path, monkeypatch):
+    patch(monkeypatch)
+    result = runner.invoke(app, ["analyze", str(sample(tmp_path)), "--json", "--virustotal"])
+    assert result.exit_code == 2
+
+
+def test_virustotal_command_emits_its_own_document(tmp_path, monkeypatch):
+    patch(monkeypatch)
+    result = runner.invoke(app, ["virustotal", "--sha256", SHA.upper(), "--format", "json"])
+    assert result.exit_code == 0
+    assert VirusTotalReport.model_validate_json(result.stdout).sample_sha256 == SHA
+    text = runner.invoke(app, ["virustotal", str(sample(tmp_path))])
+    assert text.exit_code == 0 and "Motores" in text.stdout
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["virustotal"],
+        ["virustotal", "--sha256", "xyz"],
+        ["virustotal", "--sha256", SHA, "--upload-to-virustotal"],
+        ["virustotal", "--sha256", SHA, "--format", "markdown"],
+    ],
+)
+def test_virustotal_command_usage_errors(monkeypatch, args):
+    patch(monkeypatch)
+    assert runner.invoke(app, args).exit_code == 2
+
+
+def test_missing_key_is_a_clear_error_without_a_request(monkeypatch):
+    patch(monkeypatch, environ={})
+    result = runner.invoke(app, ["virustotal", "--sha256", SHA])
+    assert result.exit_code == 1
+    assert json.loads(result.stderr)["error"]["code"] == "virustotal_key_missing"
+    assert "VT_API_KEY" in result.stdout
+
+
+def test_explain_consults_by_the_report_hash(tmp_path, monkeypatch):
+    calls = patch(monkeypatch)
+    path = sample(tmp_path)
+    saved = runner.invoke(app, ["analyze", str(path), "--json"])
+    report = tmp_path / "report.json"
+    report.write_text(saved.stdout, encoding="utf-8")
+    result = runner.invoke(app, ["explain", str(report), "--virustotal"])
+    assert result.exit_code == 0 and "Fuente externa" in result.stdout
+    assert calls == [(json.loads(saved.stdout)["sample"]["sha256"], False)]
