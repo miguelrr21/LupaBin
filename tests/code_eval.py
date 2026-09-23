@@ -1,13 +1,15 @@
 """Reproduce the Fase 4 measurements of calls to imported functions.
 
     uv run python -m tests.code_eval corpus DIR [DIR ...] [--recursive] [--ext .exe,.dll]
-        [--stride N] [--limit N]
+        [--stride N] [--limit N] [--review N] [--seed N]
     uv run python -m tests.code_eval worst
 
 `corpus` treats every file as benign and runs the PE and code extractors on it: every
 report must validate and every call must match the sample's bytes (a single failure
 would invalidate a report). In x64 it also counts calls outside the functions that
-`.pdata` declares, the error indicator of the walk. Files are only read as bytes:
+`.pdata` declares, the error indicator of the walk, and for call arguments the
+constants that the parameter's type rejects, the error indicator of the stretch rule
+(`--review N` prints N random published arguments with their stretch). Files are only read as bytes:
 nothing is executed, and they never enter the repository. `worst` times synthetic
 20 MiB inputs built to maximise decoded instructions and published calls. Not part
 of the package or of CI.
@@ -15,6 +17,7 @@ of the package or of CI.
 
 import argparse
 import bisect
+import random
 import struct
 import subprocess
 import sys
@@ -24,11 +27,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from dissect.analysis import analyze_bytes
+from dissect.evidence import argument_forms
 from dissect.evidence.code import verify_calls
 from dissect.evidence.facts import ApiCallEvidence, ImportEvidence
 from dissect.evidence.models import Limits, Report
 from dissect.extractors import code as code_extractor
-from dissect.extractors import code_entries
+from dissect.extractors import code_args, code_entries
 from dissect.extractors.code import CodeExtractor
 from dissect.extractors.pe import PEExtractor
 from dissect.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
@@ -83,8 +87,156 @@ def use_entries(names: str) -> None:
     code_extractor.entries = entries  # type: ignore[assignment]
 
 
+class ArgumentProbe:
+    """Records, inside the extractor, every constant the stretch rule recovers for a
+    catalog parameter and whether its type accepted it (design section 7).
+
+    Published arguments are type-coherent by construction; the error indicator is the
+    recovered constants the type rejects, each of which is examined. A random sample
+    of published ones is printed with its stretch disassembled, for manual review.
+    """
+
+    def __init__(self) -> None:
+        self.name = ""
+        self.recovered: Counter[tuple[int, str]] = Counter()
+        self.accepted: Counter[tuple[int, str]] = Counter()
+        self.rejected: list[tuple[int, str, str, str, int, int, str]] = []
+        self.stretches: dict[int, int] = {}  # call rva -> stretch start, current file
+        self.starts: dict[tuple[str, int], int] = {}  # (path, call rva) -> stretch start
+        self.published: list[tuple[str, int, int, int, str, str]] = []
+        self.detail = 0
+        self.seconds = 0.0
+        self.examined: Counter[int] = Counter()
+        original_argument = code_extractor._argument
+        original_constants = code_args.ArgumentFinder.constants
+        original_arguments = code_extractor._arguments
+        probe = self
+
+        def argument(parameter, entry, found, layout, characters):  # type: ignore[no-untyped-def]
+            data = original_argument(parameter, entry, found, layout, characters)
+            key = (layout.bits, parameter.name)
+            probe.recovered[key] += 1
+            if data is not None:
+                probe.accepted[key] += 1
+            else:
+                reason = probe.reason(parameter, found, layout)
+                probe.rejected.append(
+                    (layout.bits, parameter.name, reason, probe.name, found.setter[0],
+                     found.setting.value, found.setting.kind)
+                )  # fmt: skip
+            return data
+
+        def constants(finder, start, call):  # type: ignore[no-untyped-def]
+            probe.stretches[call] = start
+            probe.examined[finder.bits] += 1
+            return original_constants(finder, start, call)
+
+        def arguments(layout, code, targets, catalog, calls, collector, progress, deadline):  # type: ignore[no-untyped-def]
+            began = time.perf_counter()
+            budget = code_args.Budget
+            used: list[code_args.Budget] = []
+
+            def tracked(*a, **k):  # type: ignore[no-untyped-def]
+                used.append(budget(*a, **k))
+                return used[-1]
+
+            code_extractor.Budget = tracked  # type: ignore[assignment,misc]
+            try:
+                original_arguments(
+                    layout, code, targets, catalog, calls, collector, progress, deadline
+                )
+            finally:
+                code_extractor.Budget = budget  # type: ignore[misc]
+            probe.seconds += time.perf_counter() - began
+            probe.detail += sum(b.used for b in used)
+
+        code_extractor._argument = argument  # type: ignore[assignment]
+        code_args.ArgumentFinder.constants = constants  # type: ignore[method-assign]
+        code_extractor._arguments = arguments  # type: ignore[assignment]
+
+    @staticmethod
+    def reason(parameter, found, layout) -> str:  # type: ignore[no-untyped-def]
+        setting = found.setting
+        if parameter.type == "hkey":
+            return "not a listed key"
+        if parameter.type == "integer":
+            return "an address, not an immediate"
+        target = argument_forms.address_of(setting, layout.bits, layout.header.image_base)
+        if target is None:
+            return "not an address in the image"
+        for item in layout.sections:
+            section = item.data
+            if section.raw_status == "present" and section.rva <= target < (
+                section.rva + section.raw_size
+            ):
+                return "writable section" if "write" in section.permissions else "not a string"
+        return "not in a section on disk"
+
+    def record(self, report: Report, path: Path) -> None:
+        facts = {f.id: f for f in report.evidence}
+        bits = 32 if report.sample.type == "PE32" else 64
+        for fact in report.evidence:
+            if fact.kind != "call_argument":
+                continue
+            call = facts[fact.provenance.evidence_ids[0]]
+            data = fact.data
+            shown = data.constant or (data.string.text if data.string else hex(data.value))
+            rva = call.location.rva or 0
+            self.starts[(str(path), rva)] = self.stretches.get(rva, rva - 64)
+            self.published.append((str(path), bits, rva, fact.location.rva or 0, data.name, shown))
+        self.stretches.clear()
+
+    def report(self, review: int, seed: int) -> None:
+        for bits in (32, 64):
+            names = sorted({name for b, name in self.recovered if b == bits})
+            print(f"x{'86' if bits == 32 else '64'}: catalog calls examined {self.examined[bits]}")
+            for name in names:
+                key = (bits, name)
+                print(
+                    f"  {name:11} recovered {self.recovered[key]:6}"
+                    f"  accepted {self.accepted[key]:6}"
+                )
+        reasons = Counter((bits, name, reason) for bits, name, reason, *_ in self.rejected)
+        print("rejected by type:", dict(reasons))
+        for bits, name, reason, path, rva, value, kind in self.rejected[:40]:
+            print(f"  REJECTED x{bits} {name} {reason}: {path} setter {rva:#x} {kind} {value:#x}")
+        print(f"argument pass: {self.detail} detail instructions, {self.seconds:.2f} s")
+        rng = random.Random(seed)  # noqa: S311 - a reproducible review sample
+        chosen = rng.sample(self.published, min(review, len(self.published)))
+        for path, bits, call, setter, name, shown in chosen:
+            print(
+                f"\nREVIEW {path} x{'86' if bits == 32 else '64'} call {call:#x}: {name} = {shown}"
+            )
+            self.disassemble(Path(path), bits, call, setter)
+
+    def disassemble(self, path: Path, bits: int, call: int, setter: int) -> None:
+        import capstone
+
+        data = path.read_bytes()
+        layout = parse_layout(data, Limits())
+        start = min(self.starts.get((str(path), call), call - 64), setter)
+        start = max(start, call - 256)
+        offset, _ = layout.locate(start, call + 16 - start)
+        engine = capstone.Cs(
+            capstone.CS_ARCH_X86, capstone.CS_MODE_32 if bits == 32 else capstone.CS_MODE_64
+        )
+        for insn in engine.disasm(data[offset : offset + call + 16 - start], start):
+            mark = (
+                "  <- setter"
+                if insn.address == setter
+                else ("  <- call" if insn.address == call else "")
+            )
+            print(
+                f"    {insn.address:#010x}  {insn.bytes.hex():20}"
+                f" {insn.mnemonic} {insn.op_str}{mark}"
+            )
+            if insn.address >= call:
+                break
+
+
 def corpus(args: argparse.Namespace) -> None:
     use_entries(args.entries)
+    probe = ArgumentProbe()
     ext = tuple(e.strip().lower() for e in args.ext.split(","))
     totals: Counter[str] = Counter()
     via: Counter[str] = Counter()
@@ -100,6 +252,7 @@ def corpus(args: argparse.Namespace) -> None:
         if not data.startswith(b"MZ") or len(data) > MAX_INPUT:
             continue
         totals["files"] += 1
+        probe.name = str(path)
         start = time.perf_counter()
         try:
             report = analyze_bytes(data, extractors=(PEExtractor(), CodeExtractor()))
@@ -118,6 +271,8 @@ def corpus(args: argparse.Namespace) -> None:
         except ValueError:
             totals["verify_failures"] += 1
             print("VERIFY", path)
+        probe.record(report, path)
+        totals["arguments"] += sum(f.kind == "call_argument" for f in report.evidence)
         calls = [f for f in report.evidence if isinstance(f, ApiCallEvidence)]
         named = {f.id for f in report.evidence if isinstance(f, ImportEvidence) and f.data.function}
         called = {f.provenance.evidence_ids[0] for f in calls}
@@ -149,6 +304,7 @@ def corpus(args: argparse.Namespace) -> None:
         print("PE+code seconds p50/p90/p99/max:", ", ".join(f"{t:.2f}" for t, _, _ in pick))
         for seconds, name, instructions in times[-5:]:
             print(f"  {seconds:6.2f}s {instructions:>9} instr  {name}")
+    probe.report(args.review, args.seed)
 
 
 def peak_memory() -> int:
@@ -193,12 +349,35 @@ def worst_case(name: str) -> bytes:
         "jumps": bytes([0x74, 0x00]),  # jz to the next instruction: a block per instruction
         "relative-calls": bytes([0xE8, 0, 0, 0, 0]),  # a call site per instruction
         "import-calls": bytes([0xFF, 0x15]) + absolute,  # a published call per instruction
+        # calls to a catalog function: long stretches exhaust the detail-mode budget,
+        # constant pushes the published-argument quota
+        "argument-stretches": bytes([0x90]) * 63 + bytes([0xFF, 0x15]) + absolute,
+        "argument-values": (
+            bytes([0x68])
+            + struct.pack("<I", 0x20019)  # push samDesired
+            + bytes([0x6A, 0x00])  # push ulOptions
+            + bytes([0x6A, 0x00])  # push lpSubKey (not a string)
+            + bytes([0x68])
+            + struct.pack("<I", 0x80000001)  # push hKey
+            + bytes([0xFF, 0x15])
+            + absolute
+        ),  # fmt: skip
     }
     unit = units[name]
-    return build_code_pe(unit * (size // len(unit)))
+    code = unit * (size // len(unit))
+    if name.startswith("argument"):
+        return build_code_pe(code, dll=b"advapi32.dll", function=b"RegOpenKeyExW")
+    return build_code_pe(code)
 
 
-WORST = ("nops", "jumps", "relative-calls", "import-calls")
+WORST = (
+    "nops",
+    "jumps",
+    "relative-calls",
+    "import-calls",
+    "argument-stretches",
+    "argument-values",
+)
 
 
 def worst(args: argparse.Namespace) -> None:
@@ -238,6 +417,8 @@ def main() -> None:
         default=",".join(sorted(code_entries.SOURCES)),
         help="tables the walk starts from, besides the entry point and exports",
     )
+    run.add_argument("--review", type=int, default=0, help="arguments to print for review")
+    run.add_argument("--seed", type=int, default=2026)
     run.set_defaults(handler=corpus)
     case = commands.add_parser("worst")
     case.add_argument("--case", choices=WORST)

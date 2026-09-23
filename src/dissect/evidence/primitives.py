@@ -81,8 +81,8 @@ class CodeLimits(Model):
     calls: Annotated[int, Field(gt=0, le=4096)] = 4096
     arguments: Annotated[int, Field(gt=0, le=4096)] = 4096
     # Instructions decoded in capstone's detail mode to recover arguments, across all
-    # calls of the catalog (design section 9.6).
-    argument_instructions: Annotated[int, Field(gt=0, le=262144)] = 262144
+    # calls of the catalog (design section 10.2).
+    argument_instructions: Annotated[int, Field(gt=0, le=262144)] = 65536
 
 
 class Limits(Model):
