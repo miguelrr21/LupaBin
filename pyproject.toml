@@ -49,7 +49,7 @@ strict = true
 files = ["src"]
 
 [[tool.mypy.overrides]]
-module = "pefile"
+module = ["pefile", "capstone"]
 ignore_missing_imports = true
 
 [dependency-groups]
