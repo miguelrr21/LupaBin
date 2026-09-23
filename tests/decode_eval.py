@@ -1,6 +1,7 @@
 """Reproduce the Fase 2 decoding measurements on a directory of benign binaries.
 
-    uv run python -m tests.decode_eval false-positives DIR [--limit N]
+    uv run python -m tests.decode_eval false-positives DIR [DIR ...] [--limit N]
+        [--recursive] [--ext .exe,.dll] [--stride N] [--only all|xor|text]
     uv run python -m tests.decode_eval recall DIR [--trials N] [--seed S]
     uv run python -m tests.decode_eval timing
 
@@ -109,9 +110,26 @@ class Stream:
         return int.from_bytes(self.bytes(8), "big") % bound
 
 
-def files_in(directory: Path, limit: int) -> list[Path]:
-    paths = sorted(p for p in directory.iterdir() if p.is_file())
-    return [p for p in paths if p.stat().st_size <= MAX_INPUT][:limit]
+def files_in(
+    directory: Path,
+    limit: int,
+    *,
+    recursive: bool = False,
+    extensions: frozenset[str] | None = None,
+    stride: int = 1,
+) -> list[Path]:
+    """Regular files up to the input limit, sorted; every `stride`-th one (deterministic)."""
+    candidates = directory.rglob("*") if recursive else directory.iterdir()
+    paths = []
+    for path in candidates:
+        try:
+            if not path.is_file() or path.stat().st_size > MAX_INPUT:
+                continue
+        except OSError:
+            continue
+        if extensions is None or path.suffix.lower() in extensions:
+            paths.append(path)
+    return sorted(paths)[::stride][:limit]
 
 
 def string_facts(data: bytes) -> Iterator[StringEvidence]:
@@ -122,34 +140,57 @@ def string_facts(data: bytes) -> Iterator[StringEvidence]:
             yield fact
 
 
-def false_positives(directory: Path, limit: int) -> None:
+def false_positives(
+    directories: list[Path],
+    limit: int,
+    *,
+    recursive: bool = False,
+    extensions: frozenset[str] | None = None,
+    stride: int = 1,
+    only: str = "all",
+) -> None:
     kinds: Counter[str] = Counter()
     examples: list[tuple[str, str, str]] = []
     total, started = 0, time.perf_counter()
-    paths = files_in(directory, limit)
-    for path in paths:
+    paths = [
+        path
+        for directory in directories
+        for path in files_in(
+            directory, limit, recursive=recursive, extensions=extensions, stride=stride
+        )
+    ]
+    for count, path in enumerate(paths, 1):
         try:
             data = path.read_bytes()
         except OSError:
             continue
         total += len(data)
-        for hit in decode_xor.scan(data).hits:
-            kinds["xor"] += 1
-            text = hit.plaintext.decode(hit.encoding)[:48]
-            examples.append((path.name, f"xor key={hit.key.hex()} crib={hit.crib!r}", text))
-        next_id = map("E{}".format, itertools.count(1)).__next__
-        for fact in string_facts(data):
-            for evidence in decode_strings.candidates(fact, next_id):
-                kinds[evidence.transform.name] += 1
-                examples.append((path.name, evidence.transform.name, evidence.data.text[:48]))
+        if only in ("all", "xor"):
+            for hit in decode_xor.scan(data).hits:
+                kinds["xor"] += 1
+                text = hit.plaintext.decode(hit.encoding)[:48]
+                examples.append((str(path), f"xor key={hit.key.hex()} crib={hit.crib!r}", text))
+        if only in ("all", "text"):
+            next_id = map("E{}".format, itertools.count(1)).__next__
+            for fact in string_facts(data):
+                for evidence in decode_strings.candidates(fact, next_id):
+                    kinds[evidence.transform.name] += 1
+                    examples.append((str(path), evidence.transform.name, evidence.data.text[:48]))
+        if count % 500 == 0:
+            elapsed = time.perf_counter() - started
+            print(
+                f"  ... {count}/{len(paths)} files, {total / 2**20:.0f} MiB, {elapsed:.0f}s, "
+                f"{sum(kinds.values())} decodings",
+                flush=True,
+            )
     elapsed = time.perf_counter() - started
-    print(f"{len(paths)} files, {total / 2**20:.0f} MiB, {elapsed:.1f}s")
+    print(f"{len(paths)} files, {total / 2**20:.0f} MiB, {elapsed:.1f}s ({only})")
     counts = " ".join(
         f"{name}={kinds[key]}"
         for name, key in (("xor", "xor"), ("base64", "base64-strict-v1"), ("hex", "hex-strict-v1"))
     )
     print(f"false positives: {counts}")
-    for example in examples[:20]:
+    for example in examples[:200]:
         print("  ", example)
 
 
@@ -239,8 +280,12 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     fp = sub.add_parser("false-positives")
-    fp.add_argument("directory", type=Path)
-    fp.add_argument("--limit", type=int, default=100_000)
+    fp.add_argument("directories", type=Path, nargs="+")
+    fp.add_argument("--limit", type=int, default=1_000_000, help="max files per directory")
+    fp.add_argument("--recursive", action="store_true")
+    fp.add_argument("--ext", default="", help="comma-separated suffixes, e.g. .exe,.dll")
+    fp.add_argument("--stride", type=int, default=1, help="keep every n-th sorted file")
+    fp.add_argument("--only", choices=("all", "xor", "text"), default="all")
     rc = sub.add_parser("recall")
     rc.add_argument("directory", type=Path)
     rc.add_argument("--trials", type=int, default=300)
@@ -248,7 +293,15 @@ def main() -> None:
     sub.add_parser("timing")
     args = parser.parse_args()
     if args.command == "false-positives":
-        false_positives(args.directory, args.limit)
+        extensions = frozenset(e.strip().lower() for e in args.ext.split(",") if e.strip())
+        false_positives(
+            args.directories,
+            args.limit,
+            recursive=args.recursive,
+            extensions=extensions or None,
+            stride=args.stride,
+            only=args.only,
+        )
     elif args.command == "recall":
         recall(args.directory, args.trials, args.seed)
     else:
