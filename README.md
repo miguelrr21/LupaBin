@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
 ## Estado y alcance
 
-Fase 1B, contrato 0.3.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales y coincidencias YARA, mediante CLI JSON y worker Docker. No ejecuta ni emula la muestra. No incluye todavía informes didácticos completos, web, LLM, VirusTotal, capa ni desofuscación.
+Fase 2, contrato 0.4.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA y decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes), mediante CLI JSON y worker Docker. No ejecuta ni emula la muestra. No incluye todavía informes didácticos completos, web, LLM, VirusTotal, capa, FLOSS ni desempaquetado.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -24,7 +24,7 @@ Desde la raíz del repositorio, con una entrada local disponible:
 
 ```text
 uv sync --frozen
-docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .
+docker build --load -f docker/Dockerfile -t dissect-worker:0.4.0 .
 uv run --frozen dissect analyze "ruta/al/archivo.exe" --json
 ```
 
@@ -47,9 +47,9 @@ El generador no sobrescribe archivos existentes. Consulta [la procedencia de los
 
 La salida es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
 
-- `completed`: los tres extractores completaron su cobertura declarada; no es un veredicto de seguridad.
+- `completed`: los cuatro extractores completaron su cobertura declarada; no es un veredicto de seguridad.
 - `partial`: una parte se revisó, pero existen componentes bloqueados, errores u omisiones. Puede no haber hallazgos.
-- `failed`: los tres extractores quedaron bloqueados, o la infraestructura no pudo producir un informe validado.
+- `failed`: los cuatro extractores quedaron bloqueados, o la infraestructura no pudo producir un informe validado.
 
 La cobertura está en `extractor_runs[].components`, con contadores y estados `complete`, `partial` o `blocked`. `extractor_errors` describe fallos; `limitations` describe cuotas, truncamientos explícitos y warnings. Cero resultados con cobertura completa no equivale a un error ni demuestra seguridad.
 
@@ -63,9 +63,9 @@ También se acotan secciones (96), entradas EAT (5.000), asociaciones de nombres
 
 Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, sin borrar las cabeceras y descriptores comprobados. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
 
-La CLI 0.3.0 exige el esquema 0.3.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 y 0.2.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
+La CLI 0.4.0 exige el esquema 0.4.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0, 0.2.0 y 0.3.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
 
-Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' dissect-worker:0.3.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
+Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' dissect-worker:0.4.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
 
 ## Qué aporta YARA
 
@@ -84,14 +84,38 @@ uv run --frozen dissect analyze samples/yara-limited.bin --json
 
 El fixture contiene veinte apariciones ASCII del marcador. Con los límites predeterminados el informe debe conservar dieciséis e indicar cuatro omitidas, con salida 3. `--scenario demo` ofrece un positivo y `--scenario basic` un caso sin coincidencias de este catálogo. No ejecutes ninguno como programa.
 
+## Qué aporta la decodificación
+
+Cada `decoded_string` dice exactamente esto: "estos bytes, transformados con este algoritmo y estos parámetros, producen este texto". Es siempre `confidence: "inferred"`. No afirma que el programa realice la transformación, que el texto sea el que pretendía su autor ni que tenga significado (una URL decodificada no prueba una conexión).
+
+- **Base64 y hexadecimal** (`component: decode_strings`): sobre las cadenas ya extraídas, con validación estricta (Base64 canónico de al menos 12 caracteres si lleva relleno `=` o 16 si no; hexadecimal que no sea solo dígitos decimales, porque un número como `2147483647` también es hexadecimal válido; el texto resultante debe ser imprimible y tener al menos 4 caracteres distintos). Citan en `provenance` la cadena que contiene los bytes codificados.
+- **XOR de clave repetida de 1 a 8 bytes** (`component: decode_xor`): sobre los bytes crudos, anclado en un catálogo versionado de cadenas de referencia (`anchor`, p. ej. `http://`, `kernel32.dll`, `User-Agent: `; 48 en la versión 2). La clave no se elige entre candidatas: se deriva de los bytes y se publica en `transform.key_hex`, alineada con el inicio de `location`. Cualquiera puede comprobarla: `texto[i] = bytes[inicio + i] XOR clave[i mod longitud]`. Si una cadena usa una clave ya verificada en otro punto de la muestra (lo habitual en tablas de cadenas cifradas), también se descifra aunque su ancla sea corta, y cita en `provenance` la decodificación que estableció la clave.
+
+Límites honestos del método, medidos sobre 4.516 archivos reales de Windows (0 falsos positivos XOR y 0 decodificaciones Base64/hex espurias) y documentados en [el diseño de la Fase 2](docs/superpowers/specs/2026-09-22-static-decoding-design.md):
+
+- Un texto cifrado que **no contenga ninguna cadena del catálogo no se encuentra**.
+- Si la clave deja el texto cifrado todavía legible (claves pequeñas, típicamente `< 0x20`), **no se publica**: sin puntuar plausibilidad es indistinguible de texto normal. Esos bytes siguen visibles como `string`.
+- Una ancla corta solo verifica por sí sola claves cortas (`http://`, 7 bytes, nunca una clave de 8). Con claves de 8 bytes la cobertura medida es del 33 % para una cadena aislada y del 81 % cuando otra cadena de la muestra comparte la clave (el techo alcanzable en el conjunto de prueba es del 77 %: el resto no contiene ninguna ancla).
+- No hay desempaquetado, compresión, RC4, XOR rodante ni emulación.
+
+El host no confía en el worker: vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta si alguna no se reproduce. Una muestra con millones de patrones candidatos termina como limitación declarada (`decode_xor_examined_limit`), no como timeout.
+
+```text
+uv run python -m tests.fixtures.pe_builder --scenario decode-demo --output samples/decode-demo.bin
+uv run --frozen dissect analyze samples/decode-demo.bin --json
+```
+
+El fixture contiene un Base64, un hexadecimal y cuatro textos cifrados con XOR (clave de 1 byte, de 4 bytes, una cadena UTF-16LE y una URL que reutiliza la clave de 4 bytes) sobre el dominio reservado `.invalid`. El informe debe mostrar seis `decoded_string` y estado completo; la URL cita en `provenance` la decodificación que estableció su clave.
+
 ## Arquitectura
 
 ```text
 CLI -> lectura acotada + hashes -> Docker sin red
     -> PE (cabeceras, secciones, entropía, imports, exports, anomalías)
     -> cadenas literales independientes -> hijo YARA con catálogo propio
+    -> decodificación: Base64/hex sobre cadenas, XOR anclado sobre bytes
     -> presupuesto y modelos Pydantic
-    -> validación de respuesta en el host -> JSON
+    -> validación de respuesta y reverificación de decodificaciones en el host -> JSON
 ```
 
 - [Contrato y diseño](docs/evidence-schema.md).
@@ -112,13 +136,21 @@ uv run --frozen python -m dissect.evidence.schema --check
 uv build
 uv run --frozen python -m tests.check_yara_distribution
 docker compose config --quiet
-docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .
+docker build --load -f docker/Dockerfile -t dissect-worker:0.4.0 .
 uv run --frozen pytest -m docker
 ```
 
 Las pruebas Docker fallan si se solicitan sin motor o imagen; no se omiten silenciosamente. La suite ordinaria excluye explícitamente ese marcador. `docker compose build worker` es una alternativa de build; el servicio Compose de esta entrega es un worker de consola, no una web. `docker compose up` todavía no ofrece la experiencia web del MVP final.
 
 Para actualizar el esquema tras cambios aprobados en los modelos: `uv run python -m dissect.evidence.schema`. No editar manualmente el JSON generado.
+
+Para repetir las mediciones de falsos positivos, cobertura y tiempo de la decodificación sobre un directorio de binarios benignos propio (solo se leen como bytes; no forma parte de la CI):
+
+```text
+uv run python -m tests.decode_eval false-positives <directorio>
+uv run python -m tests.decode_eval recall <directorio>
+uv run python -m tests.decode_eval timing
+```
 
 ## Contribuir y licencia
 

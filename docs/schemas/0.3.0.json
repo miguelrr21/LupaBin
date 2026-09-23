@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.4.0",
-          "default": "0.4.0",
+          "const": "0.3.0",
+          "default": "0.3.0",
           "title": "Version",
           "type": "string"
         }
@@ -94,9 +94,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -132,8 +130,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -235,9 +232,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Name",
           "type": "string"
@@ -257,166 +252,6 @@
         "status"
       ],
       "title": "ComponentRun",
-      "type": "object"
-    },
-    "DecodeLimits": {
-      "additionalProperties": false,
-      "properties": {
-        "strings": {
-          "default": 2000,
-          "exclusiveMinimum": 0,
-          "maximum": 2000,
-          "title": "Strings",
-          "type": "integer"
-        },
-        "xor": {
-          "default": 256,
-          "exclusiveMinimum": 0,
-          "maximum": 256,
-          "title": "Xor",
-          "type": "integer"
-        },
-        "xor_examined": {
-          "default": 200000,
-          "exclusiveMinimum": 0,
-          "maximum": 200000,
-          "title": "Xor Examined",
-          "type": "integer"
-        }
-      },
-      "title": "DecodeLimits",
-      "type": "object"
-    },
-    "DecodedStringData": {
-      "additionalProperties": false,
-      "properties": {
-        "characters": {
-          "maximum": 1024,
-          "minimum": 4,
-          "title": "Characters",
-          "type": "integer"
-        },
-        "complete": {
-          "title": "Complete",
-          "type": "boolean"
-        },
-        "encoding": {
-          "enum": [
-            "ascii",
-            "utf-16-le"
-          ],
-          "title": "Encoding",
-          "type": "string"
-        },
-        "raw_hex": {
-          "maxLength": 4096,
-          "pattern": "^(?:[a-f0-9]{2})+$",
-          "title": "Raw Hex",
-          "type": "string"
-        },
-        "repertoire": {
-          "const": "ascii-printable-v1",
-          "default": "ascii-printable-v1",
-          "title": "Repertoire",
-          "type": "string"
-        },
-        "text": {
-          "maxLength": 1024,
-          "minLength": 4,
-          "title": "Text",
-          "type": "string"
-        },
-        "total_characters": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Total Characters"
-        }
-      },
-      "required": [
-        "encoding",
-        "text",
-        "raw_hex",
-        "characters",
-        "complete"
-      ],
-      "title": "DecodedStringData",
-      "type": "object"
-    },
-    "DecodedStringEvidence": {
-      "additionalProperties": false,
-      "properties": {
-        "anchor": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/XorAnchor"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "component": {
-          "enum": [
-            "decode_strings",
-            "decode_xor"
-          ],
-          "title": "Component",
-          "type": "string"
-        },
-        "confidence": {
-          "const": "inferred",
-          "default": "inferred",
-          "title": "Confidence",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/DecodedStringData"
-        },
-        "id": {
-          "maxLength": 16,
-          "pattern": "^E[1-9][0-9]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "decoded_string",
-          "default": "decoded_string",
-          "title": "Kind",
-          "type": "string"
-        },
-        "location": {
-          "$ref": "#/$defs/Location"
-        },
-        "provenance": {
-          "$ref": "#/$defs/Provenance"
-        },
-        "source": {
-          "const": "decode",
-          "default": "decode",
-          "title": "Source",
-          "type": "string"
-        },
-        "transform": {
-          "$ref": "#/$defs/Transform"
-        }
-      },
-      "required": [
-        "id",
-        "component",
-        "location",
-        "transform",
-        "data"
-      ],
-      "title": "DecodedStringEvidence",
       "type": "object"
     },
     "EntropyData": {
@@ -464,9 +299,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -502,8 +335,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -604,9 +436,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -642,8 +472,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -685,11 +514,7 @@
                 "anomaly_limit",
                 "evidence_budget",
                 "dependency_omitted",
-                "output_limit",
-                "decode_strings_limit",
-                "decode_xor_limit",
-                "decode_xor_examined_limit",
-                "decoded_length_limit"
+                "output_limit"
               ],
               "type": "string"
             },
@@ -728,9 +553,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -739,8 +562,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -858,9 +680,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -896,8 +716,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -976,9 +795,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -1014,8 +831,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -1046,9 +862,6 @@
           "default": 1,
           "title": "Cpus",
           "type": "integer"
-        },
-        "decode": {
-          "$ref": "#/$defs/DecodeLimits"
         },
         "entropy_bytes": {
           "default": 20971520,
@@ -1339,8 +1152,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -1518,9 +1330,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -1556,8 +1366,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -1652,9 +1461,7 @@
             "utf16le",
             "yara_rules",
             "yara_scan",
-            "yara_evidence",
-            "decode_strings",
-            "decode_xor"
+            "yara_evidence"
           ],
           "title": "Component",
           "type": "string"
@@ -1690,8 +1497,7 @@
           "enum": [
             "pe",
             "strings",
-            "yara",
-            "decode"
+            "yara"
           ],
           "title": "Source",
           "type": "string"
@@ -1705,66 +1511,6 @@
         "data"
       ],
       "title": "StringEvidence",
-      "type": "object"
-    },
-    "Transform": {
-      "additionalProperties": false,
-      "properties": {
-        "key_hex": {
-          "anyOf": [
-            {
-              "pattern": "^(?:[a-f0-9]{2}){1,8}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Key Hex"
-        },
-        "name": {
-          "enum": [
-            "base64-strict-v1",
-            "hex-strict-v1",
-            "xor-repeating-v1"
-          ],
-          "title": "Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "title": "Transform",
-      "type": "object"
-    },
-    "XorAnchor": {
-      "additionalProperties": false,
-      "properties": {
-        "catalog": {
-          "const": "dissect-xor-cribs-v3",
-          "title": "Catalog",
-          "type": "string"
-        },
-        "crib": {
-          "maxLength": 64,
-          "minLength": 5,
-          "title": "Crib",
-          "type": "string"
-        },
-        "crib_offset": {
-          "minimum": 0,
-          "title": "Crib Offset",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "catalog",
-        "crib",
-        "crib_offset"
-      ],
-      "title": "XorAnchor",
       "type": "object"
     },
     "YaraContext": {
@@ -2135,7 +1881,6 @@
       "items": {
         "discriminator": {
           "mapping": {
-            "decoded_string": "#/$defs/DecodedStringEvidence",
             "entropy": "#/$defs/EntropyEvidence",
             "export": "#/$defs/ExportEvidence",
             "header_anomaly": "#/$defs/AnomalyEvidence",
@@ -2171,13 +1916,10 @@
           },
           {
             "$ref": "#/$defs/YaraEvidence"
-          },
-          {
-            "$ref": "#/$defs/DecodedStringEvidence"
           }
         ]
       },
-      "maxItems": 22609,
+      "maxItems": 20353,
       "title": "Evidence",
       "type": "array"
     },
@@ -2194,7 +1936,7 @@
       "items": {
         "$ref": "#/$defs/Run"
       },
-      "maxItems": 4,
+      "maxItems": 3,
       "minItems": 1,
       "title": "Extractor Runs",
       "type": "array"
@@ -2212,8 +1954,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.4.0",
-      "default": "0.4.0",
+      "const": "0.3.0",
+      "default": "0.3.0",
       "title": "Schema Version",
       "type": "string"
     },
