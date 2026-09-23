@@ -80,7 +80,10 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
                 yield "pe.section.writable_executable@1", (fact,)
     for fact in evidence:
         if isinstance(fact, EntropyEvidence):
-            yield "entropy.value@1", (fact, *(facts[r] for r in fact.provenance.evidence_ids))
+            cited = (fact, *(facts[r] for r in fact.provenance.evidence_ids))
+            yield "entropy.value@1", cited
+            if RULES["entropy.high@1"].derive(cited, report) is not None:
+                yield "entropy.high@1", cited
     for fact in evidence:
         if isinstance(fact, AnomalyEvidence):
             refs = tuple(facts[r] for r in fact.provenance.evidence_ids)
