@@ -158,3 +158,33 @@ Con la cuota agotada se publica primero la primera llamada de cada import y desp
 - `code.family@1`: una por familia curada de la Fase 3 con llamadas. La cifra de prevalencia de la Fase 3 se midió sobre imports, no sobre llamadas, así que no se repite aquí.
 - Límite en ambas: "Que el código contenga la llamada no demuestra que se ejecute…".
 - Nueva entrada de glosario `code.import_call` (revisión del glosario 1.1.0), con tres fuentes de Microsoft Learn comprobadas el 2026-09-23: el thunk `jmp DWORD PTR __imp_func1` de `__declspec(dllimport)`, la IAT del formato PE y `.pdata` en x64. Matiz de la fuente: `.pdata` solo lista las funciones que reservan pila o llaman a otras, así que las funciones hoja pueden no estar.
+
+### 9.4 Mediciones (2026-09-23, `uv run python -m tests.code_eval`)
+
+**Corpus benigno** (solo PE y código; muestreo `--stride 3` en System32 y `--stride 5` en SysWOW64):
+
+| Conjunto | Archivos | Llamadas publicadas | Informes inválidos | Fallos de verificación de bytes | Llamadas x64 fuera de `.pdata` | Imports por nombre con alguna llamada | Tiempo p50 / p99 / máx. |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| System32 | 1.363 | 1.230.382 (84 % directas, 16 % thunk) | 0 | 0 | 0 de 1.230.245 | 90,4 % (198.466 de 219.628) | 0,23 / 3,77 / 14,15 s |
+| SysWOW64 | 520 (+1 bloqueado) | 145.084 (88 % directas, 12 % thunk, 14 por registro) | 0 | 0 | 3 de 2.369 | 43,8 % (34.291 de 78.372) | 0,09 / 1,63 / 8,83 s |
+
+- Las 3 llamadas fuera de `.pdata` (`edit.exe`, x64) se revisaron desensamblando a mano: son auténticas. Forman una función real (`push rsi; sub rsp, 0x30` tras relleno `int3`) que llama a `AddVectoredExceptionHandler`, `SetThreadStackGuarantee` y `GetCurrentThread`, pero no tiene entrada en `.pdata`. El indicador señala código fuera de funciones declaradas, no errores; cada caso se revisa.
+- El mayor binario benigno medido tiene 2,3 millones de instrucciones recorridas (`Windows.UI.Xaml.dll`, 14,15 s, medido con otra carga en la máquina), por debajo del presupuesto de 4 millones. 66 archivos alcanzaron la cuota de 4.096 llamadas publicadas y 2 el máximo de 262.144 llamadas examinadas.
+- **Cobertura x86, el límite principal.** Sin `.pdata`, el recorrido en x86 solo parte del punto de entrada, los exports y los callbacks TLS; el código al que se llega por punteros (vtables COM, callbacks) no se recorre. Por eso solo el 43,8 % de los imports por nombre tiene alguna llamada, frente al 90,4 % en x64. Candidato siguiente, que hay que medir: la tabla de funciones de Control Flow Guard (`GuardCFFunctionTable` del directorio de configuración de carga). La escribe el compilador, igual que `.pdata`, y lista los destinos válidos de llamadas indirectas. No se adoptará un barrido heurístico de prólogos: adivina inicios de función.
+
+**Peores casos sintéticos de 20 MiB** (en el host, cada caso en su proceso):
+
+| Caso | Tiempo | Pico de memoria | Resultado |
+| --- | --- | --- | --- |
+| `nop` continuo | 7,0 s | 103 MiB | `disassembly` parcial en 4.000.000 instrucciones |
+| `jz` a la siguiente instrucción | 14,2 s | 103 MiB | parcial en 4.000.000 |
+| `call rel32` continuo | 3,9 s | 103 MiB | parcial en 262.144 llamadas examinadas |
+| `call [casilla]` continuo | 4,2 s | 104 MiB | parcial; 4.096 publicadas |
+
+La base del proceso (intérprete y entrada de 20 MiB) ocupa 101 MiB. Variantes medidas y descartadas:
+- `disasm_lite` de capstone convierte a texto cada mnemónico y operando: 10,5 s en el caso `nop`, frente a 7,0 s con `cs_disasm` e identificadores numéricos.
+- Guardar cada sitio de llamada como objeto y clasificarlos después: unos 500 MiB previstos con 4 millones de llamadas. Un array compacto seguía necesitando 29–38 s de clasificación. Se sustituyó por la clasificación en línea con memoria acotada y el máximo de llamadas examinadas.
+- Parsear el operando con `int()` y capturar la excepción: 3,5 µs por llamada; sin excepciones es casi gratis.
+- `tracemalloc` para medir memoria ralentizaba el recorrido más de 10 veces: se mide el pico real del proceso.
+
+Queda por medir el peor caso dentro del contenedor, con su límite de 30 s para todas las fuentes.
