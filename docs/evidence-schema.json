@@ -293,6 +293,13 @@
     "CodeLimits": {
       "additionalProperties": false,
       "properties": {
+        "call_sites": {
+          "default": 262144,
+          "exclusiveMinimum": 0,
+          "maximum": 262144,
+          "title": "Call Sites",
+          "type": "integer"
+        },
         "calls": {
           "default": 4096,
           "exclusiveMinimum": 0,
@@ -819,6 +826,7 @@
                 "unsupported_architecture",
                 "code_instruction_limit",
                 "code_entry_limit",
+                "call_site_limit",
                 "api_call_limit"
               ],
               "type": "string"

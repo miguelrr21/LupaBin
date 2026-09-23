@@ -12,7 +12,7 @@ from dissect.explain.models import Explanation
 from dissect.explain.rules import RULES
 from dissect.explain.text import MESSAGES
 from dissect.glossary.catalog import load_glossary
-from tests.fixtures.pe_builder import build_decode_demo, build_demo, build_pe
+from tests.fixtures.pe_builder import build_code_demo, build_decode_demo, build_demo, build_pe
 
 GLOSSARY = load_glossary()
 
@@ -48,6 +48,9 @@ SAMPLES = {
     "demo64": lambda: build_demo(bits=64),
     "corrupt": lambda: build_demo(corrupt=True),
     "decode": build_decode_demo,
+    "code": build_code_demo,
+    "code64": lambda: build_code_demo(bits=64),
+    "code-family": lambda: build_code_demo(function=b"GetProcAddress"),
     "delay": lambda: build_pe(delay=True),
     "ordinal": lambda: build_pe(ordinal=17),
     "runtime": lambda: build_pe(function=b"GetProcAddress"),
@@ -260,3 +263,33 @@ def test_family_items_cite_the_whole_family_and_its_benign_prevalence(reports):
     assert "34,8 %" in item.statement
     assert item.glossary_ids == ("api.family.dynamic_loading", "pe.imports")
     assert "imports.family@1" not in rules_used(explain(reports["demo"], GLOSSARY))
+
+
+def test_each_called_import_says_where_it_is_called_from(reports):
+    explanation = explain(reports["code"], GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.calls@1")
+    assert item.statement == (
+        "El código contiene 3 llamadas a la función importada «ExitProcess» de «kernel32.dll»."
+    )
+    assert item.slots["sites"] == (
+        "0x00002000 (directa)",
+        "0x00002006 (a través de un thunk)",
+        "0x00002011 (por registro)",
+    )
+    assert item.level == "observed" and "no demuestra que se ejecute" in item.not_proven
+    assert item.glossary_ids == ("code.import_call", "pe.imports")
+
+
+def test_called_families_are_summarised(reports):
+    explanation = explain(reports["code-family"], GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.family@1")
+    assert item.statement.startswith("El código contiene 3 llamadas a 1 función de la familia")
+    assert item.slots["functions"] == ("GetProcAddress",)
+
+
+def test_a_call_summary_must_cite_every_call_to_its_import(reports):
+    report = reports["code"]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.calls@1")
+    partial = item.model_copy(update={"evidence_ids": item.evidence_ids[:-1]})
+    assert check_item(partial, report, GLOSSARY) is not None

@@ -4,6 +4,7 @@ from collections.abc import Iterator
 
 from dissect.evidence.facts import (
     AnomalyEvidence,
+    ApiCallEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -104,6 +105,23 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
     for group in members.values():
         if group:
             yield "imports.family@1", tuple(group)
+    calls: dict[str, list[Evidence]] = {}
+    for fact in evidence:
+        if isinstance(fact, ApiCallEvidence):
+            calls.setdefault(fact.provenance.evidence_ids[0], []).append(fact)
+    for import_id, group in calls.items():
+        yield "code.calls@1", (facts[import_id], *group)
+    called: dict[str, list[Evidence]] = {family: [] for family in FAMILIES}
+    for fact in evidence:
+        if isinstance(fact, ApiCallEvidence):
+            callee = facts[fact.provenance.evidence_ids[0]]
+            if isinstance(callee, ImportEvidence) and callee.data.function is not None:
+                family = family_of(name(callee.data.function))
+                if family is not None:
+                    called[family].append(fact)
+    for group in called.values():
+        if group:
+            yield "code.family@1", tuple(group)
     exports = tuple(fact for fact in evidence if isinstance(fact, ExportEvidence))
     if exports:
         yield "exports.table@1", exports

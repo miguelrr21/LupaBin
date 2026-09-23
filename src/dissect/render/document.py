@@ -23,6 +23,7 @@ ABSENCE = (
 )
 EXTRA = {
     "functions": "Funciones",
+    "sites": "Desde (RVA)",
     "names": "Primeros nombres",
     "description": "Qué significa, según el catálogo",
     "text": "Texto",

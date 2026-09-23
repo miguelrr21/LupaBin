@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "dissect_glossary",
- "revision": "1.0.0",
+ "revision": "1.1.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -54,6 +54,11 @@
    "sha256": "533db7f59630ceb2aeef7c4c0d20583decb632af227a74b01110f48663795009"
   },
   {
+   "id": "code.import_call",
+   "filename": "code.import_call.toml",
+   "sha256": "c4e923b27e79993d0bbde152802f82929f10a30540f5e7193c5f49270f2b440f"
+  },
+  {
    "id": "decode.base64",
    "filename": "decode.base64.toml",
    "sha256": "45992d0b41b7ae84ba5b22c5adca48cdc09d094994d49ba65d42ea70ea7dee99"
@@ -71,7 +76,7 @@
   {
    "id": "decode.key_reuse",
    "filename": "decode.key_reuse.toml",
-   "sha256": "d26f14c5a35b56c6adce3a31874d67e0751988973928cda7a201a55ca5e0e1af"
+   "sha256": "78fb358487e63fee88f75ca1042e4f4c9c31e93ed043d8962395aedba1f122b0"
   },
   {
    "id": "decode.xor",

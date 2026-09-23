@@ -91,6 +91,9 @@ MESSAGES: dict[str, str] = {
     "code_entry_limit": (
         "Se alcanzó el máximo de puntos de partida del recorrido: parte del código no se revisó."
     ),
+    "call_site_limit": (
+        "Se alcanzó el máximo de llamadas examinadas: parte del código no se revisó."
+    ),
     "api_call_limit": ("Se alcanzó el máximo de llamadas conservadas: hay más que no aparecen."),
     "yara_catalog_invalid": (
         "El catálogo de reglas no superó su validación, así que no se evaluó ninguna regla."
