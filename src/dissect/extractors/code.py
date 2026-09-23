@@ -1,20 +1,32 @@
 import bisect
 from collections.abc import Callable
 
+from dissect.evidence import argument_forms
+from dissect.evidence.api_catalog import Encoding, Function, Parameter, hkey_name, lookup
 from dissect.evidence.collector import Collector, Progress
-from dissect.evidence.facts import ApiCallData, ExportEvidence, ImportEvidence, Instruction
+from dissect.evidence.facts import (
+    ApiCallData,
+    ArgumentString,
+    CallArgumentData,
+    ExportEvidence,
+    ImportEvidence,
+    Instruction,
+)
+from dissect.evidence.models import ErrorCode
 from dissect.evidence.primitives import Component, Source
 from dissect.extractors.base import Extraction
+from dissect.extractors.code_args import ArgumentFinder, Budget, Found
 from dissect.extractors.code_calls import Call, CallFinder
-from dissect.extractors.code_disasm import Region, walk
+from dissect.extractors.code_disasm import Region, Targets, walk
 from dissect.extractors.code_entries import entries, regions
-from dissect.extractors.pe_layout import InvalidPE, Layout, parse_layout
+from dissect.extractors.pe_layout import InvalidPE, InvalidTable, Layout, parse_layout
 
 _ARCHITECTURES = {(32, 0x14C), (64, 0x8664)}
 
 
 class CodeExtractor:
-    """Which imported functions the code calls, and from where (design sections 3.1-3.3)."""
+    """Which imported functions the code calls, from where, and with which constant
+    arguments for the functions of the catalog (design sections 3.1-3.4)."""
 
     source: Source = "code"
     version = "dissect-code-v1"
@@ -51,6 +63,7 @@ class CodeExtractor:
             _reader(code), layout.bits, layout.header.image_base, slots, limits.calls
         )
         seconds = min(limits.seconds, collector.limits.timeout_seconds / 2)
+        deadline = collector.started + seconds
         result = walk(
             code,
             starts,
@@ -58,7 +71,7 @@ class CodeExtractor:
             limits.instructions,
             finder.visit,
             limits.call_sites,
-            collector.started + seconds,
+            deadline,
         )
         progress.examined["disassembly"] = result.instructions
         progress.examined["api_calls"] = result.calls
@@ -92,7 +105,144 @@ class CodeExtractor:
             ):
                 return Extraction("unknown", progress)  # the collector recorded why
         progress.complete("api_calls")
+        catalog = {
+            fact.data.iat_rva: entry
+            for fact in collector.facts
+            if isinstance(fact, ImportEvidence)
+            and fact.data.function is not None
+            and (
+                entry := lookup(
+                    bytes.fromhex(fact.data.dll.raw_hex),
+                    bytes.fromhex(fact.data.function.raw_hex),
+                )
+            )
+            is not None
+        }
+        _arguments(
+            layout, code, result.targets, catalog, finder.calls(), collector, progress, deadline
+        )
         return Extraction("unknown", progress)
+
+
+def _arguments(
+    layout: Layout,
+    code: list[Region],
+    targets: Targets,
+    catalog: dict[int, Function],
+    calls: list[Call],
+    collector: Collector,
+    progress: Progress,
+    deadline: float,
+) -> None:
+    """Publishes the constant arguments of every published call to a catalog function."""
+    if progress.states["api_calls"] != "complete":
+        # the arguments of calls that were not walked or published cannot be cited
+        progress.issue("call_arguments", "dependency_omitted", limit=True)
+    budget = Budget(collector.limits.code.argument_instructions, deadline)
+    finder = ArgumentFinder(code, targets, layout.bits, budget)
+    for call in calls:
+        entry = catalog.get(call.slot)
+        if entry is None:
+            continue
+        found = finder.constants(call.start, call.rva)
+        if found is None:
+            reason: ErrorCode = (
+                "argument_instruction_limit" if budget.exhausted else "code_time_limit"
+            )
+            progress.issue("call_arguments", reason, limit=True)
+            return
+        progress.examined["call_arguments"] += 1
+        for parameter in entry.parameters:
+            known = found.get(parameter.position)
+            if known is None:
+                continue  # no canonical constant sets it in the stretch
+            rva, size = known.setter
+            try:
+                data = _argument(
+                    parameter, entry, known, layout, collector.limits.string_characters
+                )
+                location = layout.location(rva, size)
+            except InvalidTable:
+                continue  # the setter's bytes do not map to one place in the file
+            if data is None:
+                continue  # not of the parameter's type
+            if not collector.add(
+                f"code:argument:{call.rva}:{parameter.position}",
+                progress,
+                "call_arguments",
+                data,
+                location,
+                refs=(f"code:call:{call.rva}",),
+            ):
+                return  # the collector recorded why
+    progress.complete("call_arguments")
+
+
+def _argument(
+    parameter: Parameter, entry: Function, found: Found, layout: Layout, characters: int
+) -> CallArgumentData | None:
+    """The argument as its parameter's type reads it, or None if it is not of that type."""
+    setting = found.setting
+    rva, size = found.setter
+    offset, _ = layout.locate(rva, size)
+    value = setting.value
+    constant: str | None = None
+    string: ArgumentString | None = None
+    if parameter.type == "hkey":
+        constant = hkey_name(setting.value, layout.bits)
+        if constant is None:
+            return None
+    elif parameter.type == "integer":
+        if setting.kind != "immediate" or parameter.bits is None:
+            return None
+        value = setting.value % (1 << parameter.bits)
+    else:
+        target = argument_forms.address_of(setting, layout.bits, layout.header.image_base)
+        string = None if target is None else _string(layout, target, entry.encoding, characters)
+        if string is None:
+            return None
+    return CallArgumentData(
+        position=parameter.position,
+        name=parameter.name,
+        type=parameter.type,
+        value=value,
+        raw_hex=layout.data[offset : offset + size].hex(),
+        constant=constant,
+        string=string,
+    )
+
+
+def _string(layout: Layout, rva: int, encoding: Encoding, characters: int) -> ArgumentString | None:
+    """The printable NUL-terminated string at `rva`, when the one section that holds it
+    on disk is not writable: a writable one may no longer hold it when the call runs."""
+    unit = 1 if encoding == "ascii" else 2
+    holders = [
+        item.data
+        for item in layout.sections
+        if item.data.raw_status == "present"
+        and item.data.rva <= rva < item.data.rva + item.data.raw_size
+    ]
+    if len(holders) != 1 or "write" in holders[0].permissions:
+        return None
+    section = holders[0]
+    offset = section.raw_offset + rva - section.rva
+    end = min(section.raw_offset + section.raw_size, offset + (characters + 1) * unit)
+    raw = layout.data[offset:end]
+    stop = next(
+        (i for i in range(0, len(raw) - unit + 1, unit) if raw[i : i + unit] == bytes(unit)),
+        None,
+    )
+    if stop is None:
+        return None  # no terminator within the section or the character limit
+    try:
+        text = raw[:stop].decode(encoding)
+    except UnicodeDecodeError:
+        return None
+    if not text or len(text) > characters:
+        return None
+    if any(not 32 <= ord(char) <= 126 for char in text):
+        return None
+    return ArgumentString(offset=offset, rva=rva, raw_hex=raw[: stop + unit].hex(), text=text)
 
 
 def _reader(code: list[Region]) -> Callable[[int, int], bytes | None]:

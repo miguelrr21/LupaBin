@@ -194,6 +194,59 @@ def with_load_config(data, *, bits=32, guard=(), seh=(), flags=0x400, size=None,
     return bytes(data)
 
 
+# Inert training call with constant arguments: RegOpenKeyExW(HKEY_CURRENT_USER,
+# L"Software\\Dissect\\Training", 0, KEY_READ, &key), set with the canonical forms of
+# argument_forms.py. The subkey is a made-up training name; the string lies in the
+# read-only .idata section at ARGS_STRING_RVA. Never executed.
+ARGS_STRING_RVA = 0x1A00
+ARGS_SUBKEY = "Software\\Dissect\\Training"
+KEY_READ = 0x20019
+HKCU32 = b"\x68\x01\x00\x00\x80"  # push 0x80000001
+HKCU64 = b"\x48\xc7\xc1\x01\x00\x00\x80"  # mov rcx, 0xffffffff80000001
+
+
+def args_demo_bytes(bits=32, hkey=None, before=b""):
+    """Code at CODE_RVA that calls the fixture's only import with constant arguments.
+
+    `hkey` replaces the instruction that sets hKey (x64: rcx; x86: the last push);
+    `before` goes right before the call."""
+    slot = 0x1140
+    if bits == 32:
+        body = b"\x50"  # push eax: &key, not a constant
+        body += b"\x68" + struct.pack("<I", KEY_READ)  # push samDesired
+        body += b"\x6a\x00"  # push ulOptions
+        body += b"\x68" + struct.pack("<I", 0x400000 + ARGS_STRING_RVA)  # push lpSubKey
+        body += (HKCU32 if hkey is None else hkey) + before
+        body += b"\xff\x15" + struct.pack("<I", 0x400000 + slot)  # call [slot]
+    else:
+        # lea rdx, [rip+string]
+        body = b"\x48\x8d\x15" + struct.pack("<i", ARGS_STRING_RVA - (CODE_RVA + 7))
+        body += HKCU64 if hkey is None else hkey
+        body += b"\x41\xb9" + struct.pack("<I", KEY_READ)  # mov r9d, KEY_READ
+        body += b"\x45\x33\xc0" + before  # xor r8d, r8d
+        body += b"\xff\x15" + struct.pack("<i", slot - (CODE_RVA + len(body) + 6))
+    return body + b"\xc3"
+
+
+def build_args_demo(*, bits=32, code=None, writable=False, dll=b"advapi32.dll"):
+    """RegOpenKeyExW with constant arguments; `writable` marks .idata as writable."""
+    data = bytearray(
+        build_code_pe(
+            args_demo_bytes(bits) if code is None else code,
+            bits=bits,
+            dll=dll,
+            function=b"RegOpenKeyExW",
+        )
+    )
+    text = ARGS_SUBKEY.encode("utf-16-le") + b"\0\0"
+    offset = 0x200 + ARGS_STRING_RVA - 0x1000
+    data[offset : offset + len(text)] = text
+    if writable:
+        section = 0x98 + (224 if bits == 32 else 240)
+        struct.pack_into("<I", data, section + 36, 0xC0000040)
+    return bytes(data)
+
+
 def build_code_demo(*, bits=32, **imports):
     """An entry point that calls the import once through each canonical form."""
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)

@@ -98,7 +98,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -239,6 +240,176 @@
       "title": "ApiCallEvidence",
       "type": "object"
     },
+    "ArgumentString": {
+      "additionalProperties": false,
+      "description": "The NUL-terminated string an argument points to, as the file holds it.",
+      "properties": {
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "raw_hex": {
+          "maxLength": 4100,
+          "pattern": "^(?:[a-f0-9]{2})+$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "rva": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Rva",
+          "type": "integer"
+        },
+        "text": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "offset",
+        "rva",
+        "raw_hex",
+        "text"
+      ],
+      "title": "ArgumentString",
+      "type": "object"
+    },
+    "CallArgumentData": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "const": "dissect-api-semantics-v1",
+          "default": "dissect-api-semantics-v1",
+          "title": "Catalog",
+          "type": "string"
+        },
+        "constant": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Constant"
+        },
+        "method": {
+          "const": "block-constant-v1",
+          "default": "block-constant-v1",
+          "title": "Method",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "position": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Position",
+          "type": "integer"
+        },
+        "raw_hex": {
+          "pattern": "^(?:[a-f0-9]{2}){1,15}$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "string": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArgumentString"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "enum": [
+            "hkey",
+            "string",
+            "integer"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "position",
+        "name",
+        "type",
+        "value",
+        "raw_hex"
+      ],
+      "title": "CallArgumentData",
+      "type": "object"
+    },
+    "CallArgumentEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "const": "call_arguments",
+          "default": "call_arguments",
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "inferred",
+          "default": "inferred",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/CallArgumentData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "call_argument",
+          "default": "call_argument",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "const": "code",
+          "default": "code",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "data"
+      ],
+      "title": "CallArgumentEvidence",
+      "type": "object"
+    },
     "CatalogInfo": {
       "additionalProperties": false,
       "properties": {
@@ -293,6 +464,20 @@
     "CodeLimits": {
       "additionalProperties": false,
       "properties": {
+        "argument_instructions": {
+          "default": 262144,
+          "exclusiveMinimum": 0,
+          "maximum": 262144,
+          "title": "Argument Instructions",
+          "type": "integer"
+        },
+        "arguments": {
+          "default": 4096,
+          "exclusiveMinimum": 0,
+          "maximum": 4096,
+          "title": "Arguments",
+          "type": "integer"
+        },
         "call_sites": {
           "default": 1048576,
           "exclusiveMinimum": 0,
@@ -371,7 +556,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Name",
           "type": "string"
@@ -609,7 +795,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -752,7 +939,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -843,7 +1031,9 @@
                 "code_entry_limit",
                 "call_site_limit",
                 "code_time_limit",
-                "api_call_limit"
+                "api_call_limit",
+                "call_argument_limit",
+                "argument_instruction_limit"
               ],
               "type": "string"
             },
@@ -886,7 +1076,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -1019,7 +1210,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -1147,7 +1339,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -1725,7 +1918,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -1862,7 +2056,8 @@
             "decode_strings",
             "decode_xor",
             "disassembly",
-            "api_calls"
+            "api_calls",
+            "call_arguments"
           ],
           "title": "Component",
           "type": "string"
@@ -2345,6 +2540,7 @@
         "discriminator": {
           "mapping": {
             "api_call": "#/$defs/ApiCallEvidence",
+            "call_argument": "#/$defs/CallArgumentEvidence",
             "decoded_string": "#/$defs/DecodedStringEvidence",
             "entropy": "#/$defs/EntropyEvidence",
             "export": "#/$defs/ExportEvidence",
@@ -2387,10 +2583,13 @@
           },
           {
             "$ref": "#/$defs/ApiCallEvidence"
+          },
+          {
+            "$ref": "#/$defs/CallArgumentEvidence"
           }
         ]
       },
-      "maxItems": 26705,
+      "maxItems": 30801,
       "title": "Evidence",
       "type": "array"
     },

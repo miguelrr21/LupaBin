@@ -27,6 +27,7 @@ COMPONENTS: dict[Component, str] = {
     "decode_xor": "XOR",
     "disassembly": "recorrido del código",
     "api_calls": "llamadas a funciones importadas",
+    "call_arguments": "argumentos constantes de las llamadas",
 }
 
 STATUSES = {
@@ -102,6 +103,13 @@ MESSAGES: dict[str, str] = {
         "Se alcanzó el máximo de llamadas examinadas: parte del código no se revisó."
     ),
     "api_call_limit": ("Se alcanzó el máximo de llamadas conservadas: hay más que no aparecen."),
+    "call_argument_limit": (
+        "Se alcanzó el máximo de argumentos conservados: hay más que no aparecen."
+    ),
+    "argument_instruction_limit": (
+        "Se alcanzó el máximo de instrucciones examinadas en busca de argumentos:"
+        " algunas llamadas no se revisaron."
+    ),
     "yara_catalog_invalid": (
         "El catálogo de reglas no superó su validación, así que no se evaluó ninguna regla."
     ),

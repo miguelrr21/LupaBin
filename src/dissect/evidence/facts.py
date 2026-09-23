@@ -309,6 +309,66 @@ class ApiCallEvidence(Model):
         return self
 
 
+class ArgumentString(Model):
+    """The NUL-terminated string an argument points to, as the file holds it."""
+
+    offset: NonNegative
+    rva: UInt
+    # the text's bytes followed by its terminator
+    raw_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2})+$", max_length=4100)]
+    text: Annotated[str, Field(min_length=1, max_length=1024)]
+
+    @model_validator(mode="after")
+    def printable(self) -> Self:
+        if any(not 32 <= ord(char) <= 126 for char in self.text):
+            raise ValueError("unsupported string repertoire")
+        return self
+
+
+class CallArgumentData(Model):
+    catalog: Literal["dissect-api-semantics-v1"] = "dissect-api-semantics-v1"
+    method: Literal["block-constant-v1"] = "block-constant-v1"
+    position: Annotated[int, Field(ge=0, le=15)]
+    name: Annotated[str, Field(min_length=1, max_length=64)]
+    type: Literal["hkey", "string", "integer"]
+    # hkey: the value as set; integer: modulo the parameter's width; string: the
+    # pointer as set (an address in x86, an RVA from a RIP-relative lea in x64)
+    value: Annotated[int, Field(ge=0, le=0xFFFFFFFFFFFFFFFF)]
+    raw_hex: InstructionHex  # the instruction that sets it
+    constant: Annotated[str, Field(max_length=64)] | None = None  # the predefined key
+    string: ArgumentString | None = None
+
+    @model_validator(mode="after")
+    def shape_matches_type(self) -> Self:
+        if (self.type == "hkey") != (self.constant is not None):
+            raise ValueError("only a key argument names a predefined key")
+        if (self.type == "string") != (self.string is not None):
+            raise ValueError("only a string argument carries its string")
+        return self
+
+
+class CallArgumentEvidence(Model):
+    id: EvidenceId
+    source: Literal["code"] = "code"
+    component: Literal["call_arguments"] = "call_arguments"
+    kind: Literal["call_argument"] = "call_argument"
+    location: Location  # the instruction that sets the argument
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: CallArgumentData
+
+    @model_validator(mode="after")
+    def locates_its_instruction(self) -> Self:
+        where = self.location
+        if where.offset is None or where.rva is None or where.length is None:
+            raise ValueError("an argument must locate the instruction that sets it")
+        if where.length != len(self.data.raw_hex) // 2:
+            raise ValueError("argument location disagrees with its bytes")
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("an argument cites exactly the call it belongs to")
+        return self
+
+
 class AnomalyEvidence(Fact):
     kind: Literal["header_anomaly"] = "header_anomaly"
     data: AnomalyData
@@ -343,7 +403,8 @@ Evidence = Annotated[
     | AnomalyEvidence
     | YaraEvidence
     | DecodedStringEvidence
-    | ApiCallEvidence,
+    | ApiCallEvidence
+    | CallArgumentEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -357,4 +418,5 @@ Payload = (
     | YaraMatchData
     | DecodedStringData
     | ApiCallData
+    | CallArgumentData
 )
