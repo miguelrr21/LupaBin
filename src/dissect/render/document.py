@@ -66,7 +66,11 @@ def _wrap(text: str, indent: str, first: str | None = None) -> list[str]:
 
 
 def to_text(
-    explanation: Explanation, items: tuple[Item, ...], report: Report, glossary: Glossary
+    explanation: Explanation,
+    items: tuple[Item, ...],
+    report: Report,
+    glossary: Glossary,
+    origin: str | None = None,
 ) -> str:
     sample = report.sample
     lines = [
@@ -76,9 +80,10 @@ def to_text(
         f"          MD5 {sample.md5} (solo como referencia; MD5 admite colisiones)",
         f"          {sample.size} bytes · tipo {sample.type}",
         f"Análisis  {STATUS[explanation.status]}",
-        "",
-        "1. Qué se pudo analizar",
     ]
+    if origin:
+        lines += _wrap(origin, "          ", "Origen    ")
+    lines += ["", "1. Qué se pudo analizar"]
     for note in explanation.notes:
         lines += _wrap(visible(note.statement), "     ", "   • ")
     sections = (
@@ -134,7 +139,11 @@ def _markdown_statement(item: Item) -> str:
 
 
 def to_markdown(
-    explanation: Explanation, items: tuple[Item, ...], report: Report, glossary: Glossary
+    explanation: Explanation,
+    items: tuple[Item, ...],
+    report: Report,
+    glossary: Glossary,
+    origin: str | None = None,
 ) -> str:
     sample = report.sample
     lines = [
@@ -146,10 +155,10 @@ def to_markdown(
         f"- **MD5** (solo como referencia; admite colisiones): `{sample.md5}`",
         f"- **Tamaño**: {sample.size} bytes · **tipo**: {sample.type}",
         f"- **Análisis**: {STATUS[explanation.status]}",
-        "",
-        "## 1. Qué se pudo analizar",
-        "",
     ]
+    if origin:
+        lines.append(f"- **Origen**: {markdown_text(origin)}")
+    lines += ["", "## 1. Qué se pudo analizar", ""]
     lines += [f"- {markdown_text(note.statement)}" for note in explanation.notes]
     sections = (
         ("## 2. Hechos observados en los bytes", "observed"),
