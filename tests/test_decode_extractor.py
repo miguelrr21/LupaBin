@@ -39,7 +39,13 @@ def limitation_codes(report):
 def test_pipeline_publishes_each_planted_decoding():
     report = analyze_bytes(build_decode_demo())
     assert report.schema_version == "0.5.0"
-    assert [run.source for run in report.extractor_runs] == ["pe", "strings", "yara", "decode"]
+    assert [run.source for run in report.extractor_runs] == [
+        "pe",
+        "strings",
+        "yara",
+        "decode",
+        "code",
+    ]
     assert report.analysis.status == "completed"
     assert [
         (f.component, f.transform.name, f.transform.key_hex, f.data.text) for f in decoded(report)

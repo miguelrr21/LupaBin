@@ -3,6 +3,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, Field, model_validator
 
+from dissect.evidence.code import validate_call
 from dissect.evidence.facts import Evidence as Evidence
 from dissect.evidence.facts import ImportData as ImportData
 from dissect.evidence.primitives import (
@@ -47,6 +48,10 @@ ErrorCode = (
         "decode_xor_limit",
         "decode_xor_examined_limit",
         "decoded_length_limit",
+        "unsupported_architecture",
+        "code_instruction_limit",
+        "code_entry_limit",
+        "api_call_limit",
     ]
     | YaraReason
 )
@@ -121,8 +126,8 @@ class Report(Model):
     schema_version: Literal["0.5.0"] = "0.5.0"
     analysis: Analysis
     sample: Sample
-    evidence: Annotated[tuple[Evidence, ...], Field(max_length=22609)] = ()
-    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=4)]
+    evidence: Annotated[tuple[Evidence, ...], Field(max_length=26705)] = ()
+    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=5)]
     yara_context: YaraContext | None = None
     extractor_errors: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
     limitations: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
@@ -146,6 +151,7 @@ class Report(Model):
             "string": limits.strings,
             "header_anomaly": limits.anomalies,
             "yara_match": limits.yara.matches,
+            "api_call": limits.code.calls,
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
@@ -210,6 +216,25 @@ class Report(Model):
                     raise ValueError("limited YARA instances cannot claim complete coverage")
                 if parts["yara_evidence"].examined != len(yara_matches):
                     raise ValueError("complete YARA reporting disagrees with retained matches")
+        if "code" in runs:
+            code = {part.name: part.status for part in runs["code"].components}
+            imports = (
+                ()
+                if "pe" not in runs
+                else tuple(
+                    part.status
+                    for part in runs["pe"].components
+                    if part.name in ("imports_normal", "imports_delay")
+                )
+            )
+            if code["api_calls"] == "complete" and (
+                code["disassembly"] != "complete"
+                or not imports
+                or any(status != "complete" for status in imports)
+            ):
+                raise ValueError("complete call coverage needs a complete walk and import table")
+        sections = tuple(fact.data for fact in self.evidence if fact.kind == "section")
+        header = next((fact.data for fact in self.evidence if fact.kind == "pe_header"), None)
         degrees: dict[str, int] = {}
         children: dict[str, list[str]] = {key: [] for key in facts}
         for fact in self.evidence:
@@ -217,6 +242,19 @@ class Report(Model):
                 raise ValueError("evidence has no successful or partial source")
             if fact.kind == "yara_match":
                 degrees[fact.id] = 0
+                continue
+            if fact.kind == "api_call":
+                span = fact.location
+                if span.offset is None or span.length is None:
+                    raise ValueError("a call must locate its instruction")
+                if span.offset + span.length > self.sample.size:
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have code evidence")
+                refs = fact.provenance.evidence_ids
+                validate_call(fact, facts.get(refs[0]), sections, header)
+                degrees[fact.id] = 1
+                children[refs[0]].append(fact.id)
                 continue
             if fact.kind == "decoded_string":
                 span = fact.location

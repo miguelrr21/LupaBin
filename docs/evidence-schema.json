@@ -96,7 +96,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -133,7 +135,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -147,6 +150,93 @@
         "data"
       ],
       "title": "AnomalyEvidence",
+      "type": "object"
+    },
+    "ApiCallData": {
+      "additionalProperties": false,
+      "properties": {
+        "helper": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Instruction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "raw_hex": {
+          "pattern": "^(?:[a-f0-9]{2}){1,15}$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "via": {
+          "enum": [
+            "direct",
+            "thunk",
+            "register"
+          ],
+          "title": "Via",
+          "type": "string"
+        }
+      },
+      "required": [
+        "via",
+        "raw_hex"
+      ],
+      "title": "ApiCallData",
+      "type": "object"
+    },
+    "ApiCallEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "const": "api_calls",
+          "default": "api_calls",
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ApiCallData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "api_call",
+          "default": "api_call",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "const": "code",
+          "default": "code",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "data"
+      ],
+      "title": "ApiCallEvidence",
       "type": "object"
     },
     "CatalogInfo": {
@@ -200,6 +290,34 @@
       "title": "CatalogInfo",
       "type": "object"
     },
+    "CodeLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "calls": {
+          "default": 4096,
+          "exclusiveMinimum": 0,
+          "maximum": 4096,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "entries": {
+          "default": 262144,
+          "exclusiveMinimum": 0,
+          "maximum": 262144,
+          "title": "Entries",
+          "type": "integer"
+        },
+        "instructions": {
+          "default": 4000000,
+          "exclusiveMinimum": 0,
+          "maximum": 4000000,
+          "title": "Instructions",
+          "type": "integer"
+        }
+      },
+      "title": "CodeLimits",
+      "type": "object"
+    },
     "ComponentRun": {
       "additionalProperties": false,
       "properties": {
@@ -237,7 +355,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Name",
           "type": "string"
@@ -466,7 +586,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -503,7 +625,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -606,7 +729,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -643,7 +768,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -689,7 +815,11 @@
                 "decode_strings_limit",
                 "decode_xor_limit",
                 "decode_xor_examined_limit",
-                "decoded_length_limit"
+                "decoded_length_limit",
+                "unsupported_architecture",
+                "code_instruction_limit",
+                "code_entry_limit",
+                "api_call_limit"
               ],
               "type": "string"
             },
@@ -730,7 +860,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -740,7 +872,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -860,7 +993,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -897,7 +1032,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -985,7 +1121,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -1022,7 +1160,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -1038,6 +1177,35 @@
       "title": "ImportEvidence",
       "type": "object"
     },
+    "Instruction": {
+      "additionalProperties": false,
+      "description": "An instruction a claim rests on: where it is in the file and in the image.",
+      "properties": {
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "raw_hex": {
+          "pattern": "^(?:[a-f0-9]{2}){1,15}$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "rva": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Rva",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "offset",
+        "rva",
+        "raw_hex"
+      ],
+      "title": "Instruction",
+      "type": "object"
+    },
     "Limits": {
       "additionalProperties": false,
       "properties": {
@@ -1047,6 +1215,9 @@
           "maximum": 128,
           "title": "Anomalies",
           "type": "integer"
+        },
+        "code": {
+          "$ref": "#/$defs/CodeLimits"
         },
         "cpus": {
           "const": 1,
@@ -1347,7 +1518,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -1527,7 +1699,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -1564,7 +1738,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -1661,7 +1836,9 @@
             "yara_scan",
             "yara_evidence",
             "decode_strings",
-            "decode_xor"
+            "decode_xor",
+            "disassembly",
+            "api_calls"
           ],
           "title": "Component",
           "type": "string"
@@ -1698,7 +1875,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -2142,6 +2320,7 @@
       "items": {
         "discriminator": {
           "mapping": {
+            "api_call": "#/$defs/ApiCallEvidence",
             "decoded_string": "#/$defs/DecodedStringEvidence",
             "entropy": "#/$defs/EntropyEvidence",
             "export": "#/$defs/ExportEvidence",
@@ -2181,10 +2360,13 @@
           },
           {
             "$ref": "#/$defs/DecodedStringEvidence"
+          },
+          {
+            "$ref": "#/$defs/ApiCallEvidence"
           }
         ]
       },
-      "maxItems": 22609,
+      "maxItems": 26705,
       "title": "Evidence",
       "type": "array"
     },
@@ -2201,7 +2383,7 @@
       "items": {
         "$ref": "#/$defs/Run"
       },
-      "maxItems": 4,
+      "maxItems": 5,
       "minItems": 1,
       "title": "Extractor Runs",
       "type": "array"
