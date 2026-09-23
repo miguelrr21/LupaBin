@@ -1,6 +1,6 @@
 # Fase 4: qué hace el código, en estático (llamadas a API y sus argumentos)
 
-Estado: revisión 1 (2026-09-23), diseño antes de implementar. Responde a la petición del usuario: que Dissect "analice en estático el binario y diga exactamente lo que hace". El alcance y sus límites se registraron en `docs/roadmap.md`.
+Estado: revisión 2 (2026-09-23). La primera entrega, la versión reducida (sección 9), está implementada en la rama `feat/static-api-calls`: qué funciones importadas llama el código y desde dónde, sin leer argumentos. Los argumentos (secciones 3.4 y 4) siguen solo diseñados. Responde a la petición del usuario: que Dissect "analice en estático el binario y diga exactamente lo que hace". El alcance y sus límites se registraron en `docs/roadmap.md`.
 
 ## 1. Qué se puede afirmar y qué no
 
@@ -129,3 +129,32 @@ Sobre el corpus benigno de las fases anteriores:
 6. Integración: evidencias, colector, límites, extractor `code`, verificación aritmética en el host e imagen `dissect-worker:0.5.0`.
 7. Mediciones de la sección 7 y ajustes.
 8. Explicaciones, glosario, renderizado, documentación, demostración con fixture sintético y PR.
+
+## 9. Entrega 1: versión reducida (implementada)
+
+Responde a "qué funciones importadas llama el código y desde dónde", sin argumentos ni catálogo semántico. Cubre los pasos 2, 3, 4 (sin argumentos), 6, 7 y 8 del plan de la sección 8. Los argumentos y el catálogo `dissect-api-semantics-v1` quedan para la entrega 2.
+
+### 9.1 Diferencias con las secciones anteriores
+
+- **Todas las funciones importadas, no solo las del catálogo.** Sin argumentos, el catálogo no aporta nada que no dé ya la tabla de imports: se publica toda llamada cuya casilla es la `iat_rva` de un `import` publicado, por nombre u ordinal.
+- **Vía `register`, más estricta que en la sección 3.3.** La carga `mov reg, [casilla]` debe ser la instrucción inmediatamente anterior a `call reg`, sin nada en medio. Así el propio informe comprueba la adyacencia con aritmética, y no hace falta el modo detallado de capstone para saber qué registros se escriben entre las dos. El coste medido es de cobertura, no de error: 9 llamadas por registro en 92 DLL de SysWOW64 y ninguna en 88 de System32 (x64), donde el compilador llama casi siempre con `call [rip+disp]`.
+- **Verificación también en el modelo.** Como el hecho lleva los bytes de sus instrucciones, `Report` rehace la aritmética de la sección 5 sin la muestra; el host y `explain --sample` solo comparan esos bytes con los de la muestra.
+- **Sin pasada detallada.** Solo hay una pasada, que lee de cada instrucción su identificador numérico y su longitud, y el texto del operando solo en saltos y llamadas.
+
+### 9.2 Presupuestos y orden de publicación
+
+| Límite | Valor | Motivo medido |
+| --- | --- | --- |
+| Instrucciones decodificadas | 4.000.000 | Peor caso sintético de 20 MiB dentro del tiempo del worker (sección 9.4) |
+| Llamadas examinadas | 262.144 | Clasificar una llamada cuesta varias veces más que decodificar una instrucción; sin este límite, 20 MiB de llamadas tardaban 29–38 s |
+| Puntos de partida | 262.144 | Acota la lista de `.pdata`, que un archivo manipulado puede declarar enorme |
+| Llamadas publicadas | 4.096 | Cabe en el presupuesto de bytes del informe (unos 330 bytes por hecho) |
+
+Con la cuota agotada se publica primero la primera llamada de cada import y después las repetidas, en el orden del recorrido, para que las llamadas publicadas cubran el máximo de funciones distintas. En memoria solo se guarda una llamada por casilla más la cuota de repetidas, y las instrucciones visitadas se marcan en un `bytearray` por sección: el peor caso medido no pasa de 133 MiB de pico con 101 MiB de base.
+
+### 9.3 Explicaciones y glosario
+
+- `code.calls@1`: una por función importada llamada, citando el import y todas sus llamadas publicadas, con hasta 20 direcciones y su vía. Por ejemplo: "El código contiene 3 llamadas a la función importada «ExitProcess» de «kernel32.dll»", con los sitios `0x00002000 (directa)`, etc.
+- `code.family@1`: una por familia curada de la Fase 3 con llamadas. La cifra de prevalencia de la Fase 3 se midió sobre imports, no sobre llamadas, así que no se repite aquí.
+- Límite en ambas: "Que el código contenga la llamada no demuestra que se ejecute…".
+- Nueva entrada de glosario `code.import_call` (revisión del glosario 1.1.0), con tres fuentes de Microsoft Learn comprobadas el 2026-09-23: el thunk `jmp DWORD PTR __imp_func1` de `__declspec(dllimport)`, la IAT del formato PE y `.pdata` en x64. Matiz de la fuente: `.pdata` solo lista las funciones que reservan pila o llaman a otras, así que las funciones hoja pueden no estar.

@@ -5,7 +5,7 @@ from dissect.evidence.collector import Collector, Progress
 from dissect.evidence.facts import ApiCallData, ExportEvidence, ImportEvidence, Instruction
 from dissect.evidence.primitives import Component, Source
 from dissect.extractors.base import Extraction
-from dissect.extractors.code_calls import Call, classify
+from dissect.extractors.code_calls import Call, CallFinder
 from dissect.extractors.code_disasm import Region, walk
 from dissect.extractors.code_entries import entries, regions
 from dissect.extractors.pe_layout import InvalidPE, Layout, parse_layout
@@ -41,28 +41,37 @@ class CodeExtractor:
             if isinstance(fact, ExportEvidence) and fact.data.target_kind == "declared_rva"
         ]
         starts, truncated = entries(layout, exported, limits.entries)
-        result = walk(code, starts, layout.bits, limits.instructions)
-        progress.examined["disassembly"] = result.instructions
-        progress.examined["api_calls"] = len(result.sites)
-        if truncated:
-            progress.issue("disassembly", "code_entry_limit", limit=True)
-            progress.issue("api_calls", "code_entry_limit", limit=True)
-        if result.limit:
-            progress.issue("disassembly", "code_instruction_limit", limit=True)
-            progress.issue("api_calls", "code_instruction_limit", limit=True)
-        progress.complete("disassembly")
-        tables: tuple[Component, ...] = ("imports_normal", "imports_delay")
-        if any(collector.coverage.get(("pe", table)) != "complete" for table in tables):
-            # calls through imports that were not published cannot be cited
-            progress.issue("api_calls", "dependency_omitted", limit=True)
         keys = {public: key for key, public in collector.ids.items()}
         slots = {
             fact.data.iat_rva: keys[fact.id]
             for fact in collector.facts
             if isinstance(fact, ImportEvidence)
         }
-        calls = classify(result.sites, _reader(code), layout.bits, layout.header.image_base, slots)
-        for call in _first_per_import(calls):
+        finder = CallFinder(
+            _reader(code), layout.bits, layout.header.image_base, slots, limits.calls
+        )
+        result = walk(
+            code, starts, layout.bits, limits.instructions, finder.visit, limits.call_sites
+        )
+        progress.examined["disassembly"] = result.instructions
+        progress.examined["api_calls"] = result.calls
+        if truncated:
+            progress.issue("disassembly", "code_entry_limit", limit=True)
+            progress.issue("api_calls", "code_entry_limit", limit=True)
+        if result.limit:
+            progress.issue("disassembly", "code_instruction_limit", limit=True)
+            progress.issue("api_calls", "code_instruction_limit", limit=True)
+        if result.call_limit:
+            progress.issue("disassembly", "call_site_limit", limit=True)
+            progress.issue("api_calls", "call_site_limit", limit=True)
+        progress.complete("disassembly")
+        tables: tuple[Component, ...] = ("imports_normal", "imports_delay")
+        if any(collector.coverage.get(("pe", table)) != "complete" for table in tables):
+            # calls through imports that were not published cannot be cited
+            progress.issue("api_calls", "dependency_omitted", limit=True)
+        if finder.dropped:
+            progress.issue("api_calls", "api_call_limit", limit=True)
+        for call in finder.calls():
             if not collector.add(
                 f"code:call:{call.rva}",
                 progress,
@@ -74,17 +83,6 @@ class CodeExtractor:
                 return Extraction("unknown", progress)  # the collector recorded why
         progress.complete("api_calls")
         return Extraction("unknown", progress)
-
-
-def _first_per_import(calls: list[Call]) -> list[Call]:
-    """Each import's first call before any repeated one, so a quota keeps the most imports."""
-    seen: set[int] = set()
-    first: list[Call] = []
-    rest: list[Call] = []
-    for call in calls:
-        (rest if call.slot in seen else first).append(call)
-        seen.add(call.slot)
-    return first + rest
 
 
 def _reader(code: list[Region]) -> Callable[[int, int], bytes | None]:

@@ -152,18 +152,24 @@ def code_demo_bytes(bits=32):
     return bytes(code)
 
 
-def build_code_demo(*, bits=32):
-    """build_pe plus an executable .text section whose entry point calls the import."""
-    data = bytearray(build_pe(bits=bits)) + code_demo_bytes(bits)
+def build_code_pe(code, *, bits=32, **imports):
+    """build_pe plus an executable .text section at CODE_RVA, where the entry point is."""
+    size = -(-len(code) // 0x200) * 0x200
+    data = bytearray(build_pe(bits=bits, **imports)) + code + b"\xcc" * (size - len(code))
     opt = 0x98
     section = opt + (224 if bits == 32 else 240) + 40
     struct.pack_into("<H", data, 0x86, 2)
     struct.pack_into("<I", data, opt + 16, CODE_RVA)
-    struct.pack_into("<I", data, opt + 56, 0x3000)
+    struct.pack_into("<I", data, opt + 56, CODE_RVA + -(-size // 0x1000) * 0x1000)
     data[section : section + 8] = b".text\0\0\0"
-    struct.pack_into("<IIII", data, section + 8, 0x200, CODE_RVA, 0x200, 0x1200)
+    struct.pack_into("<IIII", data, section + 8, size, CODE_RVA, size, 0x1200)
     struct.pack_into("<I", data, section + 36, 0x60000020)
     return bytes(data)
+
+
+def build_code_demo(*, bits=32, **imports):
+    """An entry point that calls the import once through each canonical form."""
+    return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)
 
 
 def main():

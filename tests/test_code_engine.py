@@ -3,7 +3,7 @@ import struct
 import pytest
 
 from dissect.evidence import call_forms
-from dissect.extractors.code_calls import classify
+from dissect.extractors.code_calls import CallFinder
 from dissect.extractors.code_disasm import Region, walk
 
 BASE32 = 0x400000
@@ -24,11 +24,14 @@ def reader(regions):
     return read
 
 
-def calls_in(code, bits, slots=(IAT,), entries=(0x1000,), budget=10_000):
+def calls_in(
+    code, bits, slots=(IAT,), entries=(0x1000,), budget=10_000, quota=4096, call_budget=1000
+):
     regions = [Region(0x1000, bytearray(code))]
-    result = walk(regions, list(entries), bits, budget)
     base = BASE32 if bits == 32 else 0x140000000
-    return result, classify(result.sites, reader(regions), bits, base, dict.fromkeys(slots))
+    finder = CallFinder(reader(regions), bits, base, set(slots), quota)
+    result = walk(regions, list(entries), bits, budget, finder.visit, call_budget)
+    return result, finder.calls()
 
 
 # --- canonical forms -------------------------------------------------------------
@@ -169,3 +172,27 @@ def test_undecodable_bytes_end_the_run():
     call = b"\xff\x15" + rel32(0x1001, IAT, 6)
     result, calls = calls_in(b"\x06" + call, 64)
     assert result.instructions == 0 and calls == []
+
+
+def test_quota_keeps_each_import_first_then_repeats_in_order():
+    first, second = IAT, IAT + 4
+    call = lambda slot: b"\xff\x15" + struct.pack("<I", BASE32 + slot)  # noqa: E731
+    code = call(first) * 3 + call(second) + b"\xc3"
+    result, calls = calls_in(code, 32, slots=(first, second), quota=3)
+    assert result.calls == 4
+    assert [(c.slot, c.rva) for c in calls] == [(first, 0x1000), (second, 0x1012), (first, 0x1006)]
+
+
+def test_far_jumps_end_the_run():
+    call = b"\xff\x15" + struct.pack("<I", BASE32 + IAT)
+    # ljmp 0x10:0x1000 is never followed, nor does execution fall through it
+    code = b"\xea\x00\x10\x00\x00\x10\x00" + call
+    result, calls = calls_in(code, 32)
+    assert result.instructions == 1 and calls == []
+
+
+def test_the_call_budget_stops_the_walk_and_says_so():
+    call = b"\xff\x15" + struct.pack("<I", BASE32 + IAT)
+    result, calls = calls_in(call * 5 + b"\xc3", 32, call_budget=2)
+    assert result.call_limit and not result.limit
+    assert result.calls == 2 and len(calls) == 2
