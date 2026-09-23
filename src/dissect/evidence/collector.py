@@ -1,3 +1,4 @@
+import time
 from collections import Counter
 from collections.abc import Mapping
 
@@ -98,6 +99,7 @@ class Progress:
 class Collector:
     def __init__(self, limits: Limits):
         self.limits = limits
+        self.started = time.monotonic()  # when the analysis began, for time budgets
         self.facts: list[Evidence] = []
         self.ids: dict[str, str] = {}
         self.counts: Counter[str] = Counter()

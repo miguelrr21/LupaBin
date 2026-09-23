@@ -288,3 +288,16 @@ def test_unusable_guard_tables_add_no_entries(options):
     data = with_load_config(hidden_function(32), guard=(0x2100,), **options)
     report = analyze_bytes(data)
     assert calls(report) == [] and report.analysis.status == "completed"
+
+
+def test_the_walk_stops_at_its_deadline_and_says_so():
+    data = build_code_demo()
+    collector = Collector(Limits())
+    PEExtractor().extract(data, collector, Progress("pe", "test"))
+    for table in ("imports_normal", "imports_delay"):
+        collector.coverage[("pe", table)] = "complete"
+    collector.started -= 3600  # the analysis began an hour ago: no time is left
+    progress = Progress("code", "test")
+    CodeExtractor().extract(data, collector, progress)
+    assert progress.states == {"disassembly": "partial", "api_calls": "partial"}
+    assert {reason.code for reason in progress.limitations} == {"code_time_limit"}

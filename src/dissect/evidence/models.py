@@ -48,10 +48,12 @@ ErrorCode = (
         "decode_xor_limit",
         "decode_xor_examined_limit",
         "decoded_length_limit",
+        "decode_time_limit",
         "unsupported_architecture",
         "code_instruction_limit",
         "code_entry_limit",
         "call_site_limit",
+        "code_time_limit",
         "api_call_limit",
     ]
     | YaraReason

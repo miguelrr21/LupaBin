@@ -50,8 +50,15 @@ class CodeExtractor:
         finder = CallFinder(
             _reader(code), layout.bits, layout.header.image_base, slots, limits.calls
         )
+        seconds = min(limits.seconds, collector.limits.timeout_seconds / 2)
         result = walk(
-            code, starts, layout.bits, limits.instructions, finder.visit, limits.call_sites
+            code,
+            starts,
+            layout.bits,
+            limits.instructions,
+            finder.visit,
+            limits.call_sites,
+            collector.started + seconds,
         )
         progress.examined["disassembly"] = result.instructions
         progress.examined["api_calls"] = result.calls
@@ -61,6 +68,9 @@ class CodeExtractor:
         if result.limit:
             progress.issue("disassembly", "code_instruction_limit", limit=True)
             progress.issue("api_calls", "code_instruction_limit", limit=True)
+        if result.time_limit:
+            progress.issue("disassembly", "code_time_limit", limit=True)
+            progress.issue("api_calls", "code_time_limit", limit=True)
         if result.call_limit:
             progress.issue("disassembly", "call_site_limit", limit=True)
             progress.issue("api_calls", "call_site_limit", limit=True)

@@ -79,6 +79,10 @@ MESSAGES: dict[str, str] = {
         "Se alcanzó el máximo de apariciones XOR examinadas: parte del archivo no se revisó con"
         " este método."
     ),
+    "decode_time_limit": (
+        "Se agotó el tiempo reservado a la búsqueda XOR: parte del archivo no se revisó con "
+        "este método."
+    ),
     "decoded_length_limit": (
         "Algún texto decodificado superaba el máximo de caracteres y se conservó recortado."
     ),
@@ -90,6 +94,9 @@ MESSAGES: dict[str, str] = {
     ),
     "code_entry_limit": (
         "Se alcanzó el máximo de puntos de partida del recorrido: parte del código no se revisó."
+    ),
+    "code_time_limit": (
+        "Se agotó el tiempo reservado al recorrido del código: parte del código no se revisó."
     ),
     "call_site_limit": (
         "Se alcanzó el máximo de llamadas examinadas: parte del código no se revisó."
