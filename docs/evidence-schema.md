@@ -25,8 +25,12 @@ Componentes y limitaciones de `code`:
 
 | Componente | Revisa | Limitaciones propias |
 | --- | --- | --- |
-| `disassembly` | Instrucciones decodificadas por descenso recursivo en secciones ejecutables (`examined`) | `code_instruction_limit` (4.000.000), `call_site_limit` (262.144 llamadas examinadas), `code_entry_limit` (262.144 puntos de partida) |
+| `disassembly` | Instrucciones decodificadas por descenso recursivo en secciones ejecutables (`examined`) | `code_instruction_limit` (4.000.000), `call_site_limit` (262.144 llamadas examinadas), `code_entry_limit` (262.144 puntos de partida), `code_time_limit` (el análisis lleva 15 s, o la mitad de `timeout_seconds`) |
 | `api_calls` | Instrucciones `call` examinadas (`examined`) | Las del recorrido, más `api_call_limit` (4.096 publicadas) y `dependency_omitted` si la tabla de imports no se leyó completa |
+
+Los puntos de partida del recorrido son el punto de entrada, los exports y tablas que escribe el compilador o el enlazador: callbacks TLS, `.pdata` (x64), la tabla de funciones de Control Flow Guard y los manejadores SafeSEH (x86). Ninguno se adivina.
+
+**Límites de tiempo.** La búsqueda XOR y el recorrido del código se detienen al llegar a su marca de tiempo, contada desde el inicio del análisis (`analysis.limits.decode.seconds` y `analysis.limits.code.seconds`), y lo declaran con su código. Así una máquina lenta o una entrada diseñada contra ellos deja el informe parcial en vez de agotar el tiempo del worker y perderlo entero. Consecuencia: en una máquina más lenta, el mismo archivo puede dar un resultado parcial distinto. Lo publicado sigue siendo cierto, pero ya no es idéntico entre máquinas cuando aparece uno de estos códigos.
 
 `api_calls` solo puede ser completo si también lo son `disassembly` y los dos componentes de imports. Con la cuota agotada, se publica primero la primera llamada de cada import y después las repetidas, para cubrir el máximo de funciones distintas. Arquitecturas distintas de x86/x64 bloquean la fuente (`unsupported_architecture`), igual que las correspondencias ambiguas entre memoria y archivo (`unsafe_mapping`) y las entradas que no son PE. Cero llamadas con cobertura completa no demuestra que el programa no llame a nada: el código al que solo se llega por saltos indirectos no se recorre.
 
@@ -54,7 +58,7 @@ Componentes y limitaciones de `decode`:
 | Componente | Revisa | Limitaciones propias |
 | --- | --- | --- |
 | `decode_strings` | Todas las cadenas extraídas y completas | `decode_strings_limit` (2.000 resultados) |
-| `decode_xor` | Todas las apariciones de los patrones del catálogo en los bytes | `decode_xor_limit` (256 resultados), `decode_xor_examined_limit` (200.000 apariciones examinadas), `decoded_length_limit` (texto recortado a 1.024 caracteres) |
+| `decode_xor` | Todas las apariciones de los patrones del catálogo en los bytes | `decode_xor_limit` (256 resultados), `decode_xor_examined_limit` (200.000 apariciones examinadas), `decoded_length_limit` (texto recortado a 1.024 caracteres), `decode_time_limit` (desde 0.5.0: el análisis lleva 10 s, o un tercio de `timeout_seconds`) |
 
 Los límites efectivos aparecen en `analysis.limits.decode`. Cero decodificaciones con cobertura completa es el caso habitual y no significa nada sobre la muestra. El estado global considera las cuatro fuentes con la regla existente.
 
