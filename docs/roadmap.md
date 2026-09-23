@@ -54,6 +54,10 @@ Cifras de la sección 8 del diseño de la Fase 2: 43 textos realistas, 150 prueb
 Ninguna está aprobada ni diseñada. Cada una requiere su documento de diseño antes de escribir código:
 
 - Interfaz web (`docker compose up` todavía es solo un worker de consola).
-- capa, con verificación de que no emula; FLOSS solo sin sus rutas de emulación.
+- **Fase 4 (siguiente, petición del usuario del 2026-09-23): qué hace el programa, en estático.** El usuario quiere que Dissect "analice en estático el binario y diga exactamente lo que hace". Eso es análisis de capacidades a partir del código: desensamblar las funciones, seguir las llamadas a APIs y sus argumentos constantes, y reconocer patrones (por ejemplo, "crea un servicio con este nombre" o "escribe esta clave de registro"). Candidatos: capa (reglas de capacidades de Mandiant sobre desensamblado, verificando que no emula) y un desensamblador acotado dentro del worker. Límites que el diseño debe aceptar de partida:
+  - Lo que se puede afirmar es "el código contiene una ruta que llama a X con estos argumentos", no "el programa lo hará". Si esa ruta se ejecuta depende de condiciones, entradas y entorno que el análisis estático no resuelve en general.
+  - Un binario empaquetado o cifrado solo muestra su desempaquetador hasta desempaquetarlo, y eso exige emulación o ejecución, que están prohibidas. En ese caso Dissect debe decirlo y abstenerse, no adivinar.
+  - Cada capacidad debe citar las direcciones y bytes de código que la respaldan, con la misma regla de "citar no basta" y una medición de falsos positivos sobre binarios benignos antes de adoptarla.
+- FLOSS solo sin sus rutas de emulación (probablemente dentro de la Fase 4 o después).
 - VirusTotal, como integración opcional y separada del worker sin red.
 - **LLM barato como segundo revisor en caso de duda** (petición del usuario, 2026-09-23). Solo en el host, opcional y desactivado por defecto. Emite un documento `Review` aparte, cuyas opiniones citan explicaciones existentes y nunca se convierten en hechos. La arquitectura ya lo prevé: sección 9 del diseño de la Fase 3.
