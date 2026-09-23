@@ -196,3 +196,40 @@ def test_the_call_budget_stops_the_walk_and_says_so():
     result, calls = calls_in(call * 5 + b"\xc3", 32, call_budget=2)
     assert result.call_limit and not result.limit
     assert result.calls == 2 and len(calls) == 2
+
+
+# --- entries into the walked code and linear stretches (for call arguments) -------
+
+
+def stretches(code, entries=(0x1000,), budget=10_000):
+    regions = [Region(0x1000, bytearray(code))]
+    seen = []
+    visitor = lambda data, offset, rva, size, previous, start: seen.append((rva, start))  # noqa: E731
+    return walk(regions, list(entries), 32, budget, visitor, 1000), seen
+
+
+def test_a_stretch_starts_at_the_run_or_after_the_previous_call():
+    call = b"\xff\x15" + struct.pack("<I", BASE32 + IAT)
+    # nop ; call [slot] ; jz 0x100f ; call [slot] ; ret
+    code = b"\x90" + call + b"\x74\x06" + call + b"\xc3"
+    result, seen = stretches(code)
+    # a conditional branch does not end the stretch; a call does
+    assert seen == [(0x1001, 0x1000), (0x1009, 0x1007)]
+    assert result.targets.last(0x1000, 0x100F) == 0x100F  # the branch target
+    assert result.targets.last(0x1007, 0x1009) is None
+    assert result.targets.marks[0][0] == 1  # the entry point
+
+
+def test_a_run_that_reaches_decoded_code_marks_where_it_joins():
+    # from 0x1002: nop ; nop ; nop ; ret. From 0x1000: mov eax, 0x90909090 ends at 0x1005,
+    # inside code already decoded, without a branch to it.
+    code = b"\xb8\x90\x90\x90\x90\xc3"
+    result, _ = stretches(code, entries=(0x1002, 0x1000))
+    assert result.targets.last(0x1002, 0x1005) == 0x1005
+
+
+def test_targets_left_pending_by_a_budget_are_marked():
+    code = b"\xe8" + rel32(0x1000, 0x1100) + b"\x90" * 0x200
+    result, seen = stretches(code, budget=1)
+    assert result.limit and seen == [(0x1000, 0x1000)]
+    assert result.targets.last(0x1000, 0x1100) == 0x1100
