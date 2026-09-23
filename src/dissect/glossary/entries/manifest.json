@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "dissect_glossary",
- "revision": "1.1.0",
+ "revision": "1.2.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -52,6 +52,11 @@
    "id": "api.family.sockets",
    "filename": "api.family.sockets.toml",
    "sha256": "533db7f59630ceb2aeef7c4c0d20583decb632af227a74b01110f48663795009"
+  },
+  {
+   "id": "code.call_argument",
+   "filename": "code.call_argument.toml",
+   "sha256": "0c33297eee5046a14fcb84752f27f255747f4dd93ce53957252c34f952f36910"
   },
   {
    "id": "code.import_call",

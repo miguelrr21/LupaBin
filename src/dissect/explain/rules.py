@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from dissect.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
+    CallArgumentEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -400,6 +401,48 @@ def _calls(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("code.import_call", "pe.imports")
 
 
+ARGUMENT_TEXT_SHOWN = 200
+
+
+def _argument_value(fact: CallArgumentEvidence) -> str:
+    data = fact.data
+    if data.constant is not None:
+        return data.constant
+    if data.string is not None:
+        text = data.string.text
+        if len(text) > ARGUMENT_TEXT_SHOWN:
+            text = f"{text[:ARGUMENT_TEXT_SHOWN]}… ({number(len(data.string.text))} caracteres)"
+        return f"«{text}»"
+    return f"{data.value:#x}"
+
+
+def _arguments(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """One call and every argument the report publishes for it, in report order."""
+    if len(cited) < 2 or not isinstance(cited[0], ApiCallEvidence):
+        return None
+    call = cited[0]
+    values = [fact for fact in cited[1:] if isinstance(fact, CallArgumentEvidence)]
+    if len(values) != len(cited) - 1:
+        return None
+    group = tuple(
+        fact.id
+        for fact in report.evidence
+        if isinstance(fact, CallArgumentEvidence) and fact.provenance.evidence_ids == (call.id,)
+    )
+    if tuple(fact.id for fact in values) != group:
+        return None  # every published argument of the call, in report order
+    target = next((f for f in report.evidence if f.id == call.provenance.evidence_ids[0]), None)
+    if not isinstance(target, ImportEvidence):
+        return None
+    shown = sorted(values, key=lambda fact: fact.data.position)
+    slots: Slots = {
+        "site": hexadecimal(call.location.rva or 0),
+        "function": _import_label(target),
+        "arguments": ", ".join(f"{f.data.name} = {_argument_value(f)}" for f in shown),
+    }
+    return slots, ("code.call_argument", "code.import_call", "evidence.confidence")
+
+
 def _code_family(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     """Every published call to an import on one curated family list."""
     calls = [fact for fact in cited if isinstance(fact, ApiCallEvidence)]
@@ -512,6 +555,14 @@ RULES: dict[str, Rule] = {
             "Estar en la lista no demuestra que el programa haga eso: muchos programas "
             "legítimos llaman a estas funciones. " + NOT_EXECUTED,
             _code_family,
+        ),
+        Rule(
+            "code.arguments@1",
+            "En {site} el código llama a «{function}» con {arguments}.",
+            "Es una inferencia a partir de las instrucciones que preceden a la llamada en el "
+            "mismo tramo: no demuestra que la llamada se ejecute, ni descarta que un camino "
+            "que el recorrido no ve llegue a ella con otros valores.",
+            _arguments,
         ),
         Rule(
             "exports.table@1",
