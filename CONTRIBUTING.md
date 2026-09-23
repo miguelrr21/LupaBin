@@ -38,6 +38,14 @@ No publiques una regla que afirme ejecución o una familia solo por encontrar no
 
 Después de un cambio aprobado, reconstruye la imagen y comprueba los tests YARA y `uv run --frozen python -m tests.check_yara_distribution` tras `uv build`. Un wheel que omita el catálogo no es una entrega válida. No hay carga de reglas externas por CLI en esta fase.
 
+## Glosario y explicaciones
+
+El glosario (`src/dissect/glossary/entries/`) es contenido revisado: una entrada TOML por concepto, en español, con al menos una fuente editorial (documentación del fabricante, RFC o estándar, documentación oficial de la herramienta o artículo académico) y la fecha en que se comprobó. Los conceptos propios de Dissect citan su documento del proyecto con ruta y ancla. El texto es conocimiento general: nunca habla de una muestra concreta. Si una entrada describe algo que se observa en muestras, incluye `not_proven`.
+
+Tras revisar un cambio, vuelve a fijar el manifiesto con `uv run python -m dissect.glossary.catalog --write <revisión>` y comprueba las fuentes con `uv run python -m tests.check_glossary_sources`. El cargador rechaza cualquier entrada cuyo digest no coincida.
+
+Las explicaciones (`src/dissect/explain/rules.py`) son reglas puras: una frase solo puede usar campos de las evidencias que cita, y cada regla lleva su texto de límite. No añadas una regla que concluya intención, familia o comportamiento. Una cifra de contexto (como la prevalencia de una familia de APIs) debe estar medida sobre binarios benignos y documentada en el diseño de la Fase 3. Las listas de familias tienen digest fijado: cambiarlas exige nueva versión y repetir la medición.
+
 ## Decodificación y catálogo de cribs
 
 El catálogo XOR (`CRIBS` en `src/dissect/extractors/decode_xor.py`, versión `dissect-xor-cribs-v3`) es código revisado. Una crib es un ancla de búsqueda neutral elegida por su longitud, no por su significado: nombres de API o de DLL no se añaden para "detectar" nada. Una crib de *n* bytes solo verifica por sí sola claves de hasta unos *n*−5 bytes; las cribs cortas se aprovechan sobre todo cuando otra cadena de la muestra ya verificó la misma clave (reutilización de clave).
