@@ -14,9 +14,20 @@ Text = Annotated[str, Field(min_length=1, max_length=320)]
 class Source(Model):
     title: Text
     publisher: Annotated[str, Field(min_length=1, max_length=120)]
-    url: Annotated[str, Field(pattern=r"^https://[^\s\"<>`]+$", max_length=512)]
+    # Exactly one: a public page, or a document of this project (for concepts that
+    # Dissect itself defines, such as its confidence levels).
+    url: Annotated[str, Field(pattern=r"^https://[^\s\"<>`]+$", max_length=512)] | None = None
+    document: (
+        Annotated[str, Field(pattern=r"^docs/[a-z0-9_/.-]+\.md#[\w-]+$", max_length=200)] | None
+    ) = None
     # When a person or agent last checked that the page exists and supports the entry.
     verified_on: date
+
+    @model_validator(mode="after")
+    def one_location(self) -> Self:
+        if (self.url is None) == (self.document is None):
+            raise ValueError("a source needs exactly one of url or document")
+        return self
 
 
 class Entry(Model):
@@ -37,8 +48,8 @@ class Entry(Model):
     def coherent(self) -> Self:
         if len(set(self.related)) != len(self.related) or self.id in self.related:
             raise ValueError("related entries must be unique and exclude the entry itself")
-        if len({source.url for source in self.sources}) != len(self.sources):
-            raise ValueError("duplicate source URL")
+        if len({(source.url, source.document) for source in self.sources}) != len(self.sources):
+            raise ValueError("duplicate source")
         return self
 
 

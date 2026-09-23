@@ -1,0 +1,12 @@
+id = "hash.sha256"
+title = "SHA-256"
+revision = "1.0.0"
+lang = "es"
+summary = "SHA-256 es una función hash criptográfica que resume cualquier archivo en 256 bits. Sirve para identificar exactamente la muestra analizada: si cambia un solo byte, cambia el hash."
+body = "Está definida en el estándar FIPS 180-4 del NIST. Se considera resistente a colisiones: no se conoce forma práctica de construir dos archivos distintos con el mismo SHA-256.\n\nDissect calcula los hashes sobre los mismos bytes que analiza, lo que permite comparar informes y buscar la muestra en otras fuentes sin compartir el archivo."
+not_proven = "Un hash identifica el archivo, no su contenido ni su peligrosidad."
+related = ["hash.md5"]
+sources = [
+  { title = "FIPS 180-4: Secure Hash Standard (SHS)", publisher = "NIST", url = "https://csrc.nist.gov/pubs/fips/180-4/upd1/final", verified_on = 2026-09-23 },
+  { title = "Glossary: hash function", publisher = "NIST CSRC", url = "https://csrc.nist.gov/glossary/term/hash_function", verified_on = 2026-09-23 },
+]
