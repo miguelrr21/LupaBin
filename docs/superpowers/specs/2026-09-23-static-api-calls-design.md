@@ -187,4 +187,15 @@ La base del proceso (intérprete y entrada de 20 MiB) ocupa 101 MiB. Variantes m
 - Parsear el operando con `int()` y capturar la excepción: 3,5 µs por llamada; sin excepciones es casi gratis.
 - `tracemalloc` para medir memoria ralentizaba el recorrido más de 10 veces: se mide el pico real del proceso.
 
-Queda por medir el peor caso dentro del contenedor, con su límite de 30 s para todas las fuentes.
+**En el contenedor** (`dissect-worker:0.5.0`, 1 CPU, 512 MiB; las cinco fuentes y el arranque del contenedor; 11 pruebas `-m docker` en verde):
+
+| Entrada | Tiempo total | Código |
+| --- | --- | --- |
+| `jz` continuo, 20 MiB | 17,2 s de 30 | parcial en 4.000.000 instrucciones |
+| `nop` continuo, 20 MiB | 14,1 s | parcial en 4.000.000 instrucciones |
+| `call [casilla]` continuo, 20 MiB | 11,6 s | parcial en 262.144 llamadas examinadas |
+| `Windows.UI.Xaml.dll` (benigno, System32) | 12,2 s | parcial en 262.144 llamadas examinadas (2,3 millones de instrucciones) |
+
+Pendiente de decidir con medición:
+- Un binario benigno real agota el máximo de llamadas examinadas. Subirlo a 524.288 costaría unos 2 s más en el peor caso de llamadas (≈ 7 µs por llamada), que seguiría por debajo del caso `jz`. Exige cambiar el contrato y repetir estas mediciones.
+- Falta medir un peor caso combinado (mitad del archivo diseñada contra la decodificación de la Fase 2 y mitad contra el recorrido).
