@@ -72,7 +72,7 @@ Procedimiento para cada crib (codificada en ASCII y en UTF-16LE) y cada retardo 
 
 **Reutilización de clave.** Tras la primera pasada, cada clave de periodo ≥ 2 que alguna crib verificó por sí sola se busca en el resto de la muestra, para las cribs que *no* pueden verificar ese periodo solas (p. ej. `http://`, de 7 bytes, con una clave de 8). Se acepta una aparición solo si reproduce la crib completa bajo una clave **idéntica** (salvo la fase) a una ya verificada: una coincidencia casual exige alinear *n* bytes al azar (≤ 256⁻⁷ por posición para la crib más corta). Para no inundar la búsqueda, el diferencial con retardo *p* se usa solo si tiene ≥ 3 bytes no nulos; si no, se busca directamente el texto cifrado de la crib bajo cada rotación de la clave. Se reutilizan como máximo 8 claves distintas. La evidencia resultante **cita en `provenance` la decodificación que estableció la clave**, y el informe y el host comprueban que ambas claves son idénticas. Es el caso habitual en malware: las tablas de cadenas cifradas suelen compartir una sola clave.
 
-### 3.4 Catálogo de anclas `dissect-xor-cribs-v2`
+### 3.4 Catálogo de anclas `dissect-xor-cribs-v3`
 
 Cadenas neutrales frecuentes en texto de binarios Windows, elegidas por longitud (una crib de *n* bytes solo verifica claves de hasta ~*n*−5 bytes) y no por significado. Encontrarlas **no demuestra ninguna capacidad ni intención**, igual que la regla YARA de nombres de API no demuestra imports ni inyección.
 
