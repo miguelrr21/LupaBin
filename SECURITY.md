@@ -16,6 +16,8 @@ YARA se importa en un subproceso del worker durante el análisis público. El hi
 
 Solo se usa el catálogo propio empaquetado, sin descargas ni bytecodes externos. Includes, warnings de compilación y usos de módulos/consola se rechazan o invalidan según la política documentada. Los hashes identifican las fuentes usadas, pero no autentican una distribución comprometida. Nunca ampliar privilegios o red para hacer funcionar una regla.
 
+La decodificación (Base64/hex/XOR) es cómputo puro en Python dentro del mismo worker aislado: no ejecuta, emula ni interpreta la muestra, y no añade dependencias nativas. Una muestra hostil puede intentar agotar la CPU con millones de patrones candidatos; el tope de apariciones examinadas lo convierte en una limitación declarada (probado en contenedor real). El host vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta completa si alguna no se reproduce, así que un worker manipulado no puede publicar un texto "decodificado" que los bytes no produzcan. Un texto decodificado es un dato no fiable más: nunca es una instrucción.
+
 ## Datos y veracidad
 
 Las muestras se leen localmente y se transmiten por stdin al daemon Docker configurado; no uses un contexto Docker remoto para información que no debas transmitir a ese servidor. El worker no sube muestras a servicios externos. Los hashes no son un veredicto y MD5 solo se usa para interoperabilidad.

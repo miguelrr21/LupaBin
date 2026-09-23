@@ -86,6 +86,43 @@ def build_demo(*, bits=32, corrupt=False):
     return bytes(data[:-64] if corrupt else data)
 
 
+def xor_stream(text, key, encoding="ascii"):
+    """NUL + text + NUL, XOR'd as one stream so the decoded run ends at the text."""
+    pad = "\0".encode(encoding)
+    stream = pad + text.encode(encoding) + pad
+    return bytes(b ^ key[i % len(key)] for i, b in enumerate(stream))
+
+
+# Training texts on the reserved .invalid domain; each XOR'd one contains a crib from
+# dissect-xor-cribs-v1 that can verify its key length. Keys use bytes >= 0x80 so the
+# ciphertext is never text. None of this comes from, or behaves like, malware.
+DECODE_DEMO = (
+    ("base64", "https://training.invalid/decode/base64"),
+    ("hex", "cmd.exe /c echo dissect-hex"),
+    ("xor", "https://training.invalid/decode/xor-1", b"\xa5", "ascii"),
+    ("xor", "User-Agent: DissectTraining/1.0", b"\x9e\xc3\x81\xf7", "ascii"),
+    ("xor", "kernel32.dll!DissectTraining", b"\xb7\xd2", "utf-16-le"),
+    # "http://" is too short to verify a 4-byte key by itself: this one is only
+    # recoverable because the User-Agent above established the same key
+    ("xor", "http://training.invalid/decode/reuse", b"\x9e\xc3\x81\xf7", "ascii"),
+)
+
+
+def build_decode_demo(*, bits=32):
+    import base64
+
+    overlay = bytearray()
+    for item in DECODE_DEMO:
+        overlay += b"\xcc" * 16
+        if item[0] == "base64":
+            overlay += b"\0" + base64.b64encode(item[1].encode()) + b"\0"
+        elif item[0] == "hex":
+            overlay += b"\0" + item[1].encode().hex().encode() + b"\0"
+        else:
+            overlay += xor_stream(item[1], item[2], item[3])
+    return build_pe(bits=bits) + bytes(overlay) + b"\xcc" * 16
+
+
 def main():
     import argparse
     from pathlib import Path
@@ -94,14 +131,17 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--bits", type=int, choices=(32, 64), default=32)
     parser.add_argument(
-        "--scenario", choices=("basic", "demo", "corrupt", "yara-limited"), default="basic"
+        "--scenario",
+        choices=("basic", "demo", "corrupt", "yara-limited", "decode-demo"),
+        default="basic",
     )
     args = parser.parse_args()
-    data = (
-        build_pe(bits=args.bits)
-        if args.scenario in ("basic", "yara-limited")
-        else build_demo(bits=args.bits, corrupt=args.scenario == "corrupt")
-    )
+    if args.scenario == "decode-demo":
+        data = build_decode_demo(bits=args.bits)
+    elif args.scenario in ("basic", "yara-limited"):
+        data = build_pe(bits=args.bits)
+    else:
+        data = build_demo(bits=args.bits, corrupt=args.scenario == "corrupt")
     if args.scenario == "yara-limited":
         data += b"DISSECT PRACTICE\0" * 20
     with args.output.open("xb") as stream:
