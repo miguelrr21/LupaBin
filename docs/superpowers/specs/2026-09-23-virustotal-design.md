@@ -20,7 +20,7 @@ Nada de eso es un hecho verificado por Dissect. Una etiqueta es la opinión de u
 - **Por defecto solo se envía el SHA-256**, nunca el archivo. Si VirusTotal ya lo conoce, se obtiene todo sin subir nada.
 - **Subir el archivo exige una opción explícita** (`--upload-to-virustotal`) y muestra un aviso. Según su documentación ("How it works"), el contenido de los archivos subidos puede compartirse con los clientes de pago de VirusTotal. Un documento o un binario interno no deben subirse.
 - **No se envía la ruta ni el nombre local**: el archivo sube con el nombre genérico `sample`.
-- **La clave de API se lee de la variable de entorno `VT_API_KEY`**. Nunca aparece en la salida, en los errores ni en los informes.
+- **La clave de API se lee de la variable de entorno `VT_API_KEY`** o, si no existe, de un archivo `.env` en la carpeta de trabajo. Ese archivo está en `.gitignore`, el `.dockerignore` lo excluye de la imagen y el paquete no lo incluye; un test comprueba ambas reglas. La clave nunca aparece en la salida, en los errores ni en los informes.
 - **API pública**: 500 peticiones al día y 4 por minuto, y no se puede usar en productos o servicios comerciales (documentación "Public vs Premium API"). Un error de cuota se comunica como tal.
 
 ## 3. Arquitectura
