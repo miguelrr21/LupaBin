@@ -12,7 +12,14 @@ from dissect.explain.models import Explanation
 from dissect.explain.rules import RULES
 from dissect.explain.text import MESSAGES
 from dissect.glossary.catalog import load_glossary
-from tests.fixtures.pe_builder import build_code_demo, build_decode_demo, build_demo, build_pe
+from tests.fixtures.pe_builder import (
+    ARGS_SUBKEY,
+    build_args_demo,
+    build_code_demo,
+    build_decode_demo,
+    build_demo,
+    build_pe,
+)
 
 GLOSSARY = load_glossary()
 
@@ -51,6 +58,8 @@ SAMPLES = {
     "code": build_code_demo,
     "code64": lambda: build_code_demo(bits=64),
     "code-family": lambda: build_code_demo(function=b"GetProcAddress"),
+    "arguments": build_args_demo,
+    "arguments64": lambda: build_args_demo(bits=64),
     "delay": lambda: build_pe(delay=True),
     "ordinal": lambda: build_pe(ordinal=17),
     "runtime": lambda: build_pe(function=b"GetProcAddress"),
@@ -278,6 +287,29 @@ def test_each_called_import_says_where_it_is_called_from(reports):
     )
     assert item.level == "observed" and "no demuestra que se ejecute" in item.not_proven
     assert item.glossary_ids == ("code.import_call", "pe.imports")
+
+
+@pytest.mark.parametrize("sample", ["arguments", "arguments64"])
+def test_each_call_with_arguments_says_which_constants_it_receives(reports, sample):
+    report = reports[sample]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.arguments@1")
+    site = next(f for f in report.evidence if f.kind == "api_call").location.rva
+    assert item.statement == (
+        f"En 0x{site:08x} el código llama a «RegOpenKeyExW» con hKey = HKEY_CURRENT_USER, "
+        f"lpSubKey = «{ARGS_SUBKEY}», samDesired = 0x20019."
+    )
+    assert item.level == "inferred"
+    assert "no demuestra que la llamada se ejecute" in item.not_proven
+    assert item.glossary_ids == ("code.call_argument", "code.import_call", "evidence.confidence")
+
+
+def test_an_argument_summary_must_cite_every_argument_of_its_call(reports):
+    report = reports["arguments"]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.arguments@1")
+    partial = item.model_copy(update={"evidence_ids": item.evidence_ids[:-1]})
+    assert check_item(partial, report, GLOSSARY) is not None
 
 
 def test_called_families_are_summarised(reports):
