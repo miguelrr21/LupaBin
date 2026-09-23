@@ -17,5 +17,6 @@ dist/
 
 # Agent skills tooling (local, per-machine)
 .agents/
+agent/
 .claude/
 skills-lock.json

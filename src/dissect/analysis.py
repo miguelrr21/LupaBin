@@ -5,6 +5,7 @@ from typing import Literal
 from dissect.evidence.collector import Collector, Progress
 from dissect.evidence.models import Analysis, Limits, Report, Sample
 from dissect.extractors.base import Extraction, Extractor
+from dissect.extractors.decode import DecodeExtractor
 from dissect.extractors.pe import PEExtractor
 from dissect.extractors.strings import StringsExtractor
 from dissect.extractors.yara import YaraExtractor
@@ -30,7 +31,7 @@ def analyze_bytes(
     for extractor in (
         extractors
         if extractors is not None
-        else (PEExtractor(), StringsExtractor(), YaraExtractor())
+        else (PEExtractor(), StringsExtractor(), YaraExtractor(), DecodeExtractor())
     ):
         progress = Progress(extractor.source, extractor.version)
         start_count = len(collector.facts)

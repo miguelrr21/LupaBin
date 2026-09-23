@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 UInt = Annotated[int, Field(ge=0, le=0xFFFFFFFF)]
 NonNegative = Annotated[int, Field(ge=0)]
 EvidenceId = Annotated[str, Field(pattern=r"^E[1-9][0-9]*$", max_length=16)]
-Source = Literal["pe", "strings", "yara"]
+Source = Literal["pe", "strings", "yara", "decode"]
 Status = Literal["completed", "partial", "failed"]
 Component = Literal[
     "headers",
@@ -20,6 +20,8 @@ Component = Literal[
     "yara_rules",
     "yara_scan",
     "yara_evidence",
+    "decode_strings",
+    "decode_xor",
 ]
 COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "pe": (
@@ -33,6 +35,7 @@ COMPONENTS: dict[Source, tuple[Component, ...]] = {
     ),
     "strings": ("ascii", "utf16le"),
     "yara": ("yara_rules", "yara_scan", "yara_evidence"),
+    "decode": ("decode_strings", "decode_xor"),
 }
 
 
@@ -55,8 +58,15 @@ class YaraLimits(Model):
     stderr_bytes: Annotated[int, Field(gt=0, le=65536)] = 65536
 
 
+class DecodeLimits(Model):
+    strings: Annotated[int, Field(gt=0, le=2000)] = 2000
+    xor: Annotated[int, Field(gt=0, le=256)] = 256
+    xor_examined: Annotated[int, Field(gt=0, le=200000)] = 200000
+
+
 class Limits(Model):
     yara: YaraLimits = Field(default_factory=YaraLimits)
+    decode: DecodeLimits = Field(default_factory=DecodeLimits)
     input_bytes: Annotated[int, Field(gt=0, le=20971520)] = 20971520
     timeout_seconds: Annotated[int, Field(gt=0, le=30)] = 30
     memory_bytes: Literal[536870912] = 536870912
@@ -111,6 +121,39 @@ class Location(Model):
     def length_has_offset(self) -> Self:
         if self.length is not None and self.offset is None:
             raise ValueError("length requires a file offset")
+        return self
+
+
+TransformName = Literal["base64-strict-v1", "hex-strict-v1", "xor-repeating-v1"]
+
+
+def minimal_period(key: bytes) -> bytes:
+    for period in range(1, len(key) + 1):
+        if len(key) % period == 0 and key == key[:period] * (len(key) // period):
+            return key[:period]
+    return key
+
+
+def canonical_key(key: bytes) -> bytes:
+    """The same repeating key regardless of phase: minimal period, least rotation."""
+    period = minimal_period(key)
+    return min(period[shift:] + period[:shift] for shift in range(len(period)))
+
+
+class Transform(Model):
+    name: TransformName
+    key_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2}){1,8}$")] | None = None
+
+    @model_validator(mode="after")
+    def key_matches_transform(self) -> Self:
+        if (self.name == "xor-repeating-v1") != (self.key_hex is not None):
+            raise ValueError("xor-repeating-v1 requires a key; other transforms carry none")
+        if self.key_hex is not None:
+            key = bytes.fromhex(self.key_hex)
+            if not any(key):
+                raise ValueError("an all-zero XOR key is the identity, not a decoding")
+            if minimal_period(key) != key:
+                raise ValueError("an XOR key must be published in its minimal period")
         return self
 
 

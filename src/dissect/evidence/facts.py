@@ -11,6 +11,7 @@ from dissect.evidence.primitives import (
     NonNegative,
     Provenance,
     Source,
+    Transform,
     UInt,
 )
 from dissect.evidence.yara import YaraMatchData
@@ -181,6 +182,80 @@ class StringEvidence(Fact):
     data: StringData
 
 
+class DecodedStringData(Model):
+    encoding: Literal["ascii", "utf-16-le"]
+    repertoire: Literal["ascii-printable-v1"] = "ascii-printable-v1"
+    text: Annotated[str, Field(min_length=4, max_length=1024)]
+    raw_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2})+$", max_length=4096)]
+    characters: Annotated[int, Field(ge=4, le=1024)]
+    complete: bool
+    total_characters: NonNegative | None = None
+
+    @model_validator(mode="after")
+    def faithful(self) -> Self:
+        if any(not 32 <= ord(char) <= 126 for char in self.text):
+            raise ValueError("unsupported string repertoire")
+        if (
+            self.text.encode(self.encoding).hex() != self.raw_hex
+            or len(self.text) != self.characters
+        ):
+            raise ValueError("string differs from decoded bytes")
+        if self.complete and self.total_characters != self.characters:
+            raise ValueError("complete string requires its exact length")
+        if not self.complete and self.total_characters is not None:
+            if self.total_characters <= self.characters:
+                raise ValueError("truncated string cannot have a shorter total")
+        return self
+
+
+class XorAnchor(Model):
+    catalog: Literal["dissect-xor-cribs-v3"]
+    crib: Annotated[str, Field(min_length=5, max_length=64)]
+    crib_offset: NonNegative
+
+    @model_validator(mode="after")
+    def printable_crib(self) -> Self:
+        if any(not 32 <= ord(char) <= 126 for char in self.crib):
+            raise ValueError("crib outside the printable ASCII repertoire")
+        return self
+
+
+class DecodedStringEvidence(Model):
+    id: EvidenceId
+    source: Literal["decode"] = "decode"
+    component: Literal["decode_strings", "decode_xor"]
+    kind: Literal["decoded_string"] = "decoded_string"
+    location: Location
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    transform: Transform
+    anchor: XorAnchor | None = None
+    data: DecodedStringData
+
+    @model_validator(mode="after")
+    def coherent_with_transform(self) -> Self:
+        if self.location.offset is None or self.location.length is None:
+            raise ValueError("a decoded string must locate its encoded bytes")
+        if self.transform.name == "xor-repeating-v1":
+            if self.component != "decode_xor" or self.anchor is None:
+                raise ValueError("an XOR decoding belongs to decode_xor and needs its anchor")
+            if len(self.provenance.evidence_ids) > 1:
+                # empty: the anchor verified the key; one: the XOR decoding that
+                # established the same key elsewhere (checked against the report)
+                raise ValueError("an XOR decoding cites at most the decoding that set its key")
+            if self.location.length != len(self.data.raw_hex) // 2:
+                raise ValueError("XOR preserves length; region and decoded bytes must match")
+            end = self.anchor.crib_offset + len(self.anchor.crib)
+            if self.data.text[self.anchor.crib_offset : end] != self.anchor.crib:
+                raise ValueError("the anchor crib is not at its declared offset")
+        else:
+            if self.component != "decode_strings" or self.anchor is not None:
+                raise ValueError("a Base64/hex decoding belongs to decode_strings, without anchor")
+            if len(self.provenance.evidence_ids) != 1:
+                raise ValueError("a Base64/hex decoding derives from exactly one source string")
+        return self
+
+
 class AnomalyEvidence(Fact):
     kind: Literal["header_anomaly"] = "header_anomaly"
     data: AnomalyData
@@ -213,7 +288,8 @@ Evidence = Annotated[
     | ExportEvidence
     | StringEvidence
     | AnomalyEvidence
-    | YaraEvidence,
+    | YaraEvidence
+    | DecodedStringEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -225,4 +301,5 @@ Payload = (
     | StringData
     | AnomalyData
     | YaraMatchData
+    | DecodedStringData
 )

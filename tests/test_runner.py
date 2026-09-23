@@ -100,6 +100,7 @@ def test_failures_are_explicit_and_cleanup_is_attempted(failure, code):
         lambda report: report.update(schema_version="9.0.0"),
         lambda report: report.update(schema_version="0.1.0"),
         lambda report: report.update(schema_version="0.2.0"),
+        lambda report: report.update(schema_version="0.3.0"),
         lambda report: report["analysis"]["limits"].update(imports=5),
     ],
 )
@@ -110,7 +111,7 @@ def test_worker_response_must_match_original_input(change):
     with pytest.raises(DissectError) as caught:
         asyncio.run(run_isolated(build_pe(), Limits(), docker))
     expected = (
-        "incompatible_worker" if report["schema_version"] != "0.3.0" else "invalid_worker_output"
+        "incompatible_worker" if report["schema_version"] != "0.4.0" else "invalid_worker_output"
     )
     assert caught.value.code == expected
 
