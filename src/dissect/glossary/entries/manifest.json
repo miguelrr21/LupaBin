@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "dissect_glossary",
- "revision": "1.2.0",
+ "revision": "1.2.1",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -96,7 +96,7 @@
   {
    "id": "evidence.confidence",
    "filename": "evidence.confidence.toml",
-   "sha256": "98653c1bb7003fd283604a735b38d55be66dc1fb0e40482ce949fc165693f038"
+   "sha256": "ff3e6c171fbe47947b58e612f33a81a3efabff6d5115163673354c211101c643"
   },
   {
    "id": "hash.md5",
