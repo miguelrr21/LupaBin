@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import json
+import struct
 
 import pytest
 
@@ -10,8 +11,16 @@ from dissect.analysis import analyze_bytes
 from dissect.errors import DissectError
 from dissect.evidence.code import verify_calls
 from dissect.evidence.models import Limits, Report
+from dissect.evidence.primitives import CodeLimits
 from dissect.runner import run_isolated
-from tests.fixtures.pe_builder import ARGS_STRING_RVA, ARGS_SUBKEY, build_args_demo
+from tests.fixtures.pe_builder import (
+    ARGS_STRING_RVA,
+    ARGS_SUBKEY,
+    args_demo_bytes,
+    build_args_demo,
+    build_code_demo,
+    with_load_config,
+)
 from tests.test_runner import FakeDocker
 
 
@@ -188,8 +197,74 @@ def test_functions_from_dlls_that_do_not_export_them_are_not_interpreted():
 
 
 def test_a_zero_extended_key_in_x64_is_not_a_predefined_key():
-    from tests.fixtures.pe_builder import args_demo_bytes
-
     code = args_demo_bytes(64, hkey=b"\xb9\x01\x00\x00\x80")  # mov ecx, 0x80000001
     report = analyze_bytes(build_args_demo(bits=64, code=code))
     assert "hKey" not in arguments(report)
+
+
+# --- the walk's rules, end to end: overwrites, other entries, stack shape ---------
+
+
+def by_name(data, limits=None):
+    return arguments(analyze_bytes(data, limits))
+
+
+def test_an_overwrite_between_setter_and_call_forgets_that_argument():
+    # x64: mov rcx, [rax] after rcx was set; rdx and r9 keep their constants
+    code = args_demo_bytes(64, before=b"\x48\x8b\x08")
+    assert set(by_name(build_args_demo(bits=64, code=code))) == {"lpSubKey", "samDesired"}
+    # x86: mov [esp], eax rewrites the stack the pushes built
+    code = args_demo_bytes(32, before=b"\x89\x04\x24")
+    assert by_name(build_args_demo(bits=32, code=code)) == {}
+
+
+def test_another_entry_after_the_setters_leaves_every_argument_unknown():
+    # x64 body: lea (7) + mov rcx (7) + mov r9d (6) + xor r8d (3), then the nop at 0x2017
+    code = args_demo_bytes(64, before=b"\x90")
+    data = with_load_config(build_args_demo(bits=64, code=code), bits=64, guard=(0x2017,))
+    report = analyze_bytes(data)
+    assert [f.kind for f in report.evidence if f.source == "code"] == ["api_call"]
+    # the same bytes without that entry
+    assert len(by_name(build_args_demo(bits=64, code=code))) == 3
+
+
+def test_x86_pushes_that_are_missing_leave_those_arguments_unknown():
+    call = b"\xff\x15" + struct.pack("<I", 0x400000 + 0x1140)
+    code = b"\x68\x01\x00\x00\x80" + call + b"\xc3"  # only hKey is pushed
+    assert set(by_name(build_args_demo(bits=32, code=code))) == {"hKey"}
+
+
+def test_the_argument_budget_leaves_the_component_partial_and_says_so():
+    report = analyze_bytes(build_args_demo(), Limits(code=CodeLimits(argument_instructions=1)))
+    assert arguments(report) == {}
+    parts = {
+        p.name: p for p in next(r for r in report.extractor_runs if r.source == "code").components
+    }
+    assert parts["call_arguments"].status == "partial"
+    assert [(r.component, r.code) for r in report.limitations] == [
+        ("call_arguments", "argument_instruction_limit")
+    ]
+
+
+def test_calls_to_functions_outside_the_catalog_are_not_examined():
+    report = analyze_bytes(build_code_demo())
+    parts = {
+        p.name: p for p in next(r for r in report.extractor_runs if r.source == "code").components
+    }
+    assert parts["call_arguments"].status == "complete"
+    assert parts["call_arguments"].examined == 0 and arguments(report) == {}
+
+
+def test_the_fixture_generator_writes_the_arguments_demo(tmp_path, monkeypatch):
+    import sys
+
+    from tests.fixtures import pe_builder
+
+    path = tmp_path / "args.bin"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pe_builder", "--scenario", "args-demo", "--bits", "64", "--output", str(path)],
+    )
+    pe_builder.main()
+    assert path.read_bytes() == build_args_demo(bits=64)
