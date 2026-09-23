@@ -167,6 +167,33 @@ def build_code_pe(code, *, bits=32, **imports):
     return bytes(data)
 
 
+def with_load_config(data, *, bits=32, guard=(), seh=(), flags=0x400, size=None, count=None):
+    """Add a load configuration directory in .idata listing CFG targets and SafeSEH handlers.
+
+    The directory sits at RVA 0x1400 (file 0x600) and its tables at 0x1500 and 0x1580.
+    """
+    data = bytearray(data)
+    opt = 0x98
+    count_offset = 92 if bits == 32 else 108
+    base = 0x400000 if bits == 32 else 0x140000000
+    table_at, count_at, flags_at = (0x50, 0x54, 0x58) if bits == 32 else (0x80, 0x88, 0x90)
+    declared = size if size is not None else flags_at + 4
+    struct.pack_into("<II", data, opt + count_offset + 4 + 8 * 10, 0x1400, flags_at + 4)
+    struct.pack_into("<I", data, 0x600, declared)
+    fmt = "<I" if bits == 32 else "<Q"
+    struct.pack_into(fmt, data, 0x600 + table_at, base + 0x1500)
+    struct.pack_into(fmt, data, 0x600 + count_at, len(guard) if count is None else count)
+    struct.pack_into("<I", data, 0x600 + flags_at, flags)
+    stride = 4 + (flags >> 28)
+    for index, rva in enumerate(guard):
+        struct.pack_into("<I", data, 0x700 + index * stride, rva)
+    if bits == 32:
+        struct.pack_into("<II", data, 0x640, base + 0x1580, len(seh))
+        for index, rva in enumerate(seh):
+            struct.pack_into("<I", data, 0x780 + index * 4, rva)
+    return bytes(data)
+
+
 def build_code_demo(*, bits=32, **imports):
     """An entry point that calls the import once through each canonical form."""
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)

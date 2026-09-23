@@ -17,7 +17,7 @@ from dissect.extractors.pe import PEExtractor
 from dissect.ingest.reader import from_bytes
 from dissect.runner import run_isolated
 from dissect.saved_report import check_against_sample
-from tests.fixtures.pe_builder import build_code_demo, build_pe
+from tests.fixtures.pe_builder import build_code_demo, build_code_pe, build_pe, with_load_config
 from tests.test_runner import FakeDocker
 
 
@@ -238,3 +238,53 @@ def test_the_host_process_never_loads_the_disassembler():
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     )
     assert result.stdout.strip() == "False"
+
+
+# --- entry points the toolchain writes: Control Flow Guard and SafeSEH ----------
+
+
+def hidden_function(bits):
+    """Entry point `ret`; at 0x2100 a function calling the import that nothing jumps to."""
+    code = bytearray(b"\xc3" + b"\xcc" * 0x1FF)
+    if bits == 32:
+        call = b"\xff\x15" + struct.pack("<I", 0x400000 + 0x1140)
+    else:
+        call = b"\xff\x15" + struct.pack("<i", 0x1140 - (0x2100 + 6))
+    code[0x100 : 0x100 + len(call) + 1] = call + b"\xc3"
+    return build_code_pe(bytes(code), bits=bits)
+
+
+def called_from(data):
+    return [fact.location.rva for fact in calls(analyze_bytes(data))]
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+def test_guard_table_targets_are_walked(bits):
+    assert called_from(hidden_function(bits)) == []
+    assert called_from(with_load_config(hidden_function(bits), bits=bits, guard=(0x2100,))) == [
+        0x2100
+    ]
+
+
+def test_guard_entries_with_metadata_bytes_use_their_stride():
+    flags = 0x400 | (1 << 28)  # one metadata byte after each RVA
+    data = with_load_config(hidden_function(32), guard=(0x2000, 0x2100), flags=flags)
+    assert called_from(data) == [0x2100]
+
+
+def test_safe_seh_handlers_are_walked_in_x86():
+    assert called_from(with_load_config(hidden_function(32), seh=(0x2100,))) == [0x2100]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"flags": 0},  # the table-present flag is not set
+        {"size": 0x54},  # the declared structure ends before GuardFlags
+        {"count": 0xFFFFFFFF},  # a count the file cannot hold
+    ],
+)
+def test_unusable_guard_tables_add_no_entries(options):
+    data = with_load_config(hidden_function(32), guard=(0x2100,), **options)
+    report = analyze_bytes(data)
+    assert calls(report) == [] and report.analysis.status == "completed"
