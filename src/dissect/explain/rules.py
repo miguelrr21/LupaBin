@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from dissect.evidence.facts import (
     AnomalyEvidence,
+    ApiCallEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -352,6 +353,95 @@ def _xor(reused: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | Non
     return derive
 
 
+# --- code -------------------------------------------------------------------------
+
+CALL_SITES_SHOWN = 20
+VIA = {"direct": "directa", "thunk": "a través de un thunk", "register": "por registro"}
+NOT_EXECUTED = (
+    "Que el código contenga la llamada no demuestra que se ejecute: depende de condiciones "
+    "y entradas que el análisis estático no resuelve, y un binario empaquetado solo muestra "
+    "el código de su desempaquetador."
+)
+
+
+def _import_label(fact: ImportEvidence) -> str:
+    data = fact.data
+    return name(data.function) if data.function is not None else f"ordinal {data.ordinal}"
+
+
+def _calls(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """One import and every call the report publishes to it, in report order."""
+    if len(cited) < 2 or not isinstance(cited[0], ImportEvidence):
+        return None
+    target = cited[0]
+    calls = [fact for fact in cited[1:] if isinstance(fact, ApiCallEvidence)]
+    if len(calls) != len(cited) - 1:
+        return None
+    group = tuple(
+        fact.id
+        for fact in report.evidence
+        if isinstance(fact, ApiCallEvidence) and fact.provenance.evidence_ids == (target.id,)
+    )
+    if tuple(fact.id for fact in calls) != group:
+        return None  # a summary must cite every call to the import, in report order
+    sites = tuple(
+        f"{hexadecimal(fact.location.rva or 0)} ({VIA[fact.data.via]})"
+        for fact in calls[:CALL_SITES_SHOWN]
+    )
+    if len(calls) > CALL_SITES_SHOWN:
+        sites += (f"y {number(len(calls) - CALL_SITES_SHOWN)} más",)
+    slots: Slots = {
+        "function": _import_label(target),
+        "dll": name(target.data.dll),
+        "count": number(len(calls)),
+        "noun": "llamada" if len(calls) == 1 else "llamadas",
+        "sites": sites,
+    }
+    return slots, ("code.import_call", "pe.imports")
+
+
+def _code_family(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """Every published call to an import on one curated family list."""
+    calls = [fact for fact in cited if isinstance(fact, ApiCallEvidence)]
+    if not calls or len(calls) != len(cited):
+        return None
+    facts = {fact.id: fact for fact in report.evidence}
+
+    def family(call: ApiCallEvidence) -> str | None:
+        target = facts.get(call.provenance.evidence_ids[0])
+        if not isinstance(target, ImportEvidence) or target.data.function is None:
+            return None
+        return family_of(name(target.data.function))
+
+    families = {family(call) for call in calls}
+    chosen = families.pop() if len(families) == 1 else None
+    if chosen is None:
+        return None
+    group = tuple(
+        fact.id
+        for fact in report.evidence
+        if isinstance(fact, ApiCallEvidence) and family(fact) == chosen
+    )
+    if tuple(fact.id for fact in calls) != group:
+        return None
+    functions = tuple(
+        dict.fromkeys(
+            _import_label(target)
+            for call in calls
+            if isinstance(target := facts[call.provenance.evidence_ids[0]], ImportEvidence)
+        )
+    )
+    slots: Slots = {
+        "count": number(len(calls)),
+        "noun": "llamada" if len(calls) == 1 else "llamadas",
+        "distinct": len(functions),
+        "fnoun": "función" if len(functions) == 1 else "funciones",
+        "family": FAMILIES[chosen][0],
+        "functions": functions,
+    }
+    return slots, (f"api.family.{chosen}", "code.import_call")
+
+
 RULES: dict[str, Rule] = {
     rule.id: rule
     for rule in (
@@ -408,6 +498,20 @@ RULES: dict[str, Rule] = {
             "Estar en la lista no demuestra que el programa haga eso: es una pista para "
             "estudiar, y muchos programas legítimos importan estas funciones.",
             _family,
+        ),
+        Rule(
+            "code.calls@1",
+            "El código contiene {count} {noun} a la función importada «{function}» de «{dll}».",
+            NOT_EXECUTED,
+            _calls,
+        ),
+        Rule(
+            "code.family@1",
+            "El código contiene {count} {noun} a {distinct} {fnoun} de la familia «{family}» "
+            "de la lista curada de Dissect.",
+            "Estar en la lista no demuestra que el programa haga eso: muchos programas "
+            "legítimos llaman a estas funciones. " + NOT_EXECUTED,
+            _code_family,
         ),
         Rule(
             "exports.table@1",

@@ -51,6 +51,7 @@ ErrorCode = (
         "unsupported_architecture",
         "code_instruction_limit",
         "code_entry_limit",
+        "call_site_limit",
         "api_call_limit",
     ]
     | YaraReason

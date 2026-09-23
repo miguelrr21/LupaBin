@@ -70,6 +70,7 @@ class DecodeLimits(Model):
 class CodeLimits(Model):
     instructions: Annotated[int, Field(gt=0, le=4000000)] = 4000000
     entries: Annotated[int, Field(gt=0, le=262144)] = 262144
+    call_sites: Annotated[int, Field(gt=0, le=262144)] = 262144
     calls: Annotated[int, Field(gt=0, le=4096)] = 4096
 
 

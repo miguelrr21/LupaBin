@@ -1,8 +1,38 @@
 # Dissect: contrato de evidencias
 
-## Contrato activo 0.4.0
+## Contrato activo 0.5.0
 
-La Fase 2 añade al contrato 0.3.0 una cuarta fuente, `decode`, y el tipo `decoded_string`. La CLI, el paquete y la imagen esperada usan 0.4.0; el esquema 0.3.0 se conserva en `docs/schemas/` junto a los anteriores. No hay conversión automática de informes ni fallback a un worker antiguo. Diseño, mediciones y límites: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
+La Fase 4 (primera entrega, versión reducida) añade al contrato 0.4.0 una quinta fuente, `code`, y el tipo `api_call`: qué funciones importadas llama el código y desde dónde, sin leer todavía sus argumentos. La CLI, el paquete y la imagen esperada usan 0.5.0; el esquema 0.4.0 se conserva en `docs/schemas/`. Diseño, mediciones y límites: [Fase 4](superpowers/specs/2026-09-23-static-api-calls-design.md).
+
+Cambio en un tipo existente: `import` gana `iat_rva`, la dirección de su casilla en la tabla de direcciones de import (IAT), que es adonde apuntan las llamadas. `location` sigue siendo la entrada de la tabla de búsqueda que contiene el nombre u ordinal.
+
+`api_call` es `observed`: afirma que en esos bytes hay una instrucción, alcanzada por el recorrido del código, que llama a la casilla de ese import. No afirma que se ejecute. Campos:
+
+| Campo | Contenido |
+| --- | --- |
+| `component` | `api_calls`. |
+| `location` | La instrucción de llamada: `offset`, `rva`, `length` y `section`, que debe ser la única sección ejecutable que contiene esos bytes en disco. |
+| `data.via` | `direct` (`call [casilla]`), `thunk` (`call rel32` a un `jmp [casilla]`) o `register` (`mov reg, [casilla]` inmediatamente antes de `call reg`). |
+| `data.raw_hex` | Los bytes de la instrucción de llamada. |
+| `data.helper` | Solo `thunk` y `register`: el `jmp` del thunk o la carga del registro, con `offset`, `rva` y `raw_hex`. |
+| `provenance.evidence_ids` | Exactamente el `import` al que llama. |
+
+**Verificación en el propio informe.** Sin la muestra, el modelo ya vuelve a derivar la casilla desde los bytes citados con las formas canónicas de `src/dissect/evidence/call_forms.py` y exige que sea el `iat_rva` del import citado. En x86 la dirección es absoluta (menos la base de imagen de la cabecera); en x64, relativa a la instrucción siguiente. En un thunk, el destino del `call` debe ser el `jmp` citado; en la vía por registro, la carga debe terminar justo donde empieza la llamada y usar el mismo registro. También comprueba que cada `offset` corresponde a su `rva` según la tabla de secciones.
+
+**Verificación en el host.** El launcher y `dissect explain --sample` comparan los bytes de cada instrucción citada con los de la muestra. El host no lleva desensamblador: una prueba comprueba que ni la CLI ni el runner cargan capstone. Lo que ninguna comprobación puede demostrar es que el recorrido llegó a esa instrucción (y no a unos bytes que solo lo parecen). Eso es una regla del worker, probada con casos negativos y medida en binarios benignos.
+
+Componentes y limitaciones de `code`:
+
+| Componente | Revisa | Limitaciones propias |
+| --- | --- | --- |
+| `disassembly` | Instrucciones decodificadas por descenso recursivo en secciones ejecutables (`examined`) | `code_instruction_limit` (4.000.000), `call_site_limit` (262.144 llamadas examinadas), `code_entry_limit` (262.144 puntos de partida) |
+| `api_calls` | Instrucciones `call` examinadas (`examined`) | Las del recorrido, más `api_call_limit` (4.096 publicadas) y `dependency_omitted` si la tabla de imports no se leyó completa |
+
+`api_calls` solo puede ser completo si también lo son `disassembly` y los dos componentes de imports. Con la cuota agotada, se publica primero la primera llamada de cada import y después las repetidas, para cubrir el máximo de funciones distintas. Arquitecturas distintas de x86/x64 bloquean la fuente (`unsupported_architecture`), igual que las correspondencias ambiguas entre memoria y archivo (`unsafe_mapping`) y las entradas que no son PE. Cero llamadas con cobertura completa no demuestra que el programa no llame a nada: el código al que solo se llega por saltos indirectos no se recorre.
+
+## Antecedente: contrato 0.4.0
+
+La Fase 2 añadió al contrato 0.3.0 una cuarta fuente, `decode`, y el tipo `decoded_string`. Su esquema histórico está en `docs/schemas/0.4.0.json`; sus reglas siguen vigentes en 0.5.0. Diseño, mediciones y límites: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
 
 `decoded_string` es la única evidencia con `confidence="inferred"`: afirma que unos bytes, transformados con un algoritmo y unos parámetros exactos, producen un texto. No afirma que el programa realice la transformación ni que el texto tenga significado. Campos:
 

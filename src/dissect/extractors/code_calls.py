@@ -1,11 +1,10 @@
-"""Which walked call sites reach an imported function, and by which of three forms."""
+"""Which walked calls reach an imported function, and by which of three forms."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Container
 from dataclasses import dataclass
 from typing import Literal
 
 from dissect.evidence import call_forms
-from dissect.extractors.code_disasm import Site
 
 Via = Literal["direct", "thunk", "register"]
 
@@ -19,54 +18,73 @@ class Call:
     helper: tuple[int, int] | None  # (rva, size): the thunk's jmp or the register load
 
 
-def classify(
-    sites: list[Site],
-    read: Callable[[int, int], bytes | None],
-    bits: int,
-    image_base: int,
-    slots: Mapping[int, object],
-) -> list[Call]:
-    """Calls whose slot is a known import slot, in the order the walk found them.
+class CallFinder:
+    """Classifies each call the walk meets, in bounded memory.
 
-    `read(rva, size)` returns code bytes, or None outside the executable regions.
+    Publication order is each import's first call, then repeated calls, cut at
+    `quota`: when calls are dropped, the published ones still cover as many imports
+    as possible. Memory holds one call per import slot plus `quota` repeats.
     """
-    calls = []
-    for site in sites:
-        raw = read(site.rva, site.size)
-        if raw is None:
-            continue
-        slot = call_forms.memory_slot(raw, site.rva, bits, image_base, call_forms.CALL)
-        if slot is not None:
-            if slot in slots:
-                calls.append(Call("direct", site.rva, site.size, slot, None))
-            continue
-        target = call_forms.relative_target(raw, site.rva)
+
+    def __init__(
+        self,
+        read: Callable[[int, int], bytes | None],
+        bits: int,
+        image_base: int,
+        slots: Container[int],
+        quota: int,
+    ):
+        self.read = read
+        self.bits = bits
+        self.base = image_base
+        self.slots = slots
+        self.quota = quota
+        self.first: dict[int, Call] = {}
+        self.repeated: list[Call] = []
+        self.found = 0
+
+    def calls(self) -> list[Call]:
+        return (list(self.first.values()) + self.repeated)[: self.quota]
+
+    @property
+    def dropped(self) -> bool:
+        return self.found > self.quota
+
+    def visit(self, data: bytearray, offset: int, rva: int, size: int, previous: int) -> None:
+        call = self._classify(data, offset, rva, size, previous)
+        if call is None:
+            return
+        self.found += 1
+        if call.slot not in self.first:
+            self.first[call.slot] = call
+        elif len(self.repeated) < self.quota:
+            self.repeated.append(call)
+
+    def _classify(
+        self, data: bytearray, offset: int, rva: int, size: int, previous: int
+    ) -> Call | None:
+        bits, base = self.bits, self.base
+        raw = bytes(data[offset : offset + size])
+        target = call_forms.relative_target(raw, rva)
         if target is not None:
-            thunk = _thunk(read, target, bits, image_base)
-            if thunk is not None and thunk[1] in slots:
-                calls.append(Call("thunk", site.rva, site.size, thunk[1], (target, thunk[0])))
-            continue
+            for stub_size in (6,) if bits == 32 else (6, 7):
+                stub = self.read(target, stub_size)
+                if stub is None:
+                    continue
+                slot = call_forms.memory_slot(stub, target, bits, base, call_forms.JMP)
+                if slot is not None:
+                    if slot not in self.slots:
+                        return None
+                    return Call("thunk", rva, size, slot, (target, stub_size))
+            return None
+        slot = call_forms.memory_slot(raw, rva, bits, base, call_forms.CALL)
+        if slot is not None:
+            return Call("direct", rva, size, slot, None) if slot in self.slots else None
         register = call_forms.register_call(raw, bits)
-        if register is not None and site.previous is not None:
-            before = read(*site.previous)
-            load = (
-                None
-                if before is None
-                else call_forms.register_load(before, site.previous[0], bits, image_base)
-            )
-            if load is not None and load[0] == register and load[1] in slots:
-                calls.append(Call("register", site.rva, site.size, load[1], site.previous))
-    return calls
-
-
-def _thunk(
-    read: Callable[[int, int], bytes | None], rva: int, bits: int, image_base: int
-) -> tuple[int, int] | None:
-    """(size, slot) when `rva` holds a canonical `jmp [slot]`."""
-    for size in (6,) if bits == 32 else (6, 7):
-        raw = read(rva, size)
-        if raw is not None:
-            slot = call_forms.memory_slot(raw, rva, bits, image_base, call_forms.JMP)
-            if slot is not None:
-                return size, slot
-    return None
+        if register is None or not previous:
+            return None
+        before = bytes(data[offset - previous : offset])
+        load = call_forms.register_load(before, rva - previous, bits, base)
+        if load is None or load[0] != register or load[1] not in self.slots:
+            return None
+        return Call("register", rva, size, load[1], (rva - previous, previous))
