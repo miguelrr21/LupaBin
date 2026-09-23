@@ -12,6 +12,9 @@ FailureCode = Literal[
     "incompatible_worker",
     "worker_failure",
     "cleanup_failure",
+    "invalid_report",
+    "report_mismatch",
+    "glossary_invalid",
 ]
 MESSAGES: dict[FailureCode, str] = {
     "invalid_input": "No se pudo leer una entrada regular no vacía.",
@@ -25,6 +28,9 @@ MESSAGES: dict[FailureCode, str] = {
     "incompatible_worker": "Esquema o catálogo incompatible; reconstruye dissect-worker:0.4.0.",
     "worker_failure": "El worker falló; no se pudo determinar el resultado.",
     "cleanup_failure": "No se pudo confirmar la eliminación del contenedor de este análisis.",
+    "invalid_report": "El informe no se pudo leer o no es un informe 0.4.0 válido.",
+    "report_mismatch": "El informe no coincide con la muestra indicada; no se explica.",
+    "glossary_invalid": "El glosario instalado no supera su validación; no se explica el informe.",
 }
 
 
