@@ -88,12 +88,13 @@ class CodeExtractor:
 def _reader(code: list[Region]) -> Callable[[int, int], bytes | None]:
     ordered = sorted(code, key=lambda region: region.rva)
     starts = [region.rva for region in ordered]
+    ends = [region.end for region in ordered]
 
     def read(rva: int, size: int) -> bytes | None:
         index = bisect.bisect_right(starts, rva) - 1
-        if index < 0 or rva + size > ordered[index].end:
+        if index < 0 or rva + size > ends[index]:
             return None
-        start = rva - ordered[index].rva
+        start = rva - starts[index]
         return bytes(ordered[index].data[start : start + size])
 
     return read
