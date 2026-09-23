@@ -22,7 +22,7 @@ dissect = "dissect.cli:app"
 packages = ["src/dissect"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs/evidence-schema.json", "pyproject.toml", "LICENSE", "README.md"]
+include = ["src", "tests", "docs/evidence-schema.json", "docs/explanation-schema.json", "pyproject.toml", "LICENSE", "README.md"]
 
 [tool.uv]
 exclude-newer = "2026-09-13T00:00:00Z"
