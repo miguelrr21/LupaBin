@@ -57,7 +57,7 @@ def test_text_decodings_cite_the_string_holding_their_bytes():
             assert facts[ref].kind == "string"
             assert facts[ref].location == fact.location
         else:
-            assert fact.anchor.catalog == "dissect-xor-cribs-v2"
+            assert fact.anchor.catalog == "dissect-xor-cribs-v3"
             if fact.anchor.crib == "http://":  # reused key: cites the decoding that set it
                 [ref] = fact.provenance.evidence_ids
                 assert facts[ref].transform.key_hex == fact.transform.key_hex

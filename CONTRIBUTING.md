@@ -40,7 +40,7 @@ Después de un cambio aprobado, reconstruye la imagen y comprueba los tests YARA
 
 ## Decodificación y catálogo de cribs
 
-El catálogo XOR (`CRIBS` en `src/dissect/extractors/decode_xor.py`, versión `dissect-xor-cribs-v2`) es código revisado. Una crib es un ancla de búsqueda neutral elegida por su longitud, no por su significado: nombres de API o de DLL no se añaden para "detectar" nada. Una crib de *n* bytes solo verifica por sí sola claves de hasta unos *n*−5 bytes; las cribs cortas se aprovechan sobre todo cuando otra cadena de la muestra ya verificó la misma clave (reutilización de clave).
+El catálogo XOR (`CRIBS` en `src/dissect/extractors/decode_xor.py`, versión `dissect-xor-cribs-v3`) es código revisado. Una crib es un ancla de búsqueda neutral elegida por su longitud, no por su significado: nombres de API o de DLL no se añaden para "detectar" nada. Una crib de *n* bytes solo verifica por sí sola claves de hasta unos *n*−5 bytes; las cribs cortas se aprovechan sobre todo cuando otra cadena de la muestra ya verificó la misma clave (reutilización de clave).
 
 Para cambiar el catálogo:
 

@@ -111,6 +111,17 @@ def test_recovers_text_around_the_crib():
     assert decoded[hit.crib_offset :].startswith(hit.crib)
 
 
+def test_recovers_a_registry_path_in_utf16_under_a_four_byte_key():
+    # Shape of a real obfuscated string found in a benign system driver while
+    # choosing the v3 path anchors (design section 8); the key here is synthetic.
+    text = "\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Training"
+    data, start, end, key = plant(text, high_key(4, seed=21), encoding="utf-16-le")
+    [hit] = x.scan(data).hits
+    assert (hit.start, hit.end, hit.key) == (start, end, key)
+    assert hit.plaintext.decode("utf-16-le") == text
+    assert hit.crib == "\\Registry\\Machine\\"
+
+
 def test_several_cribs_in_one_run_yield_one_hit():
     text = "Mozilla/5.0 (Windows NT 10.0) http://x.invalid/kernel32.dll"
     data, start, end, key = plant(text, high_key(2, seed=5))
