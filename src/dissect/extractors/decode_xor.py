@@ -24,7 +24,7 @@ from dissect.evidence.primitives import (
 Encoding = Literal["ascii", "utf-16-le"]
 ENCODINGS: tuple[Encoding, ...] = ("ascii", "utf-16-le")
 
-CATALOG_ID: Literal["dissect-xor-cribs-v2"] = "dissect-xor-cribs-v2"
+CATALOG_ID: Literal["dissect-xor-cribs-v3"] = "dissect-xor-cribs-v3"
 # Neutral anchors chosen for length, not meaning: finding one says nothing about
 # capability or intent. Changing this tuple requires a new CATALOG_ID and digest.
 CRIBS: tuple[str, ...] = (
@@ -77,8 +77,24 @@ CRIBS: tuple[str, ...] = (
     "https://www.",
     "\\Microsoft\\Windows\\",
     "C:\\Windows\\System32",
+    # v3: path and registry fragments, chosen by coverage of real path strings in
+    # benign binaries (design section 8), plus two common persistence locations.
+    "\\Microsoft\\",
+    "\\windows\\",
+    "\\Windows\\",
+    "\\CurrentControlSet\\",
+    "\\system32\\",
+    "\\System32\\",
+    "\\Device\\",
+    "SOFTWARE\\",
+    "Software\\",
+    "\\Users\\",
+    "\\Registry\\Machine\\",
+    "\\ProgramData\\",
+    "%APPDATA%\\",
+    "\\Temp\\",
 )
-CATALOG_SHA256 = "f096f766792268443f6f1b5551c7f313a07c687918613c789e22bc84eea3111f"
+CATALOG_SHA256 = "517bf2b5b557fab3f75724a3fa7fb946605e11335a234c2d68fb5d8b5ff6ca5c"
 
 MAX_KEY_LENGTH = 8
 # Distinct keys (period >= 2) whose reuse is searched after the first pass; each one

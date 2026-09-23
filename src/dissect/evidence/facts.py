@@ -209,7 +209,7 @@ class DecodedStringData(Model):
 
 
 class XorAnchor(Model):
-    catalog: Literal["dissect-xor-cribs-v2"]
+    catalog: Literal["dissect-xor-cribs-v3"]
     crib: Annotated[str, Field(min_length=5, max_length=64)]
     crib_offset: NonNegative
 

@@ -11,7 +11,7 @@ La Fase 2 añade al contrato 0.3.0 una cuarta fuente, `decode`, y el tipo `decod
 | `component` | `decode_strings` (Base64/hex) o `decode_xor`. |
 | `location` | Dónde están los bytes codificados. Para Base64/hex coincide con la cadena fuente; para XOR es la región cifrada, de la misma longitud que el texto resultante. |
 | `transform` | `base64-strict-v1`, `hex-strict-v1` o `xor-repeating-v1`; solo XOR lleva `key_hex` (1–8 bytes, en su periodo mínimo, no nula, alineada con el inicio de `location`). |
-| `anchor` | Solo XOR: catálogo `dissect-xor-cribs-v2`, cadena de referencia y su desplazamiento en caracteres dentro del texto. |
+| `anchor` | Solo XOR: catálogo `dissect-xor-cribs-v3`, cadena de referencia y su desplazamiento en caracteres dentro del texto. |
 | `provenance.evidence_ids` | Base64/hex: exactamente la cadena fuente. XOR: vacío si la propia ancla verificó la clave; o la única decodificación XOR, verificada por sí misma, que estableció esa misma clave en otro punto de la muestra (reutilización de clave: permite descifrar anclas demasiado cortas para verificar una clave larga por sí solas). |
 | `data` | Mismas reglas de fidelidad que `string`: `text`, `raw_hex` del texto resultante, `characters`, `complete`. |
 
