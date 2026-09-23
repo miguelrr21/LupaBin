@@ -60,7 +60,7 @@ def _wrap(text: str, indent: str, first: str | None = None) -> list[str]:
         WIDTH,
         initial_indent=first if first is not None else indent,
         subsequent_indent=indent,
-        break_long_words=True,
+        break_long_words=False,
         break_on_hyphens=False,
     ) or [first or indent]
 
