@@ -22,6 +22,7 @@ from dissect.evidence.facts import (
     YaraEvidence,
 )
 from dissect.evidence.models import Report
+from dissect.explain.families import FAMILIES, PREVALENCE, family_of
 from dissect.explain.models import SlotValue
 from dissect.explain.text import hexadecimal, name, number, section_name
 
@@ -165,6 +166,35 @@ def _imports(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
         "functions": functions,
     }
     return slots, tuple(glossary)
+
+
+def _family(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """All imports, from any DLL or table, whose name is on one curated family list."""
+    imports = [fact for fact in cited if isinstance(fact, ImportEvidence)]
+    if not imports or len(imports) != len(cited):
+        return None
+    names = [name(fact.data.function) if fact.data.function else None for fact in imports]
+    families = {family_of(n) if n is not None else None for n in names}
+    family = families.pop() if len(families) == 1 else None
+    if family is None:
+        return None
+    group = tuple(
+        fact.id
+        for fact in report.evidence
+        if isinstance(fact, ImportEvidence)
+        and fact.data.function is not None
+        and family_of(name(fact.data.function)) == family
+    )
+    if tuple(fact.id for fact in imports) != group:
+        return None
+    slots: Slots = {
+        "count": len(imports),
+        "noun": "import pertenece" if len(imports) == 1 else "imports pertenecen",
+        "family": FAMILIES[family][0],
+        "share": PREVALENCE[family],
+        "functions": tuple(n for n in names if n is not None),
+    }
+    return slots, (f"api.family.{family}", "pe.imports")
 
 
 def _exports(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
@@ -370,6 +400,14 @@ RULES: dict[str, Rule] = {
             "Un import no demuestra que la función se ejecute ni con qué fin; y un programa "
             "puede usar funciones que no aparecen en esta tabla.",
             _imports,
+        ),
+        Rule(
+            "imports.family@1",
+            "{count} {noun} a la familia «{family}» de la lista curada de Dissect. En "
+            "binarios benignos medidos, el {share} importa alguna función de esta familia.",
+            "Estar en la lista no demuestra que el programa haga eso: es una pista para "
+            "estudiar, y muchos programas legítimos importan estas funciones.",
+            _family,
         ),
         Rule(
             "exports.table@1",

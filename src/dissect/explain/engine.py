@@ -15,9 +15,10 @@ from dissect.evidence.facts import (
     YaraEvidence,
 )
 from dissect.evidence.models import Report
+from dissect.explain.families import FAMILIES, family_of
 from dissect.explain.models import Explanation, Item, Note, ReportRef
 from dissect.explain.rules import RULES
-from dissect.explain.text import COMPONENTS, MESSAGES, SOURCES, STATUSES
+from dissect.explain.text import COMPONENTS, MESSAGES, SOURCES, STATUSES, name
 from dissect.glossary.catalog import Glossary
 
 RUN_STATUS = {"completed": "completo", "partial": "parcial", "failed": "fallido"}
@@ -94,6 +95,15 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
             groups.setdefault((fact.data.dll.raw_hex, fact.data.table), []).append(fact)
     for group in groups.values():
         yield "imports.dll@1", tuple(group)
+    members: dict[str, list[Evidence]] = {family: [] for family in FAMILIES}
+    for fact in evidence:
+        if isinstance(fact, ImportEvidence) and fact.data.function is not None:
+            family = family_of(name(fact.data.function))
+            if family is not None:
+                members[family].append(fact)
+    for group in members.values():
+        if group:
+            yield "imports.family@1", tuple(group)
     exports = tuple(fact for fact in evidence if isinstance(fact, ExportEvidence))
     if exports:
         yield "exports.table@1", exports
