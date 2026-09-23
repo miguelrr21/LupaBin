@@ -27,6 +27,8 @@ from dissect.analysis import analyze_bytes
 from dissect.evidence.code import verify_calls
 from dissect.evidence.facts import ApiCallEvidence, ImportEvidence
 from dissect.evidence.models import Limits, Report
+from dissect.extractors import code as code_extractor
+from dissect.extractors import code_entries
 from dissect.extractors.code import CodeExtractor
 from dissect.extractors.pe import PEExtractor
 from dissect.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
@@ -68,7 +70,21 @@ def outside(calls: list[ApiCallEvidence], ranges: list[tuple[int, int]]) -> int:
     return count
 
 
+def use_entries(names: str) -> None:
+    """Walk only from the entry point, exports and these tables (a measured variant)."""
+    chosen = frozenset(name for name in names.split(",") if name)
+    unknown = chosen - code_entries.SOURCES
+    if unknown:
+        raise SystemExit(f"unknown entry sources: {sorted(unknown)}")
+
+    def entries(layout, exports, limit):  # type: ignore[no-untyped-def]
+        return code_entries.entries(layout, exports, limit, chosen)
+
+    code_extractor.entries = entries  # type: ignore[assignment]
+
+
 def corpus(args: argparse.Namespace) -> None:
+    use_entries(args.entries)
     ext = tuple(e.strip().lower() for e in args.ext.split(","))
     totals: Counter[str] = Counter()
     via: Counter[str] = Counter()
@@ -107,6 +123,11 @@ def corpus(args: argparse.Namespace) -> None:
         called = {f.provenance.evidence_ids[0] for f in calls}
         ranges = functions(data)
         if ranges:
+            layout = parse_layout(data, Limits())
+            starts = {begin for begin, _ in ranges}
+            guard = code_entries.guard_targets(layout, 1 << 20)
+            totals["x64_guard_targets"] += len(guard)
+            totals["x64_guard_targets_in_pdata"] += sum(t in starts for t in guard)
             totals["x64_files"] += 1
             totals["x64_calls"] += len(calls)
             totals["outside_pdata"] += outside(calls, ranges)
@@ -212,6 +233,11 @@ def main() -> None:
     run.add_argument("--ext", default=".exe,.dll,.sys")
     run.add_argument("--stride", type=int, default=1)
     run.add_argument("--limit", type=int, default=0)
+    run.add_argument(
+        "--entries",
+        default=",".join(sorted(code_entries.SOURCES)),
+        help="tables the walk starts from, besides the entry point and exports",
+    )
     run.set_defaults(handler=corpus)
     case = commands.add_parser("worst")
     case.add_argument("--case", choices=WORST)

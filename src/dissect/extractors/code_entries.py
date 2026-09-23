@@ -8,6 +8,15 @@ from dissect.extractors.pe_layout import InvalidTable, Layout
 
 _TLS = 9
 _EXCEPTION = 3
+_LOAD_CONFIG = 10
+# IMAGE_LOAD_CONFIG_DIRECTORY offsets (winnt.h): SEHandlerTable/Count (x86 only) and
+# GuardCFFunctionTable/Count/GuardFlags, for 32 and 64 bits.
+_SEH = {32: (0x40, 0x44)}
+_GUARD = {32: (0x50, 0x54, 0x58), 64: (0x80, 0x88, 0x90)}
+_GUARD_TABLE_PRESENT = 0x400
+_GUARD_STRIDE_SHIFT = 28
+# Where the walk may start, all written by the compiler or linker, none guessed.
+SOURCES = frozenset({"tls", "pdata", "guard", "seh"})
 _TLS_CALLBACKS = 64
 _RUNTIME_FUNCTION = 12
 
@@ -24,17 +33,26 @@ def regions(layout: Layout) -> list[Region]:
     ]
 
 
-def entries(layout: Layout, exports: Iterable[int], limit: int) -> tuple[list[int], bool]:
-    """Entry point, exported code, TLS callbacks and, in x64, `.pdata` function starts.
+def entries(
+    layout: Layout, exports: Iterable[int], limit: int, sources: frozenset[str] = SOURCES
+) -> tuple[list[int], bool]:
+    """Entry point, exported code and the tables the toolchain writes: TLS callbacks,
+    x64 `.pdata` function starts, Control Flow Guard call targets and x86 SafeSEH
+    handlers.
 
     Returns at most `limit` distinct entries and whether any were left out. Unreadable
-    TLS or exception tables add no entries; they never invent any.
+    tables add no entries; they never invent any.
     """
     found = [layout.header.entry_point_rva] if layout.header.entry_point_rva else []
     found += exports
-    found += _tls_callbacks(layout)
-    if layout.bits == 64:
+    if "tls" in sources:
+        found += _tls_callbacks(layout)
+    if "pdata" in sources and layout.bits == 64:
         found += _function_starts(layout, limit + 1)
+    if "guard" in sources:
+        found += guard_targets(layout, limit + 1)
+    if "seh" in sources:
+        found += _safe_handlers(layout, limit + 1)
     unique = list(dict.fromkeys(found))
     return unique[:limit], len(unique) > limit
 
@@ -80,3 +98,67 @@ def _function_starts(layout: Layout, max_functions: int) -> list[int]:
         struct.unpack_from("<I", layout.data, offset + index * _RUNTIME_FUNCTION)[0]
         for index in range(count)
     ]
+
+
+def _load_config(layout: Layout) -> tuple[int, int] | None:
+    """(offset, declared size) of the load configuration directory, if readable."""
+    rva, size = _directory(layout, _LOAD_CONFIG)
+    if not rva or size < 4:
+        return None
+    try:
+        offset, end = layout.locate(rva, 4)
+    except InvalidTable:
+        return None
+    declared = struct.unpack_from("<I", layout.data, offset)[0]
+    return offset, min(declared, end - offset)
+
+
+def _field(layout: Layout, config: tuple[int, int], at: int, width: int) -> int | None:
+    offset, size = config
+    if at + width > size:
+        return None  # older linkers write a shorter structure
+    return int.from_bytes(layout.data[offset + at : offset + at + width], "little")
+
+
+def _rva_table(layout: Layout, va: int, count: int, stride: int, limit: int) -> list[int]:
+    base = layout.header.image_base
+    count = min(count, limit)
+    if va <= base or not count:
+        return []
+    try:
+        offset, _ = layout.locate(va - base, count * stride)
+    except InvalidTable:
+        return []
+    return [
+        struct.unpack_from("<I", layout.data, offset + index * stride)[0] for index in range(count)
+    ]
+
+
+def guard_targets(layout: Layout, limit: int) -> list[int]:
+    """Control Flow Guard's table of valid indirect-call targets: function starts."""
+    config = _load_config(layout)
+    if config is None:
+        return []
+    width = layout.bits // 8
+    table_at, count_at, flags_at = _GUARD[layout.bits]
+    table = _field(layout, config, table_at, width)
+    count = _field(layout, config, count_at, width)
+    flags = _field(layout, config, flags_at, 4)
+    if table is None or count is None or flags is None or not flags & _GUARD_TABLE_PRESENT:
+        return []
+    stride = 4 + (flags >> _GUARD_STRIDE_SHIFT)  # an RVA plus per-entry metadata bytes
+    return _rva_table(layout, table, count, stride, limit)
+
+
+def _safe_handlers(layout: Layout, limit: int) -> list[int]:
+    """x86 SafeSEH: the exception handlers the image registers, which are functions."""
+    if layout.bits != 32:
+        return []
+    config = _load_config(layout)
+    if config is None:
+        return []
+    table = _field(layout, config, _SEH[32][0], 4)
+    count = _field(layout, config, _SEH[32][1], 4)
+    if table is None or count is None:
+        return []
+    return _rva_table(layout, table, count, 4, limit)

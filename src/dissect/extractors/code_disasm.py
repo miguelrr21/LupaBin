@@ -13,6 +13,7 @@ an adversarial 20 MiB input (design section 7).
 
 import bisect
 import ctypes
+import struct
 from array import array
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -82,6 +83,13 @@ def _target(operand: bytes) -> int | None:
     return None
 
 
+# capstone's cs_insn layout (5.0.9): a batch is copied out once and only the id and
+# size are unpacked per instruction; ctypes field access cost more than decoding.
+_RECORD = ctypes.sizeof(capstone._cs_insn)
+_HEAD = struct.Struct("<I12xH")
+_OPERAND = capstone._cs_insn.op_str.offset
+
+
 def walk(
     regions: list[Region],
     entries: list[int],
@@ -99,8 +107,11 @@ def walk(
     engine = Cs(CS_ARCH_X86, CS_MODE_32 if bits == 32 else CS_MODE_64)
     disasm = capstone._cs.cs_disasm
     release = capstone._cs.cs_free
+    head = _HEAD.unpack_from
+    flow = _FLOW.get
     regions = sorted(regions, key=lambda region: region.rva)
     starts = [region.rva for region in regions]
+    ends = [region.end for region in regions]
     decoded = [bytearray(len(region.data)) for region in regions]
     bases = [
         ctypes.addressof((ctypes.c_char * len(region.data)).from_buffer(region.data))
@@ -109,65 +120,71 @@ def walk(
         for region in regions
     ]
     result = Walk()
+    instructions = calls = 0
     pending = array("I", reversed([entry for entry in entries if 0 <= entry < _LIMIT]))
     insn = ctypes.POINTER(capstone._cs_insn)()
+    pointer = ctypes.POINTER(ctypes.c_char)
     while pending:
         address = pending.pop()
         index = bisect.bisect_right(starts, address) - 1
-        if index < 0 or address >= regions[index].end:
+        if index < 0 or address >= ends[index]:
             continue
         region, marks, base = regions[index], decoded[index], bases[index]
-        position = address - region.rva
+        rva, data, length = region.rva, region.data, len(region.data)
+        position = address - rva
         if marks[position]:
             continue
         previous = 0
         running = True
-        while running and position < len(region.data):
-            window = min(_BATCH * 15, len(region.data) - position)
+        while running and position < length:
             count = disasm(
                 engine.csh,
-                ctypes.cast(base + position, ctypes.POINTER(ctypes.c_char)),
-                window,
-                region.rva + position,
+                ctypes.cast(base + position, pointer),
+                min(_BATCH * 15, length - position),
+                rva + position,
                 _BATCH,
                 ctypes.byref(insn),
             )
+            if not count:
+                break  # an undecodable byte
             try:
-                for number in range(count):
-                    item = insn[number]
-                    if marks[position]:
-                        running = False  # the rest of this run was already decoded
-                        break
-                    if result.instructions >= budget:
-                        result.limit = True
-                        return result
-                    size = item.size
-                    marks[position] = 1
-                    result.instructions += 1
-                    role = _FLOW.get(item.id)
-                    if role is not None:
-                        if role != _END:
-                            target = _target(item.op_str)
-                            # the next instruction is decoded by this run anyway (a jump
-                            # there is a no-op, a call there reads its own address)
-                            fall_through = region.rva + position + size
-                            if target is not None and target < _LIMIT and target != fall_through:
-                                pending.append(target)
-                        if role == _CALL:
-                            if result.calls >= call_budget:
-                                result.call_limit = True
-                                return result
-                            result.calls += 1
-                            visit(region.data, position, region.rva + position, size, previous)
-                        elif role != _BRANCH:
-                            running = False
-                            break
-                    previous = size
-                    position += size
-                else:
-                    if count < _BATCH:
-                        running = False  # an undecodable byte or the end of the section
+                batch = ctypes.string_at(insn, count * _RECORD)
             finally:
-                if count:
-                    release(insn, count)
+                release(insn, count)
+            for record in range(0, count * _RECORD, _RECORD):
+                if marks[position]:
+                    running = False  # the rest of this run was already decoded
+                    break
+                if instructions >= budget:
+                    result.instructions, result.calls, result.limit = instructions, calls, True
+                    return result
+                ident, size = head(batch, record)
+                marks[position] = 1
+                instructions += 1
+                role = flow(ident)
+                if role is not None:
+                    if role != _END:
+                        start = record + _OPERAND
+                        target = _target(batch[start : batch.index(b"\0", start)])
+                        # the next instruction is decoded by this run anyway (a jump
+                        # there is a no-op, a call there reads its own address)
+                        if target is not None and target < _LIMIT:
+                            if target != rva + position + size:
+                                pending.append(target)
+                    if role == _CALL:
+                        if calls >= call_budget:
+                            result.instructions, result.calls = instructions, calls
+                            result.call_limit = True
+                            return result
+                        calls += 1
+                        visit(data, position, rva + position, size, previous)
+                    elif role != _BRANCH:
+                        running = False
+                        break
+                previous = size
+                position += size
+            else:
+                if count < _BATCH:
+                    running = False  # an undecodable byte or the end of the section
+    result.instructions, result.calls = instructions, calls
     return result
