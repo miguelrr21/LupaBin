@@ -14,6 +14,7 @@ an adversarial 20 MiB input (design section 7).
 import bisect
 import ctypes
 import struct
+import time
 from array import array
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -46,6 +47,7 @@ _FLOW |= dict.fromkeys(
 # longest x86 instruction, so a window of _BATCH * 15 bytes never truncates a batch.
 _BATCH = 32
 _LIMIT = 0xFFFFFFFF
+_CLOCK_EVERY = 4096
 
 # visit(region bytes, offset of the call, its RVA, its size, size of the instruction
 # right before it in the same run or 0)
@@ -70,6 +72,7 @@ class Walk:
     calls: int = 0
     limit: bool = False  # the instruction budget stopped the walk
     call_limit: bool = False  # the call budget stopped the walk
+    time_limit: bool = False  # the deadline stopped the walk
 
 
 def _target(operand: bytes) -> int | None:
@@ -97,12 +100,15 @@ def walk(
     budget: int,
     visit: Visitor,
     call_budget: int,
+    deadline: float = float("inf"),
 ) -> Walk:
     """Decode every instruction reachable from `entries` without resolving indirection.
 
     Every `call` is passed to `visit`; its target, when constant, is walked too.
     Stops after `budget` instructions or `call_budget` calls, whichever comes first:
     classifying a call costs several times more than decoding an instruction.
+    Also stops when `time.monotonic()` passes `deadline`, checked every
+    _CLOCK_EVERY instructions.
     """
     engine = Cs(CS_ARCH_X86, CS_MODE_32 if bits == 32 else CS_MODE_64)
     disasm = capstone._cs.cs_disasm
@@ -157,6 +163,10 @@ def walk(
                     break
                 if instructions >= budget:
                     result.instructions, result.calls, result.limit = instructions, calls, True
+                    return result
+                if not instructions % _CLOCK_EVERY and time.monotonic() > deadline:
+                    result.instructions, result.calls = instructions, calls
+                    result.time_limit = True
                     return result
                 ident, size = head(batch, record)
                 marks[position] = 1

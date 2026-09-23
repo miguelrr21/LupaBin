@@ -320,6 +320,13 @@
           "maximum": 4000000,
           "title": "Instructions",
           "type": "integer"
+        },
+        "seconds": {
+          "default": 15,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Seconds",
+          "type": "integer"
         }
       },
       "title": "CodeLimits",
@@ -389,6 +396,13 @@
     "DecodeLimits": {
       "additionalProperties": false,
       "properties": {
+        "seconds": {
+          "default": 10,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Seconds",
+          "type": "integer"
+        },
         "strings": {
           "default": 2000,
           "exclusiveMinimum": 0,
@@ -823,10 +837,12 @@
                 "decode_xor_limit",
                 "decode_xor_examined_limit",
                 "decoded_length_limit",
+                "decode_time_limit",
                 "unsupported_architecture",
                 "code_instruction_limit",
                 "code_entry_limit",
                 "call_site_limit",
+                "code_time_limit",
                 "api_call_limit"
               ],
               "type": "string"

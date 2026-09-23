@@ -53,12 +53,15 @@ class DecodeExtractor:
             max_hits=limits.decode.xor,
             max_examined=limits.decode.xor_examined,
             max_chars=limits.string_characters,
+            deadline=collector.started + min(limits.decode.seconds, limits.timeout_seconds / 3),
         )
         progress.examined["decode_xor"] = result.examined
         if result.examined_limit:
             progress.issue("decode_xor", "decode_xor_examined_limit", limit=True)
         if result.hit_limit:
             progress.issue("decode_xor", "decode_xor_limit", limit=True)
+        if result.time_limit:
+            progress.issue("decode_xor", "decode_time_limit", limit=True)
         # self-verified hits first, so a reused key can cite the decoding that set it
         ordered = sorted(result.hits, key=lambda hit: hit.verified_by is not None)
         for hit in ordered:
