@@ -65,12 +65,18 @@ class DecodeLimits(Model):
     strings: Annotated[int, Field(gt=0, le=2000)] = 2000
     xor: Annotated[int, Field(gt=0, le=256)] = 256
     xor_examined: Annotated[int, Field(gt=0, le=200000)] = 200000
+    # The XOR scan stops once the analysis has run this long (or a third of
+    # timeout_seconds, if less), leaving time for the code walk and the report.
+    seconds: Annotated[int, Field(gt=0, le=30)] = 10
 
 
 class CodeLimits(Model):
     instructions: Annotated[int, Field(gt=0, le=4000000)] = 4000000
     entries: Annotated[int, Field(gt=0, le=262144)] = 262144
     call_sites: Annotated[int, Field(gt=0, le=262144)] = 262144
+    # The walk stops once the analysis has run this long (or half of timeout_seconds, if
+    # less): it is the last source, and a timeout would lose the whole report.
+    seconds: Annotated[int, Field(gt=0, le=30)] = 15
     calls: Annotated[int, Field(gt=0, le=4096)] = 4096
 
 
