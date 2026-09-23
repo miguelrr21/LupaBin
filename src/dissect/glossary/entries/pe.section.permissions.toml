@@ -1,0 +1,20 @@
+id = "pe.section.permissions"
+title = "Permisos de una sección"
+revision = "1.0.0"
+lang = "es"
+summary = "Cada sección de un PE declara si su contenido podrá leerse, escribirse o ejecutarse como código una vez cargado en memoria."
+body = """
+El campo Characteristics de la cabecera de cada sección incluye tres indicadores de memoria: \
+IMAGE_SCN_MEM_READ (la sección se puede leer), IMAGE_SCN_MEM_WRITE (se puede escribir) \
+e IMAGE_SCN_MEM_EXECUTE (se puede ejecutar como código). El cargador de Windows los usa \
+para fijar la protección de las páginas donde coloca la sección.
+
+Lo habitual es que el código esté en una sección de lectura y ejecución, y los datos en \
+secciones de lectura, o de lectura y escritura. Una sección que declara escritura y ejecución \
+a la vez es menos común: la usan algunos empaquetadores y programas que generan código en \
+tiempo de ejecución, pero también compiladores y enlazadores antiguos o poco convencionales.
+"""
+not_proven = "Los permisos declarados no demuestran que el programa escriba en esa sección ni que ejecute lo que haya en ella."
+sources = [
+  { title = "PE Format: Section Flags", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-flags", verified_on = 2026-09-23 },
+]
