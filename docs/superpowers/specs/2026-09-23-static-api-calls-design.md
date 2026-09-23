@@ -199,3 +199,33 @@ La base del proceso (intérprete y entrada de 20 MiB) ocupa 101 MiB. Variantes m
 Pendiente de decidir con medición:
 - Un binario benigno real agota el máximo de llamadas examinadas. Subirlo a 524.288 costaría unos 2 s más en el peor caso de llamadas (≈ 7 µs por llamada), que seguiría por debajo del caso `jz`. Exige cambiar el contrato y repetir estas mediciones.
 - Falta medir un peor caso combinado (mitad del archivo diseñada contra la decodificación de la Fase 2 y mitad contra el recorrido).
+
+### 9.5 Revisión: más puntos de partida y límites de tiempo (2026-09-23)
+
+**Tablas del compilador como puntos de partida.** El recorrido parte además de la tabla de funciones de Control Flow Guard (`GuardCFFunctionTable`, x86 y x64) y de los manejadores SafeSEH (x86). Validación en x64, donde `.pdata` sirve de referencia (System32, `--stride 20`, 205 archivos):
+
+| Puntos de partida | Imports por nombre con alguna llamada | Llamadas | Fuera de `.pdata` |
+| --- | --- | --- | --- |
+| Entrada, exports y TLS | 36,4 % | 50.909 | 0 |
+| + `.pdata` | 89,6 % | 197.809 | 0 |
+| + Control Flow Guard, **sin** `.pdata` | 87,7 % | 190.103 | 0 |
+| Todas | 89,6 % | 197.809 | 0 |
+
+Solo desde la tabla de Control Flow Guard se alcanza el 96 % de las llamadas que alcanza `.pdata`, y ninguna fuera de una función declarada. De 15.586 destinos de esa tabla en 60 DLL, 9.241 son inicios de `.pdata` y ninguno cae dentro del cuerpo de otra función. Los 6.345 restantes quedan fuera de todos los rangos; una muestra desensamblada a mano mostró funciones hoja (`mov eax, 0x40; ret`) y *adjustor thunks* de C++ (`sub rcx, 0x10; jmp …`), que no llevan entrada en `.pdata`.
+
+En x86 (SysWOW64, `--stride 10`, 260 archivos), los imports por nombre con alguna llamada pasan del **44,5 % al 90,9 %** (18.174 → 37.173) y las llamadas, de 81.521 a 215.544. SafeSEH aporta poco (23 imports más) pero no cuesta nada. Precio: el p99 de PE+código en el host pasa de 2,2 s a 10,4 s.
+
+**Bucle del recorrido.** Cada lote de capstone se copia una vez y solo se desempaquetan el identificador y el tamaño (`Windows.UI.Xaml.dll`: 17,5 → 14,8 s). Se midió un lote adaptativo (empezar con 4, 8 o 16 instrucciones y duplicar): sin ganancia fuera del ruido, descartado.
+
+**Límites de tiempo.** Con el portátil en batería, la máquina virtual de Docker iba unas 2,5 veces más lenta: `Windows.UI.Xaml.dll` pasó de 12,2 s a más de 30 s y el análisis terminó en `timeout`, sin informe. Ahora el recorrido se detiene cuando el análisis lleva `code.seconds` (15 s, o la mitad de `timeout_seconds`), y la búsqueda XOR de la Fase 2 a los 10 s. Cada uno lo declara con su código. En el contenedor, en batería:
+
+| Entrada | Total | Límites alcanzados |
+| --- | --- | --- |
+| `nop` continuo, 20 MiB | 21,9 s | `decode_time_limit` (el código completa sus 4.000.000 instrucciones) |
+| `jz` continuo, 20 MiB | 20,0 s | `decode_time_limit`, `code_time_limit` |
+| `call [casilla]` continuo, 20 MiB | 18,3 s | `decode_time_limit` |
+| `Windows.UI.Xaml.dll` | 21,6 s | `decode_time_limit`, `code_time_limit` |
+| `mshtml.dll` (x86) | 21,6 s | `decode_time_limit`, `code_time_limit` |
+| `shell32.dll` | 20,7 s | ninguno (código completo; llamadas publicadas en su cuota) |
+
+Ningún caso agota ya los 30 s. El coste es que, en una máquina lenta, los DLL benignos más grandes quedan parciales en XOR y código; en la misma máquina conectada a la corriente se completaban. Se prefirió este reparto conservador: un timeout pierde el informe entero.
