@@ -1,6 +1,6 @@
 # Hoja de ruta y trabajo pendiente
 
-Actualizado: 2026-09-22.
+Actualizado: 2026-09-23.
 
 ## Objetivo que guía todo lo siguiente
 
@@ -13,7 +13,7 @@ El usuario quiere que Dissect sea **lo más optimizado posible y con la tasa de 
 
 ## Estado actual
 
-- **Fase 2 (decodificación, contrato 0.4.0)**: implementada y verificada en local. 360 tests y 10 pruebas en Docker real en verde; 0 falsos positivos XOR y 0 decodificaciones Base64/hex espurias en 4.516 archivos benignos de System32.
+- **Fase 2 (decodificación, contrato 0.4.0, catálogo de anclas v3)**: implementada y verificada en local. 361 tests y 10 pruebas en Docker real en verde. Ruido medido: 0 en XOR y 0 en Base64/hex sobre un corpus benigno ampliado (System32, SysWOW64, drivers, .NET y Program Files: más de 30.000 archivos, unos 13 GB). Todas las decodificaciones encontradas en ese corpus se revisaron a mano y son auténticas (sección 8 del diseño).
 - Diseño y mediciones: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
 
 ## Pendiente para cerrar la Fase 2
@@ -28,17 +28,17 @@ Cifras de la sección 8 del diseño de la Fase 2: 43 textos realistas, 150 prueb
 
 | Límite | Cifra actual | Por qué | Línea de mejora a investigar (medir falsos positivos antes) |
 | --- | --- | --- | --- |
-| Cadena aislada con clave de 8 bytes | 33 % ASCII / 57 % UTF-16LE | Una crib de *n* bytes solo verifica claves de hasta ~*n*−5 | Más anclas largas y neutrales, elegidas con un conjunto de evaluación independiente para no sobreajustar |
-| Cadena con clave compartida de 8 bytes | 81 % (techo del conjunto: 77 % + ruido) | Ya en el techo: el resto no tiene crib | Solo mejora si baja la fracción de textos sin ancla (fila siguiente) |
+| Cadena aislada con clave de 8 bytes | 37 % ASCII / 62 % UTF-16LE | Una crib de *n* bytes solo verifica claves de hasta ~*n*−5 | Más anclas largas y neutrales, elegidas con un conjunto de evaluación independiente para no sobreajustar |
+| Cadena con clave compartida de 8 bytes | 92 % (techo del conjunto: 86 % + ruido) | Ya en el techo: el resto no tiene crib | Solo mejora si baja la fracción de textos sin ancla (fila siguiente) |
 | Textos sin ninguna crib | 0 % | Por diseño: sin ancla habría que puntuar plausibilidad | Con una clave ya verificada, descifrar texto sin crib solo si hay evidencia estructural extra (tabla de cadenas contigua, terminadores NUL cifrados); es el candidato de mayor ganancia y mayor riesgo |
-| Rutas y registro | 41 % con clave compartida | La mayoría de rutas no contiene ninguna crib | Anclas de rutas comunes (`\Users\`, `%APPDATA%`, `\ProgramData\`), si pasan la medición |
+| Rutas y registro | Rutas reales reservadas: ~45–50 % (claves de 1–4 bytes u 8 compartida; antes ~10 %); 6 % aisladas en ASCII con clave de 8 | Hecho en v3 (14 anclas de rutas). El techo sobre rutas reales es 50 %: la otra mitad no contiene ningún fragmento común | Anclas más largas (≥ 13 caracteres) para verificar solas claves de 8 bytes; elegirlas con la misma separación entrenamiento/reserva |
 | Claves pequeñas que dejan el texto cifrado legible | 62 % frente a 77 % con clave ≥ 0x80 (1 byte) | Indistinguible de texto⊕texto sin puntuar | Buscar evidencia estructural, no puntuaciones |
 | Transformaciones fuera de alcance | — | Base32, ROT/ADD/ROL, XOR rodante o incremental, RC4 con clave presente, compresión, claves de más de 8 bytes | Cada una requiere su propio diseño y medición |
-| Rendimiento | Primera pasada: 2,7 s con 20 MiB; reutilización: 5,7 s en el peor caso (8 claves) | Búsqueda de patrones en Python sobre diferenciales en C | Búsqueda multipatrón en una sola pasada; perfilar antes de optimizar |
+| Rendimiento | Primera pasada: 3,3 s con 20 MiB; reutilización: 9,0 s en el peor caso (8 claves); análisis completo del peor caso en el contenedor: 10,3 s de 30 | Perfilado: una pasada de `bytes.find` por plan (453), ya a ~3 GB/s en C | Solo queda un buscador multipatrón nativo (dependencia compilada en el worker): requiere diseño propio. Variantes en Python puro medidas y descartadas en la sección 7 del diseño |
 
 ## Mejorar la propia evaluación
 
-- **Corpus benigno más variado** que System32: instaladores, binarios .NET, drivers, software de terceros. Un corpus más diverso da una cifra de falsos positivos más robusta.
+- **Corpus benigno más variado**: hecho con SysWOW64, drivers, .NET y Program Files (`--recursive --ext --stride --only`). Quedan instaladores y binarios empaquetados.
 - **Textos de evaluación independientes** del catálogo, escritos por alguien que no diseñó las anclas, para medir la cobertura sin sesgo.
 - Solo datos sintéticos o benignos: no descargar ni versionar malware real (`AGENTS.md`).
 
