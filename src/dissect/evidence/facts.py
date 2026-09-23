@@ -22,6 +22,8 @@ class ImportData(Model):
     function: Name | None = None
     ordinal: Annotated[int, Field(ge=0, le=65535)] | None = None
     table: Literal["normal", "delay"]
+    # RVA of this import's slot in the import address table, where calls point.
+    iat_rva: Annotated[int, Field(gt=0, le=0xFFFFFFFF)]
 
     @model_validator(mode="after")
     def name_or_ordinal(self) -> Self:

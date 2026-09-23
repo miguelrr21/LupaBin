@@ -264,7 +264,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "0.4.0",
+          "const": "0.5.0",
           "title": "Schema Version",
           "type": "string"
         }

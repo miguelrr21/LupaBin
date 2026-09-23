@@ -72,7 +72,13 @@ def read_imports(
                 f"pe:import:{table}:{number}:{entry}",
                 progress,
                 component,
-                ImportData(dll=dll, function=function, ordinal=ordinal, table=table),
+                ImportData(
+                    dll=dll,
+                    function=function,
+                    ordinal=ordinal,
+                    table=table,
+                    iat_rva=iat + entry * width,
+                ),
                 layout.location(address, width),
             ):
                 return
