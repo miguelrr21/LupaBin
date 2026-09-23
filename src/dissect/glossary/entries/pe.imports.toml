@@ -1,0 +1,12 @@
+id = "pe.imports"
+title = "Tabla de imports"
+revision = "1.0.0"
+lang = "es"
+summary = "La tabla de imports enumera las DLL y las funciones de otras bibliotecas que el programa pide al cargador de Windows que resuelva al arrancar (enlace en tiempo de carga)."
+body = "Para cada DLL, la tabla contiene una lista de funciones, por nombre o por número (ordinal). El cargador busca cada una y escribe su dirección en la tabla de direcciones de import (IAT), a través de la cual llama el programa.\n\nUn import indica que el programa se enlazó contra esa función. No indica cuántas veces se llama, si se llama alguna vez, ni para qué: muchos imports vienen del compilador o de bibliotecas que el programa incluye sin usarlas.\n\nLo contrario tampoco se cumple: un programa puede obtener funciones en tiempo de ejecución sin que aparezcan en esta tabla (ver enlace dinámico en tiempo de ejecución)."
+not_proven = "Un import no demuestra que la función se ejecute ni con qué fin; su ausencia no demuestra que no se use."
+related = ["pe.imports.delay", "pe.imports.ordinal", "pe.imports.runtime_linking"]
+sources = [
+  { title = "PE Format: The .idata Section", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-idata-section", verified_on = 2026-09-23 },
+  { title = "Load-Time Dynamic Linking", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/dlls/load-time-dynamic-linking", verified_on = 2026-09-23 },
+]

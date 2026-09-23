@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
 ## Estado y alcance
 
-Fase 2, contrato 0.4.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA y decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes), mediante CLI JSON y worker Docker. No ejecuta ni emula la muestra. No incluye todavía informes didácticos completos, web, LLM, VirusTotal, capa, FLOSS ni desempaquetado.
+Contrato de hechos 0.4.0 (Fases 1A, 1B y 2): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA y decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes), producidos en un worker Docker aislado. Fase 3 (en la rama `feat/didactic-glossary`): un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario de 38 entradas con fuentes verificadas. No ejecuta ni emula la muestra. No incluye todavía web, LLM, VirusTotal, capa, FLOSS ni desempaquetado.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -25,8 +25,17 @@ Desde la raíz del repositorio, con una entrada local disponible:
 ```text
 uv sync --frozen
 docker build --load -f docker/Dockerfile -t dissect-worker:0.4.0 .
-uv run --frozen dissect analyze "ruta/al/archivo.exe" --json
+uv run --frozen dissect analyze "ruta/al/archivo.exe"
 ```
+
+Por defecto se muestra el informe didáctico. `--json` emite el informe de hechos validado (para guardarlo o procesarlo) y `--markdown` el informe didáctico en Markdown. Un informe guardado se puede explicar sin repetir el análisis:
+
+```text
+uv run --frozen dissect analyze "ruta/al/archivo.exe" --json > informe.json
+uv run --frozen dissect explain informe.json --sample "ruta/al/archivo.exe"
+```
+
+Con `--sample`, el host repite sus comprobaciones contra la muestra (hashes, cada decodificación y cada coincidencia YARA) y rechaza un informe que los bytes contradigan. Sin `--sample`, el informe explicado lleva un aviso visible: su estructura es válida, pero nada garantiza que proceda de la muestra. `--format json` emite el documento de explicaciones (contrato 0.1.0).
 
 El parser se ejecuta en un contenedor sin red, sin capacidades adicionales, con usuario no root y raíz de solo lectura. La CLI no ejecuta el parser en el host si Docker falla. La imagen se resuelve a su ID local antes del análisis. No se montan archivos ni el socket Docker en el worker; la muestra se transmite como bytes por stdin.
 
@@ -43,9 +52,20 @@ uv run --frozen dissect analyze samples/phase1a-partial.bin --json
 
 El generador no sobrescribe archivos existentes. Consulta [la procedencia de los fixtures](samples/README.md). No ejecutes los archivos generados.
 
+## Qué aporta el informe didáctico
+
+El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, tipo y si el informe se acaba de producir o se cargó de un archivo), **qué no se pudo analizar**, los hechos observados, las inferencias (resultados de aplicar una transformación) y el glosario de los términos usados, con sus fuentes.
+
+- Cada frase la genera una regla determinista a partir de las evidencias que cita (`X1`, `X2`… citan `E1`, `E2`…). Antes de mostrarla, el validador la regenera desde esas citas y exige que coincida exactamente; una frase alterada no se muestra, y se dice cuántas se omitieron.
+- Cada frase lleva su **límite**: lo que ese hecho no demuestra. Por ejemplo, una sección con permisos de escritura y ejecución no demuestra que se ejecute código escrito en ella.
+- Las cifras de contexto están medidas. Una entropía de 7,2 o más solo la alcanza el 0,34 % de las secciones de 4 KiB o más en 55.313 binarios benignos. Los imports se agrupan en nueve familias curadas con su prevalencia benigna: por ejemplo, el 32,2 % de los binarios benignos importa alguna función de comprobación de depuradores.
+- Todo texto que procede de la muestra (nombres, cadenas, textos decodificados) se neutraliza antes de mostrarse: los caracteres de control, de escape de terminal y bidi se convierten en escapes visibles, y en Markdown van en bloques de código inertes.
+
+Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md).
+
 ## Salida y abstención
 
-La salida es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
+La salida `--json` es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
 
 - `completed`: los cuatro extractores completaron su cobertura declarada; no es un veredicto de seguridad.
 - `partial`: una parte se revisó, pero existen componentes bloqueados, errores u omisiones. Puede no haber hallazgos.
@@ -89,13 +109,13 @@ El fixture contiene veinte apariciones ASCII del marcador. Con los límites pred
 Cada `decoded_string` dice exactamente esto: "estos bytes, transformados con este algoritmo y estos parámetros, producen este texto". Es siempre `confidence: "inferred"`. No afirma que el programa realice la transformación, que el texto sea el que pretendía su autor ni que tenga significado (una URL decodificada no prueba una conexión).
 
 - **Base64 y hexadecimal** (`component: decode_strings`): sobre las cadenas ya extraídas, con validación estricta (Base64 canónico de al menos 12 caracteres si lleva relleno `=` o 16 si no; hexadecimal que no sea solo dígitos decimales, porque un número como `2147483647` también es hexadecimal válido; el texto resultante debe ser imprimible y tener al menos 4 caracteres distintos). Citan en `provenance` la cadena que contiene los bytes codificados.
-- **XOR de clave repetida de 1 a 8 bytes** (`component: decode_xor`): sobre los bytes crudos, anclado en un catálogo versionado de cadenas de referencia (`anchor`, p. ej. `http://`, `kernel32.dll`, `User-Agent: `; 48 en la versión 2). La clave no se elige entre candidatas: se deriva de los bytes y se publica en `transform.key_hex`, alineada con el inicio de `location`. Cualquiera puede comprobarla: `texto[i] = bytes[inicio + i] XOR clave[i mod longitud]`. Si una cadena usa una clave ya verificada en otro punto de la muestra (lo habitual en tablas de cadenas cifradas), también se descifra aunque su ancla sea corta, y cita en `provenance` la decodificación que estableció la clave.
+- **XOR de clave repetida de 1 a 8 bytes** (`component: decode_xor`): sobre los bytes crudos, anclado en un catálogo versionado de cadenas de referencia (`anchor`, p. ej. `http://`, `kernel32.dll`, `\Registry\Machine\`; 62 en la versión 3). La clave no se elige entre candidatas: se deriva de los bytes y se publica en `transform.key_hex`, alineada con el inicio de `location`. Cualquiera puede comprobarla: `texto[i] = bytes[inicio + i] XOR clave[i mod longitud]`. Si una cadena usa una clave ya verificada en otro punto de la muestra (lo habitual en tablas de cadenas cifradas), también se descifra aunque su ancla sea corta, y cita en `provenance` la decodificación que estableció la clave.
 
-Límites honestos del método, medidos sobre 4.516 archivos reales de Windows (0 falsos positivos XOR y 0 decodificaciones Base64/hex espurias) y documentados en [el diseño de la Fase 2](docs/superpowers/specs/2026-09-22-static-decoding-design.md):
+Límites honestos del método, medidos sobre más de 30.000 archivos benignos de Windows y programas instalados (0 decodificaciones espurias; todas las encontradas eran ofuscación real y se revisaron a mano) y documentados en [el diseño de la Fase 2](docs/superpowers/specs/2026-09-22-static-decoding-design.md):
 
 - Un texto cifrado que **no contenga ninguna cadena del catálogo no se encuentra**.
 - Si la clave deja el texto cifrado todavía legible (claves pequeñas, típicamente `< 0x20`), **no se publica**: sin puntuar plausibilidad es indistinguible de texto normal. Esos bytes siguen visibles como `string`.
-- Una ancla corta solo verifica por sí sola claves cortas (`http://`, 7 bytes, nunca una clave de 8). Con claves de 8 bytes la cobertura medida es del 33 % para una cadena aislada y del 81 % cuando otra cadena de la muestra comparte la clave (el techo alcanzable en el conjunto de prueba es del 77 %: el resto no contiene ninguna ancla).
+- Una ancla corta solo verifica por sí sola claves cortas (`http://`, 7 bytes, nunca una clave de 8). Con claves de 8 bytes la cobertura medida es del 37 % para una cadena aislada y del 92 % cuando otra cadena de la muestra comparte la clave (el techo alcanzable en el conjunto de prueba es del 86 %: el resto no contiene ninguna ancla).
 - No hay desempaquetado, compresión, RC4, XOR rodante ni emulación.
 
 El host no confía en el worker: vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta si alguna no se reproduce. Una muestra con millones de patrones candidatos termina como limitación declarada (`decode_xor_examined_limit`), no como timeout.
@@ -116,10 +136,13 @@ CLI -> lectura acotada + hashes -> Docker sin red
     -> decodificación: Base64/hex sobre cadenas, XOR anclado sobre bytes
     -> presupuesto y modelos Pydantic
     -> validación de respuesta y reverificación de decodificaciones en el host -> JSON
+    -> explicaciones deterministas (host) + glosario con fuentes
+    -> validación por regeneración -> texto / Markdown con texto de la muestra neutralizado
 ```
 
 - [Contrato y diseño](docs/evidence-schema.md).
-- [JSON Schema generado](docs/evidence-schema.json).
+- [JSON Schema generado](docs/evidence-schema.json) y [el de las explicaciones](docs/explanation-schema.json).
+- [Diseño de la Fase 3: explicaciones y glosario](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md).
 - [Decisión sobre bytes originales](docs/decisions/001-original-import-bytes.md).
 - [Reglas de veracidad](AGENTS.md).
 
@@ -133,6 +156,7 @@ uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
 uv run --frozen python -m dissect.evidence.schema --check
+uv run --frozen python -m dissect.explain.schema --check
 uv build
 uv run --frozen python -m tests.check_yara_distribution
 docker compose config --quiet
@@ -142,7 +166,7 @@ uv run --frozen pytest -m docker
 
 Las pruebas Docker fallan si se solicitan sin motor o imagen; no se omiten silenciosamente. La suite ordinaria excluye explícitamente ese marcador. `docker compose build worker` es una alternativa de build; el servicio Compose de esta entrega es un worker de consola, no una web. `docker compose up` todavía no ofrece la experiencia web del MVP final.
 
-Para actualizar el esquema tras cambios aprobados en los modelos: `uv run python -m dissect.evidence.schema`. No editar manualmente el JSON generado.
+Para actualizar los esquemas tras cambios aprobados en los modelos: `uv run python -m dissect.evidence.schema` y `uv run python -m dissect.explain.schema`. No editar manualmente el JSON generado. `uv run python -m tests.check_glossary_sources` comprueba con red que las fuentes del glosario y sus anclas siguen existiendo; no forma parte de la CI.
 
 Para repetir las mediciones de falsos positivos, cobertura y tiempo de la decodificación sobre un directorio de binarios benignos propio (solo se leen como bytes; no forma parte de la CI):
 
