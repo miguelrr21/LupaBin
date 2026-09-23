@@ -2,7 +2,8 @@
 
 The worker never has network access; this runs in the host process after (or instead
 of) the isolated analysis. Only the SHA-256 is sent unless upload is explicitly asked
-for. The API key is read from VT_API_KEY and never written anywhere.
+for. The API key comes from the VT_API_KEY variable or, failing that, from a git-ignored
+.env file in the current directory; it is never written to any output.
 """
 
 import json
@@ -14,6 +15,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from dissect.virustotal.models import Problem, VirusTotalReport
@@ -171,6 +173,36 @@ class Client:
         return self._report(sha256, status="queued", uploaded=True)
 
 
+MAX_ENV_FILE = 64 * 1024
+
+
+def key_from_env_file(path: Path) -> str:
+    """VT_API_KEY from a local .env file (KEY=VALUE lines); other variables are ignored.
+
+    The file is git-ignored and never enters the worker image or the package.
+    """
+    try:
+        with path.open("rb") as stream:
+            raw = stream.read(MAX_ENV_FILE + 1)
+    except OSError:
+        return ""
+    if len(raw) > MAX_ENV_FILE:
+        return ""
+    for line in raw.decode("utf-8", "replace").splitlines():
+        name, separator, value = line.strip().partition("=")
+        if separator and name.strip().removeprefix("export ").strip() == KEY_VARIABLE:
+            return value.strip().strip("'\"")
+    return ""
+
+
+def api_key(environ: dict[str, str] | None = None, env_file: Path | None = None) -> str:
+    """The environment variable wins; otherwise .env in the current directory."""
+    value = (environ if environ is not None else os.environ).get(KEY_VARIABLE, "").strip()
+    if value or environ is not None:
+        return value
+    return key_from_env_file(env_file if env_file is not None else Path.cwd() / ".env")
+
+
 def consult(
     sha256: str,
     data: bytes | None = None,
@@ -181,7 +213,7 @@ def consult(
     environ: dict[str, str] | None = None,
 ) -> VirusTotalReport:
     """Never raises: failures become status "unavailable" with their problem."""
-    key = (environ if environ is not None else os.environ).get(KEY_VARIABLE, "").strip()
+    key = api_key(environ)
     client = Client(key, transport, sleep)
     if not key:
         return client._report(sha256, status="unavailable", problem="key_missing")

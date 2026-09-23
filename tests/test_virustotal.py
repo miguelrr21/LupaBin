@@ -333,3 +333,25 @@ def test_explain_consults_by_the_report_hash(tmp_path, monkeypatch):
     result = runner.invoke(app, ["explain", str(report), "--virustotal"])
     assert result.exit_code == 0 and "Fuente externa" in result.stdout
     assert calls == [(json.loads(saved.stdout)["sample"]["sha256"], False)]
+
+
+def test_key_comes_from_the_environment_first_then_from_a_local_env_file(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text('OTHER=1\n# comment\nVT_API_KEY="from-file"\n', encoding="utf-8")
+    monkeypatch.delenv("VT_API_KEY", raising=False)
+    assert vt_client.api_key(env_file=env) == "from-file"
+    monkeypatch.setenv("VT_API_KEY", "from-environment")
+    assert vt_client.api_key(env_file=env) == "from-environment"
+    monkeypatch.delenv("VT_API_KEY")
+    assert vt_client.api_key(env_file=tmp_path / "missing.env") == ""
+    env.write_bytes(b"x" * (vt_client.MAX_ENV_FILE + 1))
+    assert vt_client.api_key(env_file=env) == ""
+
+
+def test_the_repository_never_tracks_or_ships_an_env_file():
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    assert ".env" in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    docker = (root / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert docker[0] == "*" and not any(".env" in line for line in docker)
