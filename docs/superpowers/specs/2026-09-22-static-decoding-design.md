@@ -1,6 +1,6 @@
 # Fase 2: decodificación estática acotada (Base64/hex/XOR)
 
-Estado: revisión 2 (2026-09-22), implementada. La revisión 1 proponía aplicar XOR sobre las cadenas ya extraídas y filtrar con un umbral de ambigüedad `K`; al ejecutarla sobre datos reales resultó estructuralmente errónea (sección 2.2). Esta revisión corrige el enfoque XOR con un método medido sobre 4.092 binarios reales (sección 8). El usuario pidió corregir el problema y continuar la implementación. El contrato ejecutable es 0.4.0 (sección 11).
+Estado: revisión 2 (2026-09-22), implementada; segunda ronda de optimización medida el 2026-09-23 (catálogo v3). La revisión 1 proponía aplicar XOR sobre las cadenas ya extraídas y filtrar con un umbral de ambigüedad `K`; al ejecutarla sobre datos reales resultó estructuralmente errónea (sección 2.2). Esta revisión corrige el enfoque XOR con un método medido sobre 4.092 binarios reales (sección 8). El usuario pidió corregir el problema y continuar la implementación. El contrato ejecutable es 0.4.0 (sección 11).
 
 ## 1. Propósito y límites del producto
 
@@ -80,6 +80,8 @@ Cadenas neutrales frecuentes en texto de binarios Windows, elegidas por longitud
 
 La versión 2 añade veinte anclas largas para que una cadena aislada pueda verificar claves de hasta 8 bytes: `GetModuleHandle`, `VirtualProtect`, `IsDebuggerPresent`, `CreateToolhelp32Snapshot`, `NtUnmapViewOfSection`, `InternetReadFile`, `HttpOpenRequest`, `RegSetValueEx`, `Content-Type: `, `Content-Length: `, `Accept-Language: `, `HTTP/1.1`, `powershell.exe`, `rundll32.exe`, `cmd.exe /c `, `schtasks /create`, `http://www.`, `https://www.`, `\Microsoft\Windows\` y `C:\Windows\System32`.
 
+La versión 3 añade catorce fragmentos de rutas y registro, porque la v2 solo cubría el 11 % de las rutas reales: `\Microsoft\`, `\windows\`, `\Windows\`, `\CurrentControlSet\`, `\system32\`, `\System32\`, `\Device\`, `SOFTWARE\`, `Software\`, `\Users\`, `\Registry\Machine\`, `\ProgramData\`, `%APPDATA%\` y `\Temp\`. Los doce primeros se eligieron por cobertura sobre cadenas de rutas reales, extraídas en claro de binarios benignos y separadas en una mitad de entrenamiento (para elegir) y otra reservada (para medir). Los dos últimos son ubicaciones de persistencia habituales que los binarios benignos apenas contienen. Se descartaron fragmentos frecuentes pero propios de rutas de compilación (`C:\__w\1\s\`, `D:\a\_work\1\s\`), que no aportan nada frente a malware. Mediciones en la sección 8.
+
 El catálogo es código revisado. Un test fija su digest SHA-256 junto a su identificador de versión: cambiar una crib sin cambiar la versión hace fallar la suite. Un test verifica además que cada crib es ASCII imprimible y tiene al menos un retardo con patrón válido en ambas codificaciones.
 
 ### 3.5 UTF-16LE
@@ -136,6 +138,10 @@ Una muestra hostil puede contener millones de apariciones de un patrón para ago
 
 Coste medido con el catálogo v2: los 8 diferenciales sobre 20 MiB tardan 0,6 s con un pico de 84 MiB; la primera pasada completa sobre 20 MiB cuesta 2,7 s. La reutilización solo se ejecuta si hay claves verificadas (ninguna en los 4.516 archivos benignos, medido con el catálogo v2): con 20 MiB, 3,6 s en total con una clave y 5,7 s con ocho claves de periodos 2 a 8, examinando 7–37 apariciones. Una primera versión usaba el diferencial para todas las cribs y agotaba las 200.000 apariciones en datos aleatorios; de ahí el umbral de 3 bytes no nulos de 3.3.
 
+Con el catálogo v3 (62 cribs, 453 planes frente a 361), la primera pasada sobre 20 MiB cuesta 3,3 s. La reutilización con ocho claves pasa de 6,4 s a 9,0 s en total, porque las anclas cortas nuevas se buscan bajo cada rotación de cada clave (335 búsquedas por juego de claves frente a 166). El análisis completo de ese peor caso dentro del contenedor, con 1 CPU y 20 MiB, terminó en 10,3 s, con `decode` completo y las 96 decodificaciones reverificadas en el host, lejos del timeout de 30 s. Estas cifras se tomaron con otras mediciones en paralelo, así que son cotas superiores.
+
+Optimización medida (O2, 2026-09-23). El perfil sobre `shell32.dll` (7,6 MiB) muestra que el 78 % del tiempo está en `bytes.find`: una pasada completa por plan, a unos 3 GB/s, y cada plan tarda lo mismo (2–5 ms). El coste es proporcional al número de planes, que ya es el mínimo por crib (los retardos 8, 7, 6 y 5 son imprescindibles para cubrir los periodos 1–8). Adoptado: derivar los ocho diferenciales de una sola conversión a entero, con resultados idénticos campo a campo en 408 entradas (649 aciertos por reutilización) y la primera pasada de 3,18 s a 2,76 s con 20 MiB, con el mismo pico de memoria. Descartado tras medirlo: búsqueda por bloques que quepan en caché (sin ganancia: no está limitada por memoria), una sola expresión regular por retardo (10 veces más lenta), una única búsqueda sobre `datos ⊕ clave` para la reutilización (incorrecta: una clave reutilizada puede aparecer con cualquier fase y el comparador detectó 72 entradas distintas) y resolver patrones contenidos en otros (solo el 6 % de los planes, a cambio de complicar código crítico). La siguiente mejora grande exigiría un buscador multipatrón nativo, es decir, una dependencia compilada dentro del worker, y no se adopta sin un diseño propio.
+
 ## 8. Evidencia empírica
 
 Medido el 2026-09-22 sobre los binarios de `C:\Windows\System32` (4.092 `.dll`/`.exe` ≤ 20 MiB, 1,9 GB). Son archivos benignos del sistema: cualquier resultado sobre ellos se trata como falso positivo. Se leyeron como datos en el host; no se ejecutaron ni se añadieron al repositorio.
@@ -156,20 +162,22 @@ Medido el 2026-09-22 sobre los binarios de `C:\Windows\System32` (4.092 `.dll`/`
 | Nivel débil: 4 / 3 / 2 bytes no nulos + clave con byte ≥ 0x80 | 1.500 | 61 / 486 / 52.119 (descartado) |
 | Nivel débil + extensión del texto (3 bytes y +4 car. / 2 bytes y +8 car.) | 1.500 | 104 / 4.929 (descartado) |
 | Catálogo v2 (48 cribs) + reutilización de clave, motor definitivo | 4.516 (todos los archivos) | **0** |
+| Solo las 22 anclas de rutas candidatas a v3 (primera pasada) | 17.388 de System32, SysWOW64 y .NET (5,6 GB) | **0** (2 auténticas, abajo) |
+| Catálogo v3 (62 cribs) + reutilización | 4.516 de System32 (1,98 GB) | **0** (1 auténtica) |
 
 La regla de "fragmento de la crib en claro dentro de la ventana" resultó redundante con la de ventana ya-texto y no se incorpora.
 
-**Cobertura XOR** con el motor definitivo (catálogo v2 + reutilización; `tests/decode_eval.py recall`, semilla `dissect-decode-eval`, 150 pruebas por celda). Los textos son 43 cadenas realistas por categoría escritas sin mirar el catálogo; 10 de ellas (23 %) no contienen ninguna crib y se incluyen a propósito. Cada texto se cifra y se planta en una DLL real, solo o con una segunda cadena bajo la misma clave ("compartida", como en las tablas de cadenas reales). Cuenta como recuperada una región solapada con la clave exacta:
+**Cobertura XOR** con el motor definitivo (catálogo v3 + reutilización, entre paréntesis la v2; `tests/decode_eval.py recall`, semilla `dissect-decode-eval`, 150 pruebas por celda). Los textos son 43 cadenas realistas por categoría escritas sin mirar el catálogo; 10 de ellas (23 %) no contienen ninguna crib y se incluyen a propósito. Cada texto se cifra y se planta en una DLL real, solo o con una segunda cadena bajo la misma clave ("compartida", como en las tablas de cadenas reales). Cuenta como recuperada una región solapada con la clave exacta:
 
 | Clave | ASCII, sola | ASCII, compartida | UTF-16LE, sola | UTF-16LE, compartida |
 | --- | --- | --- | --- | --- |
-| 1 byte, uniforme 1–255 | 62,0 % | 63,3 % | 67,3 % | 74,0 % |
-| 1 byte, ≥ 0x80 | 77,3 % | 78,7 % | 75,3 % | 76,7 % |
-| 2 bytes aleatorios | 68,7 % | 62,0 % | 72,0 % | 73,3 % |
-| 4 bytes | 56,0 % | 76,0 % | 78,0 % | 75,3 % |
-| 8 bytes | 33,3 % | 80,7 % | 57,3 % | 80,0 % |
-| 4 bytes ASCII (tipo contraseña) | 49,3 % | 74,0 % | 63,3 % | 70,7 % |
-| 8 bytes ASCII | 34,0 % | 68,0 % | 52,7 % | 71,3 % |
+| 1 byte, uniforme 1–255 | 71,3 % (62,0) | 67,3 % (63,3) | 77,3 % (67,3) | 79,3 % (74,0) |
+| 1 byte, ≥ 0x80 | 87,3 % (77,3) | 88,7 % (78,7) | 86,7 % (75,3) | 85,3 % (76,7) |
+| 2 bytes aleatorios | 76,0 % (68,7) | 71,3 % (62,0) | 82,7 % (72,0) | 82,7 % (73,3) |
+| 4 bytes | 63,3 % (56,0) | 84,7 % (76,0) | 87,3 % (78,0) | 85,3 % (75,3) |
+| 8 bytes | 36,7 % (33,3) | 92,0 % (80,7) | 62,0 % (57,3) | 87,3 % (80,0) |
+| 4 bytes ASCII (tipo contraseña) | 56,0 % (49,3) | 82,0 % (74,0) | 69,3 % (63,3) | 80,7 % (70,7) |
+| 8 bytes ASCII | 36,7 % (34,0) | 80,0 % (68,0) | 60,0 % (52,7) | 82,7 % (71,3) |
 
 Por categoría, clave de 8 bytes y texto ASCII (el techo es la fracción de textos que contiene alguna crib; n = casos muestreados):
 
@@ -180,10 +188,23 @@ Por categoría, clave de 8 bytes y texto ASCII (el techo es la fracción de text
 | API | 100 % | 71,0 % (n=31) | 100 % (n=37) |
 | DLL | 100 % | 0,0 % (n=13) | 100 % (n=11) |
 | Comando | 67 % | 25,0 % (n=12) | 82,4 % (n=17) |
-| Ruta/registro | 43 % | 31,6 % (n=38) | 41,4 % (n=29) |
+| Ruta/registro | 100 % (v2: 43 %) | 44,7 % (v2: 31,6 %) (n=38) | 100 % (v2: 41,4 %) (n=29) |
 | Sin ancla | 0 % | 0,0 % (n=9) | 0,0 % (n=9) |
 
-Con clave compartida la cobertura queda en el techo alcanzable (77 % de los textos contiene alguna crib). Con una cadena aislada, una crib de *n* bytes solo verifica claves de hasta ~*n*−5 bytes: `http://` no puede verificar sola una clave de 8, de ahí el 0 % de las URL aisladas. La pérdida con claves de un byte corresponde a los textos sin crib y a las claves que dejan el texto cifrado todavía legible (sección 5). Un texto cifrado sin crib no se encuentra. Estas cifras no son comparables con la tabla de la revisión anterior, que solo usaba textos con crib; las diferencias entre celdas vecinas de menos de ~5 puntos están dentro del ruido de muestreo.
+La fila de rutas está sesgada a favor de v3: tres de las anclas nuevas (`\Users\`, `\ProgramData\`, `%APPDATA%\`) aparecen en rutas de este conjunto de evaluación. La medida sin ese sesgo es la de rutas reales reservadas, en la tabla siguiente. Con v3, 37 de los 43 textos (86 %) contienen alguna crib, frente a 33 (77 %) con v2.
+
+**Rutas reales reservadas** (catálogo v2 → v3). Son 16.193 cadenas de rutas y registro extraídas en claro de la mitad de prueba de System32 y SysWOW64, que no se usó para elegir las anclas. Se muestrearon 400 textos, 150 pruebas por celda, sobre DLL reales. Techo (cadenas que contienen alguna crib): 10,6 % → 50,5 %.
+
+| Clave | ASCII, sola | ASCII, compartida | UTF-16LE, sola | UTF-16LE, compartida |
+| --- | --- | --- | --- | --- |
+| 1 byte | 7,3 → 46,7 % | 8,0 → 42,7 % | 8,7 → 41,3 % | 11,3 → 43,3 % |
+| 2 bytes | 9,3 → 53,3 % | 11,3 → 42,0 % | 12,0 → 47,3 % | 12,7 → 44,0 % |
+| 4 bytes | 10,7 → 50,0 % | 12,7 → 48,7 % | 13,3 → 49,3 % | 15,3 → 46,0 % |
+| 8 bytes | 5,3 → 6,0 % | 10,7 → 48,7 % | 10,0 → 52,7 % | 15,3 → 48,7 % |
+
+Una ruta aislada en ASCII con clave de 8 bytes sigue casi sin cubrir: las anclas de rutas miden menos de 13 caracteres y no verifican solas una clave de 8. Con la clave establecida por otra cadena (compartida) sí se recuperan.
+
+Con clave compartida la cobertura queda en el techo alcanzable (86 % de los textos contiene alguna crib con v3). Con una cadena aislada, una crib de *n* bytes solo verifica claves de hasta ~*n*−5 bytes: `http://` no puede verificar sola una clave de 8, de ahí el 0 % de las URL aisladas. La pérdida con claves de un byte corresponde a los textos sin crib y a las claves que dejan el texto cifrado todavía legible (sección 5). Un texto cifrado sin crib no se encuentra. Estas cifras no son comparables con la tabla de la revisión anterior, que solo usaba textos con crib; las diferencias entre celdas vecinas de menos de ~5 puntos están dentro del ruido de muestreo.
 
 **Base64/hex.** Una decodificación en un binario benigno no es necesariamente un error: los binarios legítimos también contienen texto codificado. Cada resultado se clasificó a mano:
 
@@ -192,6 +213,26 @@ Con clave compartida la cobertura queda en el techo alcanzable (77 % de los text
 | Reglas de la revisión 1 | 1.500 archivos, 1,1 M de cadenas | 23 (identificadores de 8 letras, relleno repetitivo) | 0 |
 | Mínimos 12/8 y diversidad ≥ 4 | 4.516 archivos, 1,98 GB | 9: `SystemEventW` y ocho números decimales | 4: XML en hexadecimal dentro de `license.rtf` (2), Base64 doble de texto inglés en `globinputhost.dll`, Base64 de un patrón de relleno en `ntoskrnl.exe` |
 | Reglas finales (3.1/3.2), medido | ídem | **0** | las mismas 4 |
+
+**Corpus ampliado (2026-09-23).** Medido con `false-positives --recursive --ext .exe,.dll,.sys,.ocx,.cpl,.scr,.efi,.mui`. En Program Files se usó `--stride 2` para XOR y `--stride 12` para Base64/hex. Como antes, cada resultado se clasificó a mano:
+
+| Corpus | Archivos | XOR | Base64/hex |
+| --- | --- | --- | --- |
+| SysWOW64, `System32\drivers`, `Microsoft.NET` (v2) | 6.398 (1,75 GB) | 0 | — |
+| SysWOW64 y `Microsoft.NET` (1 de cada 2) | 2.851 (0,79 GB) | — | 3 auténticas, 0 ruido |
+| Program Files y Program Files (x86), 1 de cada 2 (v2) | 24.588 (9,9 GB) | 65 auténticas, 0 ruido | — |
+| Ídem, 1 de cada 12 | 4.099 (1,6 GB) | — | 0 |
+| Program Files, 1 de cada 2 (v3) | 24.588 | 96 auténticas (las 65 de v2 y 31 rutas de registro nuevas en las mismas regiones), 0 ruido | — |
+
+Las decodificaciones auténticas muestran que el método encuentra ofuscación real en software comercial benigno:
+- DLL de MATLAB con otra DLL completa embebida y cifrada con XOR `0xCC`: cabecera `This program cannot be run in DOS mode` e imports `LoadLibraryA`, `GetProcAddress`, `VirtualAlloc`.
+- El gestor de licencias de MATLAB, con rutas de registro `Software\Microsoft\Windows\CurrentVersion\…` cifradas con una clave de 3 bytes.
+- DLL de Epson con URLs de espacios de nombres SOAP negadas bit a bit (clave `0xFF`).
+- Recursos localizados de Office Click-to-Run con el bit alto activado (clave `0x80`).
+- `ci.dll` y el driver DRM `PEAuth.sys` con `\Registry\Machine\System\CurrentControlSet\Services\PEAuth` en UTF-16LE bajo la clave `7f520e51`. Esta la encontraron las anclas v3, y la reproduce un test sintético.
+- En Base64: una cabecera JWT, el texto `Base 64 Stream` y un Base64 doble de texto inglés.
+
+Ninguna prueba intención maliciosa (sección 1): son transformaciones reproducibles de los bytes.
 
 El repositorio incluye `tests/decode_eval.py` (`uv run python -m tests.decode_eval`) para repetir estas mediciones sobre cualquier directorio de binarios benignos que aporte quien evalúa; no forma parte del paquete ni de la CI.
 
@@ -228,3 +269,4 @@ Bloques pequeños, cada uno cerrado con `ruff`, `mypy`, suite completa y `schema
 4. **Hecho**: herramienta `tests/decode_eval.py` y mediciones de la sección 8 repetidas con el motor definitivo.
 5. **Hecho**: integración 0.4.0 — fuente `decode` en el registro, colector y límites (`analysis.limits.decode`), validación en el informe, reverificación en el launcher, esquema 0.3.0 preservado, imagen `dissect-worker:0.4.0`, CI, documentación, fixture `decode-demo` y pruebas en contenedor real (recorrido completo y una muestra hostil de un millón de patrones que termina en limitación declarada).
 6. **Hecho**: optimización medida — niveles de verificación más débiles probados y descartados por falsos positivos; reutilización de clave con cita a la decodificación que la estableció; catálogo v2 con 20 anclas largas; reglas finales de Base64/hex. Resultado en el corpus completo: 0 falsos positivos XOR, 0 decodificaciones Base64/hex espurias, y cobertura de claves de 8 bytes del 81 % con clave compartida.
+7. **Hecho**: optimización medida, segunda ronda (2026-09-23). Corpus benigno ampliado a más de 30.000 archivos sin ruido. Diferenciales a partir de un único entero, con resultado idéntico. Catálogo v3 con 14 anclas de rutas elegidas sobre datos reales con separación entrenamiento/reserva: las rutas reales recuperadas pasan del ~10 % al ~45–50 %, y la clave compartida de 8 bytes del 81 % al 92 %, sin falsos positivos.
