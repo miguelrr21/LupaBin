@@ -25,7 +25,7 @@ from dissect.evidence.primitives import COMPONENTS, Provenance, Transform, minim
 
 def report_dict():
     return {
-        "schema_version": "0.4.0",
+        "schema_version": "0.5.0",
         "analysis": {
             "started_at": "2026-09-20T12:00:00Z",
             "finished_at": "2026-09-20T12:00:01Z",
@@ -42,6 +42,7 @@ def report_dict():
                     "dll": {"raw_hex": b"kernel32.dll".hex(), "text": "kernel32.dll"},
                     "function": {"raw_hex": b"ExitProcess".hex(), "text": "ExitProcess"},
                     "table": "normal",
+                    "iat_rva": 0x2000,
                 },
                 "location": {"offset": 512, "rva": 4096, "length": 4},
                 "confidence": "observed",
@@ -157,7 +158,10 @@ def test_python_construction():
                 component="imports_normal",
                 location=Location(offset=512, length=4),
                 data=ImportData(
-                    dll=Name.from_bytes(b"x.dll"), function=Name.from_bytes(b"f"), table="normal"
+                    dll=Name.from_bytes(b"x.dll"),
+                    function=Name.from_bytes(b"f"),
+                    table="normal",
+                    iat_rva=0x2000,
                 ),
             ),
         ),
