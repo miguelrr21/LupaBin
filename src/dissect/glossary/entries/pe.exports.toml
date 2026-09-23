@@ -1,0 +1,11 @@
+id = "pe.exports"
+title = "Exports"
+revision = "1.0.0"
+lang = "es"
+summary = "Los exports son las funciones o datos que un PE (normalmente una DLL) ofrece a otros programas, por nombre, por ordinal o por ambos."
+body = "La tabla de exports contiene las direcciones de lo exportado, una lista opcional de nombres y la correspondencia entre nombres y ordinales. Un ejecutable también puede exportar símbolos, aunque es menos habitual.\n\nLos nombres exportados los elige quien escribe el programa. Un nombre revela la intención declarada del autor, no lo que hace el código."
+not_proven = "El nombre de un export no demuestra su comportamiento."
+related = ["pe.exports.forwarder", "pe.imports.ordinal"]
+sources = [
+  { title = "PE Format: The .edata Section (Image Only)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-edata-section-image-only", verified_on = 2026-09-23 },
+]

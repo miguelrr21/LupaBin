@@ -98,7 +98,7 @@ def load_glossary(*, root: Traversable | None = None) -> Glossary:
 def write_manifest(directory: Path, revision: str) -> None:
     """Pin every entry file's digest; only for maintainers, after reviewing the content."""
     records = []
-    for path in sorted(directory.glob("*.toml")):
+    for path in sorted(directory.glob("*.toml"), key=lambda path: path.name.removesuffix(".toml")):
         content = path.read_bytes()
         records.append(
             {

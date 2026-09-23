@@ -49,6 +49,7 @@ El repo ya está mapeado abajo. No listar recursivamente `src/` o `docs/` al emp
 - `docs/evidence-schema.md` — contrato activo 0.4.0 (Fase 2); `docs/schemas/0.1.0.json`, `0.2.0.json` y `0.3.0.json` son históricos.
 - `src/dissect/extractors/decode.py` (extractor y `verify_decodings` usada por el host), `decode_strings.py` (Base64/hex), `decode_xor.py` (motor XOR, catálogo de cribs, `verify`). `tests/decode_eval.py` repite las mediciones de la sección 8 del diseño.
 - `src/dissect/rules/` — catálogo YARA propio: `catalog.py` (carga/valida), `process.py` (lanza el subproceso), `models.py`, `yara/*.yar` + `manifest.json`. `src/dissect/yara_worker.py` es el entrypoint aislado del hijo.
+- `src/dissect/glossary/` — glosario de la Fase 3: `entries/*.toml` (una entrada por archivo, con fuentes) y `entries/manifest.json` (digest de cada entrada). Tras revisar un cambio de contenido, se vuelve a fijar con `uv run python -m dissect.glossary.catalog --write <revisión>`. `uv run python -m tests.check_glossary_sources` comprueba con red que las URL y sus anclas existen; no forma parte de la CI.
 - `docs/roadmap.md` — **leer primero**: estado actual, pendientes, límites conocidos con cifras y el objetivo del usuario (máxima optimización y mínima tasa de error: ninguna mejora de cobertura se adopta si añade falsos positivos).
 - `docs/superpowers/specs/` — diseños aprobados por fase; leer solo el spec de la fase en la que se trabaja, no todas.
 - `docs/decisions/` — ADRs puntuales; consultar solo si la tarea toca esa decisión.

@@ -1,0 +1,11 @@
+id = "pe.section"
+title = "Sección"
+revision = "1.0.0"
+lang = "es"
+summary = "Una sección es un bloque del PE con nombre (.text, .data, .rsrc…) que el cargador coloca en memoria con unos permisos. Cada una tiene un tamaño en disco y otro en memoria."
+body = "La tabla de secciones indica para cada sección su dirección relativa en memoria (VirtualAddress), su tamaño en memoria (VirtualSize), dónde están sus bytes en el archivo (PointerToRawData) y cuántos hay (SizeOfRawData).\n\nSi VirtualSize es mayor que SizeOfRawData, el resto de la sección se rellena con ceros al cargarla. Una sección solo con datos sin inicializar puede no tener bytes en disco.\n\nLos nombres de sección son convenciones del compilador o del enlazador, no una garantía de contenido: «.text» suele contener código, pero nada obliga a ello."
+not_proven = "El nombre de una sección no demuestra qué contiene."
+related = ["pe.section.permissions", "entropy.shannon"]
+sources = [
+  { title = "PE Format: Section Table (Section Headers)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers", verified_on = 2026-09-23 },
+]

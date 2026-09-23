@@ -1,0 +1,12 @@
+id = "pe.anomaly"
+title = "Anomalías estructurales"
+revision = "1.0.0"
+lang = "es"
+summary = "Una anomalía estructural es una incoherencia entre campos declarados del PE, comprobada por una regla reproducible sobre esos campos: por ejemplo, una sección cuyos datos quedan fuera del archivo."
+body = "Dissect comprueba cinco condiciones sobre los valores declarados: datos de sección fuera del archivo, solapamiento entre los datos en disco de dos secciones, solapamiento en memoria, sección que se extiende más allá de SizeOfImage y punto de entrada fuera de la imagen. Cada anomalía cita la cabecera o las secciones cuyos campos la demuestran.\n\nSon comprobaciones conservadoras de campos declarados, no una reproducción del cargador de Windows. Pueden deberse a manipulación, a empaquetadores, a archivos truncados o a herramientas de compilación poco habituales."
+not_proven = "Una anomalía no demuestra intención maliciosa ni que el archivo no pueda ejecutarse."
+related = ["pe.header", "pe.section"]
+sources = [
+  { title = "PE Format: Section Table (Section Headers)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers", verified_on = 2026-09-23 },
+  { title = "Fase 1A, 5.6 Anomalías estructurales", publisher = "Proyecto Dissect", document = "docs/superpowers/specs/2026-09-20-static-evidence-design.md#56-anomalías-estructurales", verified_on = 2026-09-23 },
+]

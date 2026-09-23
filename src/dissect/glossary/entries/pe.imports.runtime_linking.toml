@@ -1,0 +1,12 @@
+id = "pe.imports.runtime_linking"
+title = "Enlace dinámico en tiempo de ejecución"
+revision = "1.0.0"
+lang = "es"
+summary = "Un programa puede cargar una DLL y obtener la dirección de una función mientras se ejecuta, con LoadLibrary y GetProcAddress. Esas funciones no aparecen en su tabla de imports."
+body = "Con LoadLibrary (o LoadLibraryEx) el proceso carga una DLL y obtiene un identificador; con GetProcAddress obtiene la dirección de una función exportada por su nombre u ordinal.\n\nPor eso la tabla de imports es una vista incompleta de lo que un programa puede usar. Ver LoadLibrary y GetProcAddress entre los imports solo dice que el programa puede resolver funciones dinámicamente, no cuáles."
+not_proven = "Poder resolver funciones en tiempo de ejecución no demuestra que se haga ni qué funciones se resuelven."
+related = ["pe.imports"]
+sources = [
+  { title = "Run-Time Dynamic Linking", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/dlls/run-time-dynamic-linking", verified_on = 2026-09-23 },
+  { title = "GetProcAddress function (libloaderapi.h)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress", verified_on = 2026-09-23 },
+]
