@@ -262,6 +262,10 @@ def _yara(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("yara.match", "yara.rule")
 
 
+def _bytes(count: int) -> str:
+    return f"{count} byte" if count == 1 else f"{number(count)} bytes"
+
+
 def _decoded_text(fact: DecodedStringEvidence) -> Slots:
     offset = fact.location.offset if fact.location.offset is not None else 0
     length = fact.location.length if fact.location.length is not None else 0
@@ -304,7 +308,7 @@ def _xor(reused: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | Non
         slots.update(
             {
                 "key": decoded.transform.key_hex,
-                "key_bytes": len(decoded.transform.key_hex) // 2,
+                "key_bytes": _bytes(len(decoded.transform.key_hex) // 2),
                 "encoding": "ASCII" if decoded.data.encoding == "ascii" else "UTF-16LE",
                 "crib": decoded.anchor.crib,
             }
@@ -442,7 +446,7 @@ RULES: dict[str, Rule] = {
         ),
         Rule(
             "decoded.xor@1",
-            "Aplicar XOR con la clave {key} ({key_bytes} bytes) a los {length} bytes del "
+            "Aplicar XOR con la clave {key} ({key_bytes}) a los {length} bytes del "
             "desplazamiento {offset} produce un texto {encoding} de {characters} caracteres, "
             "anclado por la crib «{crib}».",
             "No demuestra que el programa haga esta operación ni que use el texto.",
@@ -450,7 +454,7 @@ RULES: dict[str, Rule] = {
         ),
         Rule(
             "decoded.xor_reused@1",
-            "Aplicar XOR con la clave {key} ({key_bytes} bytes) a los {length} bytes del "
+            "Aplicar XOR con la clave {key} ({key_bytes}) a los {length} bytes del "
             "desplazamiento {offset} produce un texto {encoding} de {characters} caracteres, "
             "anclado por la crib «{crib}». La clave la estableció la decodificación {verifier}.",
             "No demuestra que el programa haga esta operación, ni que use el texto, ni que "
