@@ -26,12 +26,13 @@ def render(data, kind):
 @pytest.mark.parametrize(
     "raw,shown",
     [
-        ("\x1b[31m", "\\x1b[31m"),
-        ("a\\x1b", "a\\\\x1b"),
-        ("\u202eexe.txt", "\\u202eexe.txt"),
-        ("tab\there\nline", "tab\\x09here\\x0aline"),
-        ("\x9b", "\\x9b"),
-        ("zero\u200bwidth", "zero\\u200bwidth"),
+        ("\x1b[31m", "\u27e8U+001B\u27e9[31m"),
+        ("C:\\Windows\\System32", "C:\\Windows\\System32"),
+        ("\u202eexe.txt", "\u27e8U+202E\u27e9exe.txt"),
+        ("tab\there\nline", "tab\u27e8U+0009\u27e9here\u27e8U+000A\u27e9line"),
+        ("\x9b", "\u27e8U+009B\u27e9"),
+        ("zero\u200bwidth", "zero\u27e8U+200B\u27e9width"),
+        ("tag\U000e0041", "tag\u27e8U+E0041\u27e9"),
         ("plain text", "plain text"),
     ],
 )
@@ -52,7 +53,7 @@ def test_hostile_names_reach_no_output_raw(kind):
     data[0x98 + 224 : 0x98 + 232] = "\u202eexe.".encode() + b"\0"  # UTF-8 bidi override
     output = render(bytes(data), kind)
     assert "\x1b" not in output and "\x07" not in output and "\u202e" not in output
-    assert "\\x1b" in output and "\\u202e" in output
+    assert "\u27e8U+001B\u27e9" in output and "\u27e8U+202E\u27e9" in output
     if kind == "markdown":
         spans = re.findall(r"(`+)(.+?)\1", output)
         outside = re.sub(r"(`+).+?\1", "", output)
