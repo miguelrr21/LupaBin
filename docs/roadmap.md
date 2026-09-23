@@ -13,14 +13,9 @@ El usuario quiere que Dissect sea **lo más optimizado posible y con la tasa de 
 
 ## Estado actual
 
-- **Fase 2 (decodificación, contrato 0.4.0, catálogo de anclas v3)**: implementada y verificada en local. 361 tests y 10 pruebas en Docker real en verde. Ruido medido: 0 en XOR y 0 en Base64/hex sobre un corpus benigno ampliado (System32, SysWOW64, drivers, .NET y Program Files: más de 30.000 archivos, unos 13 GB). Todas las decodificaciones encontradas en ese corpus se revisaron a mano y son auténticas (sección 8 del diseño).
-- Diseño y mediciones: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
-
-## Pendiente para cerrar la Fase 2
-
-- [ ] **Publicar**: los commits de la Fase 2 están en `master` local, sin subir. Crear la rama `feat/static-decoding`, subirla y abrir el PR (mismo flujo que la Fase 1B). No hacer push directo a `master`.
-- [ ] **CI remota**: comprobar que GitHub Actions pasa para esta fase. Hasta verlo, solo hay verificación local.
-- [ ] **Limpieza**: borrar las ramas ya mergeadas `feat/static-evidence` y `feat/yara-evidence`, lo que requiere confirmación del usuario. Identificar qué es la carpeta sin versionar `agent/`, que no creó ninguna sesión de trabajo.
+- **Fase 2 (decodificación, contrato 0.4.0, catálogo de anclas v3)**: cerrada. Está publicada en `master` mediante el PR #2 (2026-09-23), con la CI remota en verde en Ubuntu, Windows y Docker. Ruido medido: 0 en XOR y 0 en Base64/hex sobre un corpus benigno ampliado (System32, SysWOW64, drivers, .NET y Program Files: más de 30.000 archivos, unos 13 GB). Todas las decodificaciones encontradas se revisaron a mano y son auténticas. Diseño y mediciones: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
+- **Fase 3 (explicaciones didácticas y glosario con fuentes)**: en curso en la rama `feat/didactic-glossary`. Diseño: [Fase 3](superpowers/specs/2026-09-23-didactic-glossary-design.md); el plan por bloques está en su sección 10.
+- Mantenimiento: las ramas `feat/static-evidence` y `feat/yara-evidence` se borraron tras sus merges. `agent/` son las skills locales de *context-mode*, ignoradas en git. La rama `fiddler` pertenece a un worktree de Orca (`orca/workspaces/Dissect/fiddler`) y no se toca.
 
 ## Límites conocidos de la decodificación y líneas de mejora
 
@@ -46,8 +41,7 @@ Cifras de la sección 8 del diseño de la Fase 2: 43 textos realistas, 150 prueb
 
 Ninguna está aprobada ni diseñada. Cada una requiere su documento de diseño antes de escribir código:
 
-- Motor de glosario y capacidades didácticas (contenido con fuentes verificables).
 - Interfaz web (`docker compose up` todavía es solo un worker de consola).
 - capa, con verificación de que no emula; FLOSS solo sin sus rutas de emulación.
 - VirusTotal, como integración opcional y separada del worker sin red.
-- LLM, solo para redactar el glosario y nunca como fuente de hechos sobre la muestra.
+- **LLM barato como segundo revisor en caso de duda** (petición del usuario, 2026-09-23). Solo en el host, opcional y desactivado por defecto. Emite un documento `Review` aparte, cuyas opiniones citan explicaciones existentes y nunca se convierten en hechos. La arquitectura ya lo prevé: sección 9 del diseño de la Fase 3.
