@@ -210,3 +210,24 @@ def test_timeout_removes_real_container():
         assert not result.stdout.strip()
 
     asyncio.run(check())
+
+
+def test_real_cli_didactic_report_and_checked_explanation(tmp_path):
+    from typer.testing import CliRunner
+
+    from dissect.cli import app
+    from tests.fixtures.pe_builder import build_decode_demo
+
+    runner = CliRunner()
+    sample = tmp_path / "decode.bin"
+    sample.write_bytes(build_decode_demo())
+    readable = runner.invoke(app, ["analyze", str(sample)])
+    assert readable.exit_code == 0
+    assert "worker aislado" in readable.stdout
+    assert "La clave la" in readable.stdout and "Límite:" in readable.stdout
+    saved = runner.invoke(app, ["analyze", str(sample), "--json"])
+    report = tmp_path / "report.json"
+    report.write_text(saved.stdout, encoding="utf-8")
+    checked = runner.invoke(app, ["explain", str(report), "--sample", str(sample)])
+    assert checked.exit_code == 0
+    assert "contrastado con la muestra" in checked.stdout

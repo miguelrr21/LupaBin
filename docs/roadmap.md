@@ -14,8 +14,20 @@ El usuario quiere que Dissect sea **lo más optimizado posible y con la tasa de 
 ## Estado actual
 
 - **Fase 2 (decodificación, contrato 0.4.0, catálogo de anclas v3)**: cerrada. Está publicada en `master` mediante el PR #2 (2026-09-23), con la CI remota en verde en Ubuntu, Windows y Docker. Ruido medido: 0 en XOR y 0 en Base64/hex sobre un corpus benigno ampliado (System32, SysWOW64, drivers, .NET y Program Files: más de 30.000 archivos, unos 13 GB). Todas las decodificaciones encontradas se revisaron a mano y son auténticas. Diseño y mediciones: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
-- **Fase 3 (explicaciones didácticas y glosario con fuentes)**: en curso en la rama `feat/didactic-glossary`. Diseño: [Fase 3](superpowers/specs/2026-09-23-didactic-glossary-design.md); el plan por bloques está en su sección 10.
+- **Fase 3 (explicaciones didácticas y glosario con fuentes)**: implementada y verificada en local en la rama `feat/didactic-glossary`, sin publicar todavía. Incluye un glosario de 38 entradas con 75 fuentes verificadas, reglas deterministas regenerables para todos los tipos de hecho, contrato `Explanation` 0.1.0, renderizado de texto y Markdown que neutraliza el texto de la muestra, `dissect analyze` legible por defecto y `dissect explain` con contraste opcional contra la muestra. Hay dos cifras de contexto medidas en 55.000 binarios benignos: la entropía alta y la prevalencia de nueve familias de APIs. 459 tests y 11 pruebas en Docker real en verde. Diseño y mediciones: [Fase 3](superpowers/specs/2026-09-23-didactic-glossary-design.md).
 - Mantenimiento: las ramas `feat/static-evidence` y `feat/yara-evidence` se borraron tras sus merges. `agent/` son las skills locales de *context-mode*, ignoradas en git. La rama `fiddler` pertenece a un worktree de Orca (`orca/workspaces/Dissect/fiddler`) y no se toca.
+
+## Pendiente para cerrar la Fase 3
+
+- [ ] **Publicar**: subir `feat/didactic-glossary`, abrir el PR y comprobar la CI remota (requiere autorización del usuario).
+- [ ] **Revisión de contenido**: el glosario y los textos de las reglas se escribieron y verificaron con fuentes, pero conviene una lectura humana del tono didáctico.
+
+## Límites conocidos de las explicaciones
+
+- Las explicaciones son en español; la estructura admite otros idiomas (`lang`), pero no hay traducciones.
+- Las familias de APIs solo reconocen imports por nombre exacto: los imports por ordinal (frecuentes en `ws2_32.dll`) no se asignan a ninguna familia.
+- La entrada de glosario de una función concreta solo existe para las familias curadas. El resto de imports se explica con la entrada genérica de la tabla de imports.
+- Las fuentes externas pueden moverse: `tests/check_glossary_sources.py` lo detecta, pero no forma parte de la CI.
 
 ## Límites conocidos de la decodificación y líneas de mejora
 
