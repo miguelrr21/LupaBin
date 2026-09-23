@@ -104,7 +104,12 @@ def test_incomplete_imports_make_calls_partial():
     CodeExtractor().extract(data, collector, progress)
     assert progress.states["api_calls"] == "partial"
     assert progress.states["disassembly"] == "complete"
-    assert [reason.code for reason in progress.limitations] == ["dependency_omitted"]
+    # arguments of calls that could not be published cannot be cited either
+    assert progress.states["call_arguments"] == "partial"
+    assert [(reason.component, reason.code) for reason in progress.limitations] == [
+        ("api_calls", "dependency_omitted"),
+        ("call_arguments", "dependency_omitted"),
+    ]
 
 
 # --- the contract re-derives each call from its own bytes ----------------------
@@ -213,7 +218,7 @@ def forged_thunk(data):
 def test_host_rejects_calls_whose_bytes_are_not_in_the_sample():
     sample = build_code_demo()
     report = forged_thunk(payload())
-    with pytest.raises(ValueError, match="call bytes differ from the sample"):
+    with pytest.raises(ValueError, match="code evidence bytes differ from the sample"):
         verify_calls(report.evidence, sample)
     with pytest.raises(DissectError) as caught:
         check_against_sample(report, from_bytes(sample, Limits()))
@@ -299,5 +304,13 @@ def test_the_walk_stops_at_its_deadline_and_says_so():
     collector.started -= 3600  # the analysis began an hour ago: no time is left
     progress = Progress("code", "test")
     CodeExtractor().extract(data, collector, progress)
-    assert progress.states == {"disassembly": "partial", "api_calls": "partial"}
-    assert {reason.code for reason in progress.limitations} == {"code_time_limit"}
+    assert progress.states == {
+        "disassembly": "partial",
+        "api_calls": "partial",
+        "call_arguments": "partial",
+    }
+    assert {(reason.component, reason.code) for reason in progress.limitations} == {
+        ("disassembly", "code_time_limit"),
+        ("api_calls", "code_time_limit"),
+        ("call_arguments", "dependency_omitted"),
+    }

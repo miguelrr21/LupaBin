@@ -24,6 +24,7 @@ Component = Literal[
     "decode_xor",
     "disassembly",
     "api_calls",
+    "call_arguments",
 ]
 COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "pe": (
@@ -38,7 +39,7 @@ COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "strings": ("ascii", "utf16le"),
     "yara": ("yara_rules", "yara_scan", "yara_evidence"),
     "decode": ("decode_strings", "decode_xor"),
-    "code": ("disassembly", "api_calls"),
+    "code": ("disassembly", "api_calls", "call_arguments"),
 }
 
 
@@ -78,6 +79,10 @@ class CodeLimits(Model):
     # less): it is the last source, and a timeout would lose the whole report.
     seconds: Annotated[int, Field(gt=0, le=30)] = 15
     calls: Annotated[int, Field(gt=0, le=4096)] = 4096
+    arguments: Annotated[int, Field(gt=0, le=4096)] = 4096
+    # Instructions decoded in capstone's detail mode to recover arguments, across all
+    # calls of the catalog (design section 9.6).
+    argument_instructions: Annotated[int, Field(gt=0, le=262144)] = 262144
 
 
 class Limits(Model):
