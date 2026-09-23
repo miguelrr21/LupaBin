@@ -17,7 +17,7 @@ def yara_payload(payload):
 
 def test_default_pipeline_has_four_sources_and_yara_evidence():
     report = analyze_bytes(build_demo())
-    assert report.schema_version == "0.4.0"
+    assert report.schema_version == "0.5.0"
     assert [run.source for run in report.extractor_runs] == ["pe", "strings", "yara", "decode"]
     assert report.analysis.status == "completed"
     match = next(f for f in report.evidence if f.kind == "yara_match")

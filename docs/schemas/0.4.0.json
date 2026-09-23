@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.5.0",
-          "default": "0.5.0",
+          "const": "0.4.0",
+          "default": "0.4.0",
           "title": "Version",
           "type": "string"
         }
@@ -930,12 +930,6 @@
           ],
           "default": null
         },
-        "iat_rva": {
-          "exclusiveMinimum": 0,
-          "maximum": 4294967295,
-          "title": "Iat Rva",
-          "type": "integer"
-        },
         "ordinal": {
           "anyOf": [
             {
@@ -961,8 +955,7 @@
       },
       "required": [
         "dll",
-        "table",
-        "iat_rva"
+        "table"
       ],
       "title": "ImportData",
       "type": "object"
@@ -2219,8 +2212,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.5.0",
-      "default": "0.5.0",
+      "const": "0.4.0",
+      "default": "0.4.0",
       "title": "Schema Version",
       "type": "string"
     },
