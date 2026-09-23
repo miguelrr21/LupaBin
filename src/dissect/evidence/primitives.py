@@ -71,9 +71,9 @@ class DecodeLimits(Model):
 
 
 class CodeLimits(Model):
-    instructions: Annotated[int, Field(gt=0, le=4000000)] = 4000000
+    instructions: Annotated[int, Field(gt=0, le=8000000)] = 8000000
     entries: Annotated[int, Field(gt=0, le=262144)] = 262144
-    call_sites: Annotated[int, Field(gt=0, le=262144)] = 262144
+    call_sites: Annotated[int, Field(gt=0, le=1048576)] = 1048576
     # The walk stops once the analysis has run this long (or half of timeout_seconds, if
     # less): it is the last source, and a timeout would lose the whole report.
     seconds: Annotated[int, Field(gt=0, le=30)] = 15

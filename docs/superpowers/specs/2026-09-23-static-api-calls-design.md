@@ -229,3 +229,24 @@ En x86 (SysWOW64, `--stride 10`, 260 archivos), los imports por nombre con algun
 | `shell32.dll` | 20,7 s | ninguno (código completo; llamadas publicadas en su cuota) |
 
 Ningún caso agota ya los 30 s. El coste es que, en una máquina lenta, los DLL benignos más grandes quedan parciales en XOR y código; en la misma máquina conectada a la corriente se completaban. Se prefirió este reparto conservador: un timeout pierde el informe entero.
+
+**Topes por recuento, revisados.** Con el tiempo acotado por los dos límites anteriores, los topes por recuento ya no protegen del timeout: son solo topes de cordura. Se subieron a 8.000.000 instrucciones y 1.048.576 llamadas examinadas, porque con los anteriores quedaban partidos DLL benignos. Completar `Windows.UI.Xaml.dll` exige 3.266.335 instrucciones y 379.675 llamadas; `mshtml.dll` (x86), 4.246.274 instrucciones. Medido en el contenedor, con el portátil conectado a la corriente (11 pruebas `-m docker` en verde):
+
+| Entrada | Total | Código | Límites |
+| --- | --- | --- | --- |
+| `nop` continuo, 20 MiB | 16,6 s | parcial en 8.000.000 | `code_instruction_limit`, `decode_time_limit` |
+| `jz` continuo, 20 MiB | 17,7 s | parcial en 4.038.656 | `code_time_limit`, `decode_time_limit` |
+| `call rel32` continuo, 20 MiB | 12,5 s | parcial en 1.048.576 llamadas | `call_site_limit` |
+| `call [casilla]` continuo, 20 MiB | 15,0 s | parcial en 1.048.576 llamadas | `call_site_limit`, `api_call_limit` |
+| `Windows.UI.Xaml.dll` | 15,1 s | **recorrido completo** | `api_call_limit` |
+| `mshtml.dll` (x86) | 14,8 s | **recorrido completo** | `api_call_limit` |
+| `shell32.dll` | 9,0 s | recorrido completo | `api_call_limit` |
+
+El caso `nop` es también el peor combinado: agota a la vez el tiempo de la búsqueda XOR y el tope del recorrido. Por construcción, ninguna combinación pasa de la marca de 15 s del código más el arranque y la serialización.
+
+**Corpus completo con los puntos de partida nuevos** (mismas muestras que la sección 9.4):
+
+| Conjunto | Archivos | Llamadas | Inválidos | Fallos de verificación | Fuera de `.pdata` | Imports por nombre con alguna llamada |
+| --- | --- | --- | --- | --- | --- | --- |
+| System32 | 1.363 | 1.230.385 | 0 | 0 | 0 de 1.230.245 | 90,4 % (sin cambio: ya tenía `.pdata`) |
+| SysWOW64 | 520 | 412.834 (antes 145.084) | 0 | 0 | 3 de 2.369 (los de `edit.exe`, auténticos) | **90,7 %** (antes 43,8 %) |
