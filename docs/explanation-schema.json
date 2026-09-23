@@ -161,7 +161,9 @@
                 "code_entry_limit",
                 "call_site_limit",
                 "code_time_limit",
-                "api_call_limit"
+                "api_call_limit",
+                "call_argument_limit",
+                "argument_instruction_limit"
               ],
               "type": "string"
             },
@@ -210,7 +212,8 @@
                 "decode_strings",
                 "decode_xor",
                 "disassembly",
-                "api_calls"
+                "api_calls",
+                "call_arguments"
               ],
               "type": "string"
             },
