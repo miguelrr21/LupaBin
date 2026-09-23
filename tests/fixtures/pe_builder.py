@@ -261,12 +261,22 @@ def main():
     parser.add_argument("--bits", type=int, choices=(32, 64), default=32)
     parser.add_argument(
         "--scenario",
-        choices=("basic", "demo", "corrupt", "yara-limited", "decode-demo", "code-demo"),
+        choices=(
+            "basic",
+            "demo",
+            "corrupt",
+            "yara-limited",
+            "decode-demo",
+            "code-demo",
+            "args-demo",
+        ),
         default="basic",
     )
     args = parser.parse_args()
     if args.scenario == "code-demo":
         data = build_code_demo(bits=args.bits)
+    elif args.scenario == "args-demo":
+        data = build_args_demo(bits=args.bits)
     elif args.scenario == "decode-demo":
         data = build_decode_demo(bits=args.bits)
     elif args.scenario in ("basic", "yara-limited"):
