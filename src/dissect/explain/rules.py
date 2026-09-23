@@ -46,6 +46,12 @@ RUNTIME_LINKING = frozenset(
 )
 PERMISSIONS = {"read": "lectura", "write": "escritura", "execute": "ejecución"}
 EXPORT_NAMES_SHOWN = 50
+# Didactic context, not a detector (design section 6.2): on 2026-09-23, 475 of 139,057
+# sections of at least 4 KiB (0.34 %) in 55,313 benign binaries from System32 and
+# Program Files reached 7.2 bits per byte. Smaller sections are not compared: with few
+# bytes the estimate approaches 8 merely because few values repeat.
+HIGH_ENTROPY = 7.2
+HIGH_ENTROPY_MIN_BYTES = 4096
 
 
 def _section_label(section: SectionEvidence) -> str:
@@ -110,6 +116,19 @@ def _entropy(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
         "bits": f"{entropy.data.bits_per_byte:.2f}".replace(".", ","),
     }
     return slots, ("entropy.shannon",)
+
+
+def _high_entropy(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    derived = _entropy(cited, report)
+    entropy = cited[0]
+    if derived is None or not isinstance(entropy, EntropyEvidence):
+        return None
+    if (
+        entropy.data.bits_per_byte < HIGH_ENTROPY
+        or entropy.data.byte_count < HIGH_ENTROPY_MIN_BYTES
+    ):
+        return None
+    return derived
 
 
 def _imports(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
@@ -332,6 +351,14 @@ RULES: dict[str, Rule] = {
             "La entropía no demuestra empaquetado ni cifrado: los datos comprimidos legítimos "
             "(imágenes, recursos) también la tienen alta.",
             _entropy,
+        ),
+        Rule(
+            "entropy.high@1",
+            "La entropía de «{name}» ({bits} bits por byte) es alta: en binarios benignos "
+            "medidos, solo el 0,34 % de las secciones de 4 KiB o más alcanza 7,2.",
+            "No demuestra empaquetado ni cifrado: ese 0,34 % son programas legítimos con datos "
+            "comprimidos, y un empaquetador puede dejar secciones con entropía baja.",
+            _high_entropy,
         ),
         Rule(
             "imports.dll@1",

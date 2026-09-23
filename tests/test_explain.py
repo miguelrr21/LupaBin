@@ -1,3 +1,4 @@
+import hashlib
 import struct
 from typing import get_args
 
@@ -22,6 +23,16 @@ def writable_executable():
     return bytes(data)
 
 
+def high_entropy(size=0x1000):
+    data = bytearray(build_pe(imports=False))
+    section = 0x98 + 224
+    struct.pack_into("<I", data, section + 8, size)
+    struct.pack_into("<I", data, section + 16, size)
+    noise = b"".join(hashlib.sha256(bytes([n, m])).digest() for n in range(16) for m in range(8))
+    data[0x200 : 0x200 + size] = noise[:size]
+    return bytes(data)
+
+
 def patched_demo(offset, value):
     data = bytearray(build_demo())
     struct.pack_into("<I", data, offset, value)
@@ -41,6 +52,7 @@ SAMPLES = {
     "ordinal": lambda: build_pe(ordinal=17),
     "runtime": lambda: build_pe(function=b"GetProcAddress"),
     "wx": writable_executable,
+    "high-entropy": high_entropy,
     "not-pe": lambda: b"just some text, not a PE file at all " * 4,
 }
 
@@ -212,3 +224,13 @@ def test_published_explanation_schema_is_current():
     from dissect.explain.schema import schema_text
 
     assert Path("docs/explanation-schema.json").read_text(encoding="utf-8") == schema_text()
+
+
+def test_high_entropy_note_needs_both_the_value_and_enough_bytes(reports):
+    [item] = [
+        i for i in explain(reports["high-entropy"], GLOSSARY).items if i.rule == "entropy.high@1"
+    ]
+    assert "0,34 %" in item.statement
+    small = analyze_bytes(high_entropy(size=0x200))
+    assert "entropy.high@1" not in rules_used(explain(small, GLOSSARY))
+    assert "entropy.high@1" not in rules_used(explain(reports["demo"], GLOSSARY))
