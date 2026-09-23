@@ -250,3 +250,61 @@ El caso `nop` es también el peor combinado: agota a la vez el tiempo de la bús
 | --- | --- | --- | --- | --- | --- | --- |
 | System32 | 1.363 | 1.230.385 | 0 | 0 | 0 de 1.230.245 | 90,4 % (sin cambio: ya tenía `.pdata`) |
 | SysWOW64 | 520 | 412.834 (antes 145.084) | 0 | 0 | 3 de 2.369 (los de `edit.exe`, auténticos) | **90,7 %** (antes 43,8 %) |
+
+## 10. Entrega 2: argumentos constantes (implementada para `RegOpenKeyExA/W`)
+
+Responde a "con qué constantes llama el código a una función del catálogo". Publica `call_argument` (`inferred`, componente `call_arguments`) dentro del contrato 0.5.0, que no se había publicado. El catálogo `dissect-api-semantics-v1` empieza con `RegOpenKeyExA/W`; el resto de la sección 4 se añadirá en cambios separados, comprobando cada firma.
+
+### 10.1 Diferencias con la sección 3.4
+
+- **Tramo lineal, no bloque básico.** El recorrido pasa a cada llamada el inicio de su tramo: el inicio de la ejecución lineal o la instrucción siguiente a la llamada anterior del mismo tramo. Una llamada reinicia el seguimiento porque, según la convención x64 de Microsoft Learn, `RCX`, `RDX`, `R8` y `R9` son volátiles ("consider volatile registers destroyed on function calls"). En x86, la llamada mueve la pila. Los saltos condicionales no cortan el tramo: la entrada de otro camino está en su destino.
+- **Marcas de entrada.** Un `bytearray` por sección marca los puntos de partida, los destinos constantes de saltos y llamadas (también los que un límite dejó pendientes) y los puntos donde una ejecución alcanza código ya decodificado por otra. Esto último cubre la entrada por un flujo de instrucciones desalineado. El coste no se pudo medir: shell32 2,67 → 2,69 s, mshtml 7,26 → 7,18 s.
+- **Se decodifica solo desde la última entrada.** El modo detallado empieza en la última marca anterior a la llamada, o en el inicio del tramo si no hay ninguna. Si la decodificación no cae exactamente en la llamada, Dissect no publica nada: la llamada está en otro flujo de instrucciones. Si hay una marca en la propia llamada, tampoco se publica nada.
+- **Solo instrucciones revisadas.** capstone 5.0.9 no declara todas las escrituras implícitas: `syscall` no incluye `RCX`, `rdpkru` no incluye `EDX` y `rdsspq rcx` no incluye `RCX` (comprobado al escribir el módulo). Por eso solo se confía en su lista de registros escritos para las instrucciones de `_TRUSTED` (`mov`, `lea`, aritmética y lógica, `push`/`pop`, `setcc`/`cmovcc`, copias SSE y saltos condicionales), cada una comprobada en `tests/test_code_args.py`. Cualquier otra olvida todo lo seguido.
+- **x86.** Solo `push` de 32 bits. Cualquier otra escritura de `esp` (incluido `push` de 16 bits) o cualquier escritura en memoria direccionada desde `esp` olvida la lista. Límite aceptado: una escritura en la pila a través de otro registro que apunte a ella no se detecta.
+- **Tipos, más estrictos:**
+  - `hkey`: solo las cinco claves que Learn lista para `hKey`, con su valor de `winreg.h` (`((HKEY)(ULONG_PTR)((LONG)0x80000001))`). En x64 se acepta solo la extensión con signo; `mov ecx, 0x80000001` (extensión con ceros) es otro puntero y se descarta.
+  - `integer`: módulo el ancho del parámetro (32 bits para `REGSAM`). Learn: "the callee can ignore the upper bits of the register".
+  - `string`: cadena ASCII imprimible no vacía, terminada en NUL, en una sección que no se puede escribir.
+  - Además, la función importada tiene que venir de una DLL que su página de Learn declare como exportadora (`api_location`).
+
+### 10.2 Mediciones (2026-09-24, `uv run python -m tests.code_eval corpus … --review 15`)
+
+Mismas muestras que la sección 9.4. Todo lo publicado es coherente con su tipo por construcción. El indicador de error es la constante que el tramo **recupera** y el tipo **rechaza**; cada caso se examina.
+
+| Conjunto | Llamadas del catálogo examinadas | Argumentos publicados | Informes inválidos | Fallos de bytes |
+| --- | --- | --- | --- | --- |
+| System32 (x64) | 5.309 | 9.510 | 0 | 0 |
+| SysWOW64 (x86; 3 en x64) | 1.839 | 3.514 | 0 | 0 |
+
+| Parámetro | x64: recuperados / aceptados | x86: recuperados / aceptados | Rechazos examinados |
+| --- | --- | --- | --- |
+| `hKey` | 2.986 / 2.986 (+3 / 3 en SysWOW64) | 1.070 / 1.069 | El único es `push 0x80000007` en winmsipc.dll: `HKEY_CURRENT_USER_LOCAL_SETTINGS`, un valor auténtico que Learn no lista para `hKey`. **Ninguna clave recuperada era errónea.** |
+| `lpSubKey` | 2.498 / 2.370 | 961 / 934 | 77 son `NULL` (`xor edx, edx` o `push 0`), válido según Learn pero no es una cadena. 69 están en una sección escribible. 5 apuntan a búferes sin bytes en disco. 4 no son una cadena imprimible no vacía; las dos revisadas (combase.dll y NetSetupEngine.dll) son cadenas vacías. |
+| `samDesired` | 4.154 / 4.154 (+3 / 3) | 1.505 / 1.505 | — |
+
+**Revisión manual de 30 argumentos al azar** (15 x64, semilla 64; 15 x86, semilla 32), desensamblando cada tramo: **30 correctos**. Ninguna instrucción entre la que fija el valor y la llamada escribe ese registro ni mueve la pila. En modemui.dll, un `jne` entra en el tramo antes de la instrucción que fija el valor: el seguimiento se reinicia ahí y el valor sigue siendo válido. Las abstenciones vistas en esas muestras eran correctas:
+- `mov r9d, r12d` en mapi32: no se propagan valores entre registros;
+- `lea r9d, [rdi+2]` en dxdiagn: no es una forma canónica;
+- `xor edx, edx` en GameManager64: es `NULL`.
+
+**Coste.**
+- El paso de argumentos usó 56.687 instrucciones en modo detallado en todo System32 (2,07 s) y 19.533 en SysWOW64 (0,89 s). Ningún archivo se acercó al presupuesto.
+- Un tramo diseñado para agotarlo (`argument-stretches`: 63 `nop` antes de cada llamada) mide unos 11,8 µs por instrucción detallada: 262.144 instrucciones costaban 3,05 s. Por eso el valor por defecto de `argument_instructions` es **65.536** (máximo del contrato, 262.144). El peor caso baja a 0,76 s y lo declara con `argument_instruction_limit`. Por la medición, ningún binario benigno pierde cobertura: el corpus entero de System32 usó menos que eso.
+- El paso comparte además la marca de tiempo del recorrido (`code_time_limit`).
+
+**Peores casos de 20 MiB en el host** (`uv run python -m tests.code_eval worst`, cada caso en su proceso, presupuesto de 262.144):
+
+| Caso | Tiempo total | Pico | Resultado |
+| --- | --- | --- | --- |
+| `argument-stretches` | 8,14 s (paso de argumentos: 3,05 s; con 65.536: 0,76 s) | 125 MiB | `call_arguments` examina 4.096 llamadas y no publica nada: no hay constantes |
+| `argument-values` (cuatro `push` constantes por llamada) | 7,38 s (paso: 0,44 s) | 135 MiB | 4.096 argumentos publicados, `call_argument_limit` |
+| `nop`, `jz`, `call rel32`, `call [casilla]` | 4,3 / 10,1 / 3,4 / 4,2 s | 124–125 MiB | Sin cambio respecto a la sección 9.5 en lo que declaran |
+
+Pendiente: repetir los peores casos en el contenedor con la imagen reconstruida.
+
+### 10.3 Explicación y glosario
+
+- `code.arguments@1`: una por llamada con argumentos. Cita la llamada y todos sus argumentos, en orden del informe, y hereda `inferred`. Por ejemplo: "En 0x00002017 el código llama a «RegOpenKeyExW» con hKey = HKEY_CURRENT_USER, lpSubKey = «Software\Dissect\Training», samDesired = 0x20019". Las cadenas de más de 200 caracteres se recortan indicando su longitud.
+- Nueva entrada `code.call_argument` (glosario 1.2.0), con cinco fuentes de Learn comprobadas el 2026-09-24. Su límite recoge además que `RegOverridePredefKey` puede redirigir una clave predefinida: `hKey = HKEY_CURRENT_USER` no demuestra qué clave se abre.
+- El título de la sección 3 del informe pasa a "resultados de aplicar un método a los bytes": un argumento no es una transformación.
