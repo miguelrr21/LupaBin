@@ -1,0 +1,12 @@
+id = "pe.header"
+title = "Cabecera PE"
+revision = "1.0.0"
+lang = "es"
+summary = "La cabecera PE declara, entre otras cosas, si el archivo es PE32 o PE32+, dónde empieza a ejecutarse (punto de entrada) y cuánto ocupa una vez cargado (SizeOfImage)."
+body = "El campo Magic de la cabecera opcional distingue PE32 (0x10b, imágenes de 32 bits) de PE32+ (0x20b, imágenes de 64 bits).\n\nEl campo Machine de la cabecera COFF indica la arquitectura para la que se compiló: por ejemplo 0x14c (x86), 0x8664 (x64) o 0xaa64 (ARM64).\n\nAddressOfEntryPoint es la dirección del punto de entrada, relativa a la base de la imagen (RVA): en un programa es donde empieza la ejecución; en una DLL es opcional y puede ser cero.\n\nSizeOfImage es el tamaño en bytes de la imagen cargada en memoria, incluidas las cabeceras, y debe ser múltiplo de SectionAlignment.\n\nSon valores declarados por el archivo. Dissect los lee y los contrasta entre sí, pero no simula el cargador de Windows."
+not_proven = "Los valores declarados pueden ser inconsistentes o estar manipulados; su presencia no garantiza que Windows cargue el archivo así."
+related = ["pe.format", "pe.anomaly"]
+sources = [
+  { title = "PE Format: Optional Header (Image Only)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-image-only", verified_on = 2026-09-23 },
+  { title = "PE Format: Machine Types", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#machine-types", verified_on = 2026-09-23 },
+]

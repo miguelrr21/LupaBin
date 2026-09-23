@@ -1,0 +1,329 @@
+{
+  "$defs": {
+    "GlossaryInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_id": {
+          "const": "dissect_glossary",
+          "title": "Catalog Id",
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "revision": {
+          "maxLength": 32,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog_id",
+        "revision",
+        "digest"
+      ],
+      "title": "GlossaryInfo",
+      "type": "object"
+    },
+    "Item": {
+      "additionalProperties": false,
+      "description": "One statement about the sample, backed by the evidence it cites.",
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "maxLength": 16,
+            "pattern": "^E[1-9][0-9]*$",
+            "type": "string"
+          },
+          "maxItems": 25000,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "glossary_ids": {
+          "items": {
+            "maxLength": 96,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Glossary Ids",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^X[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "observed",
+            "inferred"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "not_proven": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Not Proven",
+          "type": "string"
+        },
+        "rule": {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_.]*@[1-9][0-9]*$",
+          "title": "Rule",
+          "type": "string"
+        },
+        "slots": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Slots",
+          "type": "object"
+        },
+        "statement": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "rule",
+        "level",
+        "statement",
+        "slots",
+        "evidence_ids",
+        "glossary_ids",
+        "not_proven"
+      ],
+      "title": "Item",
+      "type": "object"
+    },
+    "Note": {
+      "additionalProperties": false,
+      "description": "What could not be analysed, or how far the analysis went; shown before findings.",
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "enum": [
+                "invalid_pe",
+                "unsupported_format",
+                "extractor_failure",
+                "parser_warning",
+                "invalid_import_table",
+                "invalid_export_table",
+                "invalid_section_table",
+                "unsafe_mapping",
+                "import_limit",
+                "descriptor_limit",
+                "export_limit",
+                "export_name_limit",
+                "section_limit",
+                "string_limit",
+                "string_length_limit",
+                "entropy_limit",
+                "anomaly_limit",
+                "evidence_budget",
+                "dependency_omitted",
+                "output_limit",
+                "decode_strings_limit",
+                "decode_xor_limit",
+                "decode_xor_examined_limit",
+                "decoded_length_limit"
+              ],
+              "type": "string"
+            },
+            {
+              "enum": [
+                "yara_catalog_invalid",
+                "yara_unavailable",
+                "yara_compile_error",
+                "yara_scan_error",
+                "yara_timeout",
+                "yara_policy_violation",
+                "yara_warning",
+                "yara_process_failure",
+                "yara_output_limit",
+                "yara_result_invalid",
+                "yara_instance_limit",
+                "yara_data_limit",
+                "yara_match_limit",
+                "yara_catalog_mismatch"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "component": {
+          "anyOf": [
+            {
+              "enum": [
+                "headers",
+                "sections",
+                "entropy",
+                "imports_normal",
+                "imports_delay",
+                "exports",
+                "anomalies",
+                "ascii",
+                "utf16le",
+                "yara_rules",
+                "yara_scan",
+                "yara_evidence",
+                "decode_strings",
+                "decode_xor"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Component"
+        },
+        "glossary_ids": {
+          "items": {
+            "maxLength": 96,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Glossary Ids",
+          "type": "array"
+        },
+        "rule": {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_.]*@[1-9][0-9]*$",
+          "title": "Rule",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings",
+            "yara",
+            "decode"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "statement": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule",
+        "source",
+        "statement",
+        "glossary_ids"
+      ],
+      "title": "Note",
+      "type": "object"
+    },
+    "ReportRef": {
+      "additionalProperties": false,
+      "properties": {
+        "sample_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sample Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "0.4.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_sha256",
+        "schema_version"
+      ],
+      "title": "ReportRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "glossary": {
+      "$ref": "#/$defs/GlossaryInfo"
+    },
+    "items": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Item"
+      },
+      "maxItems": 25000,
+      "title": "Items",
+      "type": "array"
+    },
+    "notes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Note"
+      },
+      "maxItems": 512,
+      "title": "Notes",
+      "type": "array"
+    },
+    "report": {
+      "$ref": "#/$defs/ReportRef"
+    },
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "partial",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "report",
+    "glossary",
+    "status"
+  ],
+  "title": "Explanation",
+  "type": "object"
+}
