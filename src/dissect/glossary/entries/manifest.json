@@ -1,0 +1,12 @@
+{
+ "format_version": "1",
+ "catalog_id": "dissect_glossary",
+ "revision": "1.0.0",
+ "entries": [
+  {
+   "id": "pe.section.permissions",
+   "filename": "pe.section.permissions.toml",
+   "sha256": "85b1ddeee9967222e5176e5c1e684885029fcff4fbbd3eef557a73199cb7a523"
+  }
+ ]
+}

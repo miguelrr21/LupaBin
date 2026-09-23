@@ -1,2 +1,4 @@
 src/dissect/rules/yara/*.yar text eol=lf
 src/dissect/rules/yara/manifest.json text eol=lf
+src/dissect/glossary/entries/*.toml text eol=lf
+src/dissect/glossary/entries/manifest.json text eol=lf
