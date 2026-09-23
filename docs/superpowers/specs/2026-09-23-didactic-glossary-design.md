@@ -147,7 +147,7 @@ Cada regla es una función pura `(hechos citados) -> Item | None` con versión p
 | `yara.match@1` | un `yara_match` | "La regla {rule} de Dissect coincide en {n} posiciones." | Lo indicado en la descripción de la regla en el catálogo. |
 | `limitation.*@1` | un código de limitación | "El componente {component} no terminó: {motivo}." | Que lo no analizado esté ausente. |
 
-El umbral de entropía (7,2) es un parámetro didáctico ("cerca del máximo de 8"), no un detector. Antes de fijarlo se medirá qué fracción de secciones benignas lo supera, con el mismo corpus de la Fase 2, y la cifra se publicará junto a la explicación.
+El umbral de entropía (7,2) es un parámetro didáctico ("cerca del máximo de 8"), no un detector. **Medido el 2026-09-23** sobre 55.313 binarios benignos (System32, Program Files y Program Files (x86)), con la misma fórmula que Dissect: de 251.225 secciones con bytes en disco, 508 (0,2 %) alcanzan 7,2. De las 139.057 secciones de 4 KiB o más, 475 (0,34 %). Por nombre: `.rsrc` 0,6–0,8 %, `.rdata` 0,2–0,3 %, `.text` 0,1–0,2 %. La regla `entropy.high@1` solo se aplica a secciones de 4 KiB o más, porque con pocos bytes la estimación se acerca a 8 simplemente porque apenas se repiten valores. La frase publica la cifra del 0,34 % y su advertencia dice que ese 0,34 % son programas legítimos.
 
 ### 6.3 Agrupaciones didácticas
 
