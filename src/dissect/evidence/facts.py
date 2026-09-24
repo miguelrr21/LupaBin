@@ -326,7 +326,7 @@ class ArgumentString(Model):
 
 
 class CallArgumentData(Model):
-    catalog: Literal["dissect-api-semantics-v1"] = "dissect-api-semantics-v1"
+    catalog: Literal["dissect-api-semantics-v2"] = "dissect-api-semantics-v2"
     method: Literal["block-constant-v1"] = "block-constant-v1"
     position: Annotated[int, Field(ge=0, le=15)]
     name: Annotated[str, Field(min_length=1, max_length=64)]

@@ -1,4 +1,4 @@
-"""Catalog `dissect-api-semantics-v1`: which parameters of which imported functions
+"""Catalog `dissect-api-semantics-v2`: which parameters of which imported functions
 Dissect interprets, with their type (design section 4).
 
 Each entry's arity, parameter names and exporting DLLs were checked against the page
@@ -31,7 +31,7 @@ class Function(NamedTuple):
     source: str
 
 
-CATALOG_ID = "dissect-api-semantics-v1"
+CATALOG_ID = "dissect-api-semantics-v2"
 
 # The predefined keys that Microsoft Learn lists for the hKey parameter of the
 # functions below, with their values in winreg.h (Windows SDK 10.0.26100.0):
@@ -93,12 +93,32 @@ def _registry_open(name: str, encoding: Encoding, dlls: frozenset[str]) -> Funct
     )
 
 
+def _registry_create(name: str, encoding: Encoding) -> Function:
+    return Function(
+        name,
+        # hKey, lpSubKey, Reserved, lpClass, dwOptions, samDesired,
+        # lpSecurityAttributes, phkResult, lpdwDisposition
+        9,
+        encoding,
+        (
+            Parameter(0, "hKey", "hkey", None),
+            Parameter(1, "lpSubKey", "string", None),
+            Parameter(4, "dwOptions", "integer", 32),  # DWORD; on the stack in x64
+            Parameter(5, "samDesired", "integer", 32),  # REGSAM; on the stack in x64
+        ),
+        _REGISTRY_DLLS,
+        _LEARN + f"winreg/nf-winreg-{name.lower()}",
+    )
+
+
 FUNCTIONS: dict[str, Function] = {
     function.name: function
     for function in (
         # the ANSI page also lists kernel32.dll ("on legacy versions of Windows")
         _registry_open("RegOpenKeyExA", "ascii", _REGISTRY_DLLS | {"kernel32.dll"}),
         _registry_open("RegOpenKeyExW", "utf-16-le", _REGISTRY_DLLS),
+        _registry_create("RegCreateKeyExA", "ascii"),
+        _registry_create("RegCreateKeyExW", "utf-16-le"),
     )
 }
 

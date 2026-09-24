@@ -6,7 +6,10 @@ from dissect.evidence import api_catalog, argument_forms
 from dissect.evidence.api_catalog import hkey_name, lookup
 
 PINNED = {
-    "dissect-api-semantics-v1": "19e41f8f93976c5ebaf5270cdf2ef40812f8199a14ad968038d3b5d3a2bf8abb"
+    # v1: RegOpenKeyExA/W (never published)
+    "dissect-api-semantics-v1": "19e41f8f93976c5ebaf5270cdf2ef40812f8199a14ad968038d3b5d3a2bf8abb",
+    # v2: + RegCreateKeyExA/W, checked on Microsoft Learn on 2026-09-24
+    "dissect-api-semantics-v2": "238568b92b75a849ffe0d8fdf75ac5877fe4b86d8d1ba9b75022cc4006579420",
 }
 
 
@@ -24,6 +27,20 @@ def test_registry_open_signature_as_published():
             (1, "lpSubKey", "string"),
             (3, "samDesired", "integer"),
         ]
+
+
+def test_registry_create_signature_as_published():
+    for name, encoding in (("RegCreateKeyExA", "ascii"), ("RegCreateKeyExW", "utf-16-le")):
+        entry = api_catalog.FUNCTIONS[name]
+        assert entry.arity == 9 and entry.encoding == encoding
+        assert [(p.position, p.name, p.type) for p in entry.parameters] == [
+            (0, "hKey", "hkey"),
+            (1, "lpSubKey", "string"),
+            (4, "dwOptions", "integer"),
+            (5, "samDesired", "integer"),
+        ]
+    # unlike RegOpenKeyExA, the page does not list kernel32.dll
+    assert lookup(b"kernel32.dll", b"RegCreateKeyExA") is None
 
 
 def test_x64_keys_are_the_sign_extended_constants_only():

@@ -16,6 +16,8 @@ from dissect.runner import run_isolated
 from tests.fixtures.pe_builder import (
     ARGS_STRING_RVA,
     ARGS_SUBKEY,
+    HKCU32,
+    HKCU64,
     args_demo_bytes,
     build_args_demo,
     build_code_demo,
@@ -268,3 +270,37 @@ def test_the_fixture_generator_writes_the_arguments_demo(tmp_path, monkeypatch):
     )
     pe_builder.main()
     assert path.read_bytes() == build_args_demo(bits=64)
+
+
+# --- RegCreateKeyExW: arguments past the fourth are on the stack in x64 ----------
+
+
+def registry_create(bits):
+    """RegCreateKeyExW(HKCU, subkey, 0, NULL, REG_OPTION_VOLATILE, KEY_WRITE, NULL, &k, NULL)."""
+    slot = 0x1140
+    if bits == 32:
+        body = b"\x6a\x00\x50\x6a\x00"  # lpdwDisposition, phkResult (eax), lpSecurityAttributes
+        body += b"\x68" + struct.pack("<I", 0x20006)  # samDesired = KEY_WRITE
+        body += b"\x6a\x01\x6a\x00\x6a\x00"  # dwOptions = REG_OPTION_VOLATILE, lpClass, Reserved
+        body += b"\x68" + struct.pack("<I", 0x400000 + ARGS_STRING_RVA) + HKCU32
+        body += b"\xff\x15" + struct.pack("<I", 0x400000 + slot)
+    else:
+        body = b"\x48\x8d\x15" + struct.pack("<i", ARGS_STRING_RVA - (0x2000 + 7))
+        body += HKCU64 + b"\x45\x33\xc0\x45\x33\xc9"  # Reserved, lpClass
+        body += b"\xff\x15" + struct.pack("<i", slot - (0x2000 + len(body) + 6))
+    code = body + b"\xc3"
+    return build_args_demo(bits=bits, code=code, function=b"RegCreateKeyExW")
+
+
+def test_registry_create_arguments_in_x86_come_from_all_nine_pushes():
+    found = arguments(analyze_bytes(registry_create(32)))
+    assert {name: fact.data.value for name, fact in found.items() if name != "lpSubKey"} == {
+        "hKey": 0x80000001,
+        "dwOptions": 1,
+        "samDesired": 0x20006,
+    }
+    assert found["lpSubKey"].data.string.text == ARGS_SUBKEY
+
+
+def test_registry_create_stack_arguments_are_not_recovered_in_x64():
+    assert set(arguments(analyze_bytes(registry_create(64)))) == {"hKey", "lpSubKey"}
