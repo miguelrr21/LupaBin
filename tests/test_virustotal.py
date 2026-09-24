@@ -133,6 +133,10 @@ def test_explicit_upload_sends_a_generic_name_and_waits_for_the_analysis():
         SHA, b"MZtraining", upload=True, transport=fake, sleep=sleeps.append, environ=KEY
     )
     assert report.status == "found" and report.uploaded
+    from dissect.render.external import to_text_lines
+
+    shown = " ".join(to_text_lines(report, lambda text, indent, first=None: [text]))
+    assert "Dissect subió el archivo a VirusTotal porque no lo conocía" in shown
     post = next(r for r in fake.requests if r.method == "POST")
     assert b'filename="sample"' in post.body and b"MZtraining" in post.body
     assert post.headers["content-type"].startswith("multipart/form-data; boundary=")
@@ -280,13 +284,44 @@ def test_analyze_adds_an_attributed_external_section(tmp_path, monkeypatch):
     assert all(upload is False for _, upload in calls)
 
 
-def test_analyze_consults_virustotal_by_default(tmp_path, monkeypatch):
-    monkeypatch.delenv("DISSECT_VIRUSTOTAL")  # the user's default, not the tests' one
+def user_defaults(monkeypatch):
+    """The user's defaults, not the tests' ones: consult and upload."""
+    monkeypatch.delenv("DISSECT_VIRUSTOTAL")
+    monkeypatch.delenv("DISSECT_VIRUSTOTAL_UPLOAD")
+
+
+def test_analyze_consults_and_uploads_by_default(tmp_path, monkeypatch):
+    user_defaults(monkeypatch)
+    monkeypatch.setattr("dissect.cli.virustotal_client.api_key", lambda environ=None: "key")
     calls = patch(monkeypatch)
     result = runner.invoke(app, ["analyze", str(sample(tmp_path))])
     assert result.exit_code == 0 and len(calls) == 1
     assert "Fuente externa: VirusTotal (no verificada por Dissect)" in result.stdout
-    assert calls[0][1] is False  # by hash: the file is never uploaded by default
+    assert calls[0][1] is True  # uploaded only if VirusTotal does not know the file
+    assert "se sube y se espera su análisis" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("arguments", "environ"),
+    [(["--no-upload-to-virustotal"], None), ([], "off")],
+)
+def test_the_default_upload_can_be_turned_off(tmp_path, monkeypatch, arguments, environ):
+    user_defaults(monkeypatch)
+    if environ is not None:
+        monkeypatch.setenv("DISSECT_VIRUSTOTAL_UPLOAD", environ)
+    calls = patch(monkeypatch)
+    result = runner.invoke(app, ["analyze", str(sample(tmp_path)), *arguments])
+    assert result.exit_code == 0 and calls[0][1] is False
+    assert "se sube" not in result.stderr
+
+
+def test_uploading_needs_the_consultation(tmp_path, monkeypatch):
+    user_defaults(monkeypatch)
+    calls = patch(monkeypatch)
+    result = runner.invoke(app, ["analyze", str(sample(tmp_path)), "--no-virustotal"])
+    assert result.exit_code == 0 and calls == []  # nothing consulted, nothing uploaded
+    both = ["--no-virustotal", "--upload-to-virustotal"]
+    assert runner.invoke(app, ["analyze", str(sample(tmp_path)), *both]).exit_code == 2
 
 
 @pytest.mark.parametrize(
@@ -298,6 +333,7 @@ def test_analyze_consults_virustotal_by_default(tmp_path, monkeypatch):
     ],
 )
 def test_the_default_consultation_can_be_turned_off(tmp_path, monkeypatch, arguments, environ):
+    monkeypatch.delenv("DISSECT_VIRUSTOTAL_UPLOAD")
     if environ is None:
         monkeypatch.delenv("DISSECT_VIRUSTOTAL")
     else:
