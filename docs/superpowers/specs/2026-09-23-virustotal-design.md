@@ -49,7 +49,16 @@ Nada de eso es un hecho verificado por Dissect. Una etiqueta es la opinión de u
 
 ## 5. CLI
 
-- `dissect analyze ARCHIVO --virustotal`: el informe didáctico con una sección 5 de fuente externa.
+**Revisión 2 (2026-09-24), a petición del usuario: la consulta por hash es la opción por defecto.**
+- `analyze` y `explain` consultan VirusTotal sin opciones.
+- `--no-virustotal` lo desactiva para un análisis, y `DISSECT_VIRUSTOTAL=off` (también `0`, `no` o `false`) lo desactiva siempre.
+- Con `--json` no se consulta: ese JSON es el informe de hechos.
+- Sin clave no hay ninguna conexión: la sección explica cómo definirla o desactivar la consulta.
+- La subida sigue exigiendo `--upload-to-virustotal`.
+- Consecuencia para la privacidad: con una clave configurada, el SHA-256 de cada archivo analizado se envía a VirusTotal (el archivo no).
+- Las pruebas fijan `DISSECT_VIRUSTOTAL=off` en `tests/conftest.py`, así que nunca llegan a la red aunque haya una clave en el equipo.
+
+- `dissect analyze ARCHIVO`: el informe didáctico con una sección 5 de fuente externa (con `--virustotal` explícito si el valor por defecto está desactivado).
 - `dissect analyze ARCHIVO --virustotal --upload-to-virustotal`: lo mismo, subiendo el archivo si VirusTotal no lo conoce.
 - `dissect explain INFORME.json --virustotal`: consulta por el hash del informe, sin necesitar la muestra.
 - `dissect virustotal ARCHIVO` o `dissect virustotal --sha256 HASH`: solo la consulta. `--format json` emite el documento.

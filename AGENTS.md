@@ -18,7 +18,7 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 - Solo fixtures sintéticos e inofensivos en el repositorio. No descargar ni redistribuir muestras maliciosas reales.
 - La decodificación estática futura solo transformará datos mediante algoritmos auditados y acotados. Un resultado plausible no es un hecho confirmado sobre el programa.
 - No implementar etapas posteriores sin acordar el alcance. La primera entrega es andamiaje, esquema de evidencias y CLI PE de hashes/imports.
-- El funcionamiento sin LLM y sin red es obligatorio. Las integraciones externas serán opcionales y separadas del worker.
+- El funcionamiento sin LLM y sin red es obligatorio. Las integraciones externas son opcionales (desactivables) y separadas del worker. VirusTotal se consulta por defecto desde el host, solo por SHA-256, por petición del usuario (2026-09-24): sin clave o sin red el análisis local no cambia, `--no-virustotal` o `DISSECT_VIRUSTOTAL=off` lo desactivan, y subir el archivo sigue exigiendo `--upload-to-virustotal`. Las pruebas nunca consultan la red (`tests/conftest.py`).
 
 ## Contrato y desarrollo
 
