@@ -1,14 +1,18 @@
 """Terminal and Markdown views of a validated explanation.
 
-Order is fixed by the design: the sample, what could not be analysed, observed facts,
-inferences, and the glossary of the terms used. Only items that regenerate exactly
+Order is fixed by the design: the sample, a summary of the code's capabilities (Phase
+5, section 6), what could not be analysed, observed facts, inferences, and the glossary
+of the terms used. Only items that regenerate exactly
 from their citations are shown; the number of omitted items is stated.
 """
 
 import textwrap
 from collections.abc import Iterable
+from typing import NamedTuple
 
+from dissect.evidence.facts import ApiCallEvidence, ImportEvidence
 from dissect.evidence.models import Report
+from dissect.explain.capabilities import BY_RULE, CATALOG_ID, TACTICS
 from dissect.explain.models import Explanation, Item, SlotValue
 from dissect.explain.rules import RULES
 from dissect.glossary.catalog import Glossary
@@ -33,6 +37,76 @@ EXTRA = {
     "description": "Qué significa, según el catálogo",
     "text": "Texto",
 }
+
+
+SUMMARY_TITLE = "Resumen: qué contiene el código"
+SUMMARY_INTRO = (
+    "Capacidades reconocidas a partir de las llamadas del código y de sus argumentos "
+    "constantes. Que el código las contenga no demuestra que el programa las use, ni con "
+    "qué intención; el detalle y el límite de cada una están en la sección 3."
+)
+NO_CODE = "El código no se pudo recorrer: no se puede decir qué contiene."
+NO_CAPABILITY = (
+    f"No se reconoció ninguna capacidad del catálogo {CATALOG_ID}. Eso no demuestra que el "
+    "código no las tenga."
+)
+CODE_PARTS = ("disassembly", "api_calls", "call_arguments")
+PARTIAL_CODE = (
+    "El recorrido del código, sus llamadas o sus argumentos quedaron incompletos (ver la "
+    "sección 1): puede haber capacidades que no aparecen."
+)
+CREATE_PROCESS_W = (
+    "El código llama a CreateProcessW, cuya línea de órdenes Dissect no lee (tiene que "
+    "estar en memoria escribible): lo que ejecuta esa llamada no aparece aquí."
+)
+ONE_CALL = (
+    "Solo se reconocen capacidades de una sola llamada: las que encadenan llamadas, como "
+    "abrir una clave y escribir en ella después, no aparecen."
+)
+
+
+class Summary(NamedTuple):
+    groups: list[tuple[str, list[Item]]]  # (tactic, its capability items), design order
+    warnings: list[str | Item]  # what limits the summary; an Item is the density note
+
+
+def summary(items: tuple[Item, ...], report: Report) -> Summary:
+    """Capabilities grouped by tactic, then the warnings that limit what they show."""
+    run = next((r for r in report.extractor_runs if r.source == "code"), None)
+    parts: dict[str, str] = {p.name: p.status for p in (run.components if run else ())}
+    if parts.get("disassembly", "blocked") == "blocked":
+        return Summary([], [NO_CODE])
+    groups = []
+    for tactic, label in TACTICS.items():
+        chosen = [i for i in items if i.rule in BY_RULE and BY_RULE[i.rule].tactic == tactic]
+        if chosen:
+            groups.append((label[0].upper() + label[1:], chosen))
+    warnings: list[str | Item] = [] if groups else [NO_CAPABILITY]
+    warnings += [item for item in items if item.rule == "code.walk_density@1"]
+    if any(parts.get(part, "complete") != "complete" for part in CODE_PARTS):
+        warnings.append(PARTIAL_CODE)
+    facts = {fact.id: fact for fact in report.evidence}
+    callees = (
+        facts.get(fact.provenance.evidence_ids[0])
+        for fact in report.evidence
+        if isinstance(fact, ApiCallEvidence)
+    )
+    if any(
+        isinstance(callee, ImportEvidence)
+        and callee.data.function is not None
+        and callee.data.function.text == "CreateProcessW"
+        for callee in callees
+    ):
+        warnings.append(CREATE_PROCESS_W)
+    warnings.append(ONE_CALL)
+    return Summary(groups, warnings)
+
+
+def _techniques(item: Item) -> str | None:
+    shown = item.slots.get("techniques")
+    if not isinstance(shown, tuple):
+        return None
+    return "Técnicas de MITRE ATT&CK con el mismo mecanismo: " + ", ".join(shown)
 
 
 def _extras(item: Item) -> Iterable[tuple[str, SlotValue]]:
@@ -90,6 +164,19 @@ def to_text(
     ]
     if origin:
         lines += wrap(origin, "          ", "Origen    ")
+    lines += ["", SUMMARY_TITLE, *wrap(SUMMARY_INTRO, "   ")]
+    overview = summary(items, report)
+    for tactic, chosen in overview.groups:
+        lines += ["", f"   {tactic}"]
+        for item in chosen:
+            lines += wrap(visible(item.statement), "          ", f"   {item.id:<6} ")
+            techniques = _techniques(item)
+            if techniques:
+                lines += wrap(techniques, "          ")
+    lines.append("")
+    for warning in overview.warnings:
+        text = f"{warning.id}: {warning.statement}" if isinstance(warning, Item) else warning
+        lines += wrap(visible(text), "     ", "   • ")
     lines += ["", "1. Qué se pudo analizar"]
     for note in explanation.notes:
         lines += wrap(visible(note.statement), "     ", "   • ")
@@ -171,6 +258,21 @@ def to_markdown(
     ]
     if origin:
         lines.append(f"- **Origen**: {markdown_text(origin)}")
+    lines += ["", f"## {SUMMARY_TITLE}", "", markdown_text(SUMMARY_INTRO)]
+    overview = summary(items, report)
+    for tactic, chosen in overview.groups:
+        lines += ["", f"### {markdown_text(tactic)}", ""]
+        for item in chosen:
+            lines.append(f"- **{item.id}**: {_markdown_statement(item)}")
+            techniques = _techniques(item)
+            if techniques:
+                lines.append(f"  - {markdown_text(techniques)}")
+    lines.append("")
+    for warning in overview.warnings:
+        if isinstance(warning, Item):
+            lines.append(f"- **{warning.id}**: {_markdown_statement(warning)}")
+        else:
+            lines.append(f"- {markdown_text(warning)}")
     lines += ["", "## 1. Qué se pudo analizar", ""]
     lines += [f"- {markdown_text(note.statement)}" for note in explanation.notes]
     sections = (
