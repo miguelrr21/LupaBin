@@ -164,3 +164,53 @@ Corpus: System32 (`--stride 3`, 1.363 PE), SysWOW64 (`--stride 5`, 521) y Progra
 **Coste.** Calcular las 13 capacidades en shell32.dll (7.936 hechos) tarda 0,10 s. Generar y validar todas sus explicaciones tarda 14,41 s con capacidades y 14,46 s sin ellas, así que las capacidades no añaden coste medible. Los 14 s ya existían, y parecen deberse a reglas que recorren el informe entero por cada uno de sus ~2.860 ítems (sin comprobar); queda como mejora pendiente en la hoja de ruta.
 
 Cambiar una condición, una redacción o una cifra exige una nueva versión del catálogo y repetir esta medición.
+
+## 10. Entrega 5.6: más cobertura, catálogo `dissect-capabilities-v2` (2026-09-24)
+
+Petición del usuario tras el merge del PR #8: seguir con la 5.4 (camino a) y la 5.6. Tres ampliaciones, cada una comprobada contra su fuente y medida antes de adoptarla con el mismo corpus y la misma revisión manual de la sección 9:
+
+1. **Modificador de Control Flow Guard.** Learn permite `PAGE_TARGETS_INVALID` (0x40000000) con `VirtualAlloc(Ex)` y `PAGE_TARGETS_NO_UPDATE` (el mismo valor) con `VirtualProtect(Ex)`, "only valid when the protection changes to an executable type". No cambian si la memoria es escribible, así que pasan a ser modificadores aceptados, con el nombre que corresponde a cada función. Hasta ahora Dissect se abstenía en 13 llamadas del corpus.
+2. **`RunOnceEx`.** ATT&CK (T1547.001) cita `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunOnceEx`, con su ejemplo de una subclave `0001\Depend` que carga una DLL. Se acepta esa clave y cualquier subclave suya, solo bajo `HKEY_LOCAL_MACHINE` (también a través de `Wow6432Node`), que es donde la sitúa la fuente. Bajo una clave que no se pudo determinar no se acepta: no se sabría si es la de la máquina.
+3. **Escribir un valor en `Winlogon`** (`RegSetKeyValue`, capacidad nueva). T1547.004 (Winlogon Helper DLL) nombra los valores `Shell` y `Userinit` y la subclave `Notify`, en `HKLM\Software[\Wow6432Node\]\Microsoft\Windows NT\CurrentVersion\Winlogon` y en la de HKCU. La técnica solo se asocia si el nombre del valor es `Shell` o `Userinit` o la subclave es `Notify` o una suya; otros valores de `Winlogon` se describen sin técnica.
+
+Abrir `Winlogon` para escribir sigue sin técnica, por la misma razón que la clave `Run` (sección 4). Un cambio de condición exige una nueva versión del catálogo: `dissect-capabilities-v2`.
+
+### 10.1 Medición y adopción
+
+Mismo corpus y herramienta que la sección 9.2 (3.087 PE). Resultado: 0 informes inválidos, 0 fallos de verificación y 0 errores de explicación. Se compararon, caso por caso, las mediciones con los catálogos v1 y v2:
+- **13 casos nuevos**, todos de memoria ejecutable y escribible con `0x40000040`: 3 en System32 y 10 en SysWOW64 (RMActivate, msmpeg2ac3dec, msmpeg2adec, CPFilters y mshtml). Los 13 son correctos y cada uno nombra el bit como lo documenta su función (`PAGE_TARGETS_INVALID` con `VirtualAlloc`, `PAGE_TARGETS_NO_UPDATE` con `VirtualProtect`). Los binarios con algún caso pasan de 69 a 72 (2,33 %).
+- **Ningún caso de v1 desaparece ni cambia**, salvo por la redacción.
+- `RunOnceEx` y la escritura de valores en `Winlogon` no aparecen en el corpus benigno: 0 binarios. Solo las ejercitan los fixtures sintéticos, con sus pruebas positivas y negativas.
+
+**Adoptado** como `dissect-capabilities-v2`. Glosario 1.4.0 con la entrada `attack.t1547_004`.
+
+## 11. Entrega 5.4, camino a): abrir y escribir en la misma función (diseño, 2026-09-24)
+
+El usuario eligió el camino a) de la sección 7. Esta sección concreta qué exige.
+
+### 11.1 Por qué hace falta un hecho nuevo
+
+Las capacidades se derivan solo del informe, para que `validate` pueda regenerarlas sin la muestra. El contrato 0.5.0 no publica ningún límite de función: una llamada solo lleva su instrucción. "Misma función" tiene que venir de un dato que el informe cite y que el host pueda comprobar:
+- **Tabla `.pdata` (x64): adoptada.** Cada entrada `RUNTIME_FUNCTION` declara el inicio, el fin y la información de desenrollado de un tramo contiguo de una función, escritos por el compilador. Dos llamadas dentro del mismo rango están en el mismo tramo de la misma función. El host comprueba los 12 bytes de la entrada contra la muestra, sin parsear nada.
+- **Descartado: distancia entre llamadas.** Adivina límites.
+- **Descartado: región alcanzable desde un inicio de función sin seguir llamadas.** Es un dato del recorrido, y el host no puede comprobarlo sin un desensamblador (el host no importa capstone).
+- **Descartado: tabla de Control Flow Guard.** Da inicios de función, pero no finales.
+
+**Límite aceptado: solo x64.** En x86 no hay `.pdata`, y la capacidad nunca se reconoce. Un binario puede declarar una `.pdata` falsa: la frase dice "el rango que declara la tabla `.pdata`", no "la función".
+
+### 11.2 Contrato 0.6.0
+
+- Hecho nuevo `code_function` (`observed`, fuente `code`, componente `api_calls`). Datos: `begin`, `end` y `unwind` (RVA), y los 12 bytes de la entrada; `location` es su desplazamiento en el archivo. El modelo comprueba que los bytes codifican esos tres valores y que `begin < end`. El host compara los bytes con la muestra, igual que con las llamadas.
+- Publicación: la entrada de `.pdata` que contiene cada llamada publicada a una función del catálogo de argumentos, sin repetir. Su número está acotado por el de esas llamadas.
+- El 0.5.0 se conserva en `docs/schemas/`, y la imagen pasa a `dissect-worker:0.6.0`.
+- Una regla nueva, `code.functions@1`, explica todas las funciones publicadas en un solo ítem, porque todo hecho tiene que estar explicado.
+
+### 11.3 Capacidades nuevas
+
+- **`run_key_open_and_set`**: en el mismo rango de `.pdata` hay una llamada que abre una clave `Run` para escribir (la condición de `run_key_open_write`) y una llamada a `RegSetValueExA/W`. Esa llamada no puede tener como `hKey` una clave predefinida publicada, porque entonces escribiría en otra clave. El caso cita el rango, las dos llamadas y sus argumentos. Frase: "en el rango 0x…–0x… que declara `.pdata`, el código abre «…» para escribir y llama a RegSetValueEx (valor «…»); no se sabe si esa escritura usa la clave abierta".
+- **`winlogon_open_and_set`**: lo mismo con `Winlogon`.
+- **Técnicas:** T1547.001 para `Run`; T1547.004 para `Winlogon` solo si el valor es `Shell` o `Userinit`. Así lo permite la sección 7, siempre que la frase diga que no se sabe si la escritura usa la clave abierta.
+
+### 11.4 Criterio de adopción
+
+Mismo corpus que la sección 9, más una **revisión por desensamblado de cada caso**: comprobar si el `hKey` de `RegSetValueEx` es el identificador que devolvió la llamada que abre la clave. La capacidad solo se adopta si la frase es cierta en todos los casos. La técnica, además, solo si en todos los casos revisados la escritura usa la clave abierta; si no, la capacidad se queda sin técnica. También se miden el tamaño que añade al informe y el coste en tiempo.
