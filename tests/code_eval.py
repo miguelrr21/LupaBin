@@ -17,6 +17,7 @@ of the package or of CI.
 
 import argparse
 import bisect
+import json
 import random
 import struct
 import subprocess
@@ -219,8 +220,10 @@ class ArgumentProbe:
             print(f"  REJECTED x{bits} {name} {reason}: {path} setter {rva:#x} {kind} {value:#x}")
         print(f"argument pass: {self.detail} detail instructions, {self.seconds:.2f} s")
         rng = random.Random(seed)  # noqa: S311 - a reproducible review sample
-        pool = [item for item in self.published if match in item[4]]
-        chosen = rng.sample(pool, min(review, len(pool)))
+        chosen = []
+        for pattern in match.split(",") if match else [""]:
+            pool = [item for item in self.published if pattern in item[4]]
+            chosen += rng.sample(pool, min(review, len(pool)))
         for path, bits, call, setter, name, shown in chosen:
             print(
                 f"\nREVIEW {path} x{'86' if bits == 32 else '64'} call {call:#x}: {name} = {shown}"
@@ -323,6 +326,11 @@ def corpus(args: argparse.Namespace) -> None:
         for seconds, name, instructions in times[-5:]:
             print(f"  {seconds:6.2f}s {instructions:>9} instr  {name}")
     probe.report(args.review, args.seed, args.review_match)
+    if args.dump:
+        # every published and rejected argument, for analyses that should not walk the
+        # corpus again (design section 10.6)
+        with open(args.dump, "w", encoding="utf-8") as stream:
+            json.dump({"published": probe.published, "rejected": probe.rejected}, stream)
 
 
 def peak_memory() -> int:
@@ -448,6 +456,7 @@ def main() -> None:
     )
     run.add_argument("--review", type=int, default=0, help="arguments to print for review")
     run.add_argument("--seed", type=int, default=2026)
+    run.add_argument("--dump", help="write published and rejected arguments as JSON")
     run.add_argument(
         "--review-match", default="", help="review only Function.parameter labels containing this"
     )
