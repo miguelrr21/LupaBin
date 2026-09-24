@@ -18,9 +18,11 @@ from tests.fixtures.pe_builder import (
     ARGS_SUBKEY,
     HKCU32,
     HKCU64,
+    RESOLVE_NAME,
     args_demo_bytes,
     build_args_demo,
     build_code_demo,
+    build_resolve_demo,
     with_load_config,
 )
 from tests.test_runner import FakeDocker
@@ -373,3 +375,18 @@ def test_host_compares_the_copied_register_setter_with_the_sample():
     report = Report.model_validate_json(json.dumps(data))
     with pytest.raises(ValueError, match="code evidence bytes differ from the sample"):
         verify_calls(report.evidence, sample)
+
+
+# --- GetProcAddress: a name, or an ordinal that is not one --------------------------
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+def test_get_proc_address_names_are_published_and_ordinals_are_not(bits):
+    data = build_resolve_demo(bits=bits)
+    report = analyze_bytes(data)
+    calls = [fact for fact in report.evidence if fact.kind == "api_call"]
+    names = [fact for fact in report.evidence if fact.kind == "call_argument"]
+    assert len(calls) == 2  # by name, then by ordinal 5
+    assert [(f.data.name, f.data.string.text) for f in names] == [("lpProcName", RESOLVE_NAME)]
+    assert names[0].provenance.evidence_ids == (calls[0].id,)
+    verify_calls(report.evidence, data)

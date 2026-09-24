@@ -251,6 +251,40 @@ def build_args_demo(
     return bytes(data)
 
 
+# Inert training use of GetProcAddress: one call by name (a made-up training export,
+# in the read-only .idata) and one by ordinal 5, which is not a name. Never executed.
+RESOLVE_NAME = "DissectTrainingProc"
+
+
+def resolve_demo_bytes(bits=32):
+    slot = 0x1140
+    if bits == 32:
+        absolute = struct.pack("<I", 0x400000 + slot)
+        body = bytes.fromhex("68") + struct.pack("<I", 0x400000 + ARGS_STRING_RVA)
+        body += bytes.fromhex("56ff15") + absolute  # push esi (hModule); call
+        body += bytes.fromhex("6a0556ff15") + absolute  # by ordinal 5
+    else:
+        body = bytes.fromhex("488d15") + struct.pack("<i", ARGS_STRING_RVA - (CODE_RVA + 7))
+        body += bytes.fromhex("488bcbff15")  # mov rcx, rbx (hModule); call
+        body += struct.pack("<i", slot - (CODE_RVA + len(body) + 4))
+        body += bytes.fromhex("ba05000000488bcbff15")  # mov edx, 5: by ordinal
+        body += struct.pack("<i", slot - (CODE_RVA + len(body) + 4))
+    return body + bytes.fromhex("c3")
+
+
+def build_resolve_demo(*, bits=32):
+    """GetProcAddress by name and by ordinal, imported from kernel32.dll."""
+    data = bytearray(
+        build_code_pe(
+            resolve_demo_bytes(bits), bits=bits, dll=b"kernel32.dll", function=b"GetProcAddress"
+        )
+    )
+    text = RESOLVE_NAME.encode("ascii") + bytes(1)
+    offset = 0x200 + ARGS_STRING_RVA - 0x1000
+    data[offset : offset + len(text)] = text
+    return bytes(data)
+
+
 def build_code_demo(*, bits=32, **imports):
     """An entry point that calls the import once through each canonical form."""
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)
