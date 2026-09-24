@@ -6,6 +6,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from dissect.errors import DissectError
+from dissect.evidence.code import verify_calls
 from dissect.evidence.models import Limits, Report
 from dissect.evidence.yara import validate_matches
 from dissect.extractors.decode import verify_decodings
@@ -14,8 +15,8 @@ from dissect.rules.catalog import CatalogError, load_catalog
 from dissect.transport import Completed as Completed
 from dissect.transport import DockerCLI, Transport
 
-IMAGE = "dissect-worker:0.4.0"
-SOURCES = ("pe", "strings", "yara", "decode")
+IMAGE = "dissect-worker:0.5.0"
+SOURCES = ("pe", "strings", "yara", "decode", "code")
 LABEL = "org.dissect.analysis"
 
 
@@ -108,7 +109,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         try:
             envelope = json.loads(response.stdout)
             if isinstance(envelope, dict) and isinstance(envelope.get("schema_version"), str):
-                if envelope["schema_version"] != "0.4.0":
+                if envelope["schema_version"] != "0.5.0":
                     raise DissectError("incompatible_worker")
             report = Report.model_validate_json(response.stdout)
         except (ValidationError, ValueError, RecursionError):
@@ -126,6 +127,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
             raise DissectError("invalid_worker_output")
         try:
             verify_decodings(report.evidence, blob.data)
+            verify_calls(report.evidence, blob.data)
         except ValueError:
             raise DissectError("invalid_worker_output") from None
         context = report.yara_context

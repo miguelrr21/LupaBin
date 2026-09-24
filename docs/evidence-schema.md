@@ -1,8 +1,60 @@
 # Dissect: contrato de evidencias
 
-## Contrato activo 0.4.0
+## Contrato activo 0.5.0
 
-La Fase 2 añade al contrato 0.3.0 una cuarta fuente, `decode`, y el tipo `decoded_string`. La CLI, el paquete y la imagen esperada usan 0.4.0; el esquema 0.3.0 se conserva en `docs/schemas/` junto a los anteriores. No hay conversión automática de informes ni fallback a un worker antiguo. Diseño, mediciones y límites: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
+La Fase 4 añade al contrato 0.4.0 una quinta fuente, `code`, con el tipo `api_call` (primera entrega: qué funciones importadas llama el código y desde dónde) y el tipo `call_argument` (segunda entrega: argumentos constantes de las llamadas a las funciones del catálogo). La versión 0.5.0 no se había publicado cuando se añadió `call_argument`, así que ambos forman parte de ella, como preveía la sección 5 del diseño. La CLI, el paquete y la imagen esperada usan 0.5.0; el esquema 0.4.0 se conserva en `docs/schemas/`. Diseño, mediciones y límites: [Fase 4](superpowers/specs/2026-09-23-static-api-calls-design.md).
+
+Cambio en un tipo existente: `import` gana `iat_rva`, la dirección de su casilla en la tabla de direcciones de import (IAT), que es adonde apuntan las llamadas. `location` sigue siendo la entrada de la tabla de búsqueda que contiene el nombre u ordinal.
+
+`api_call` es `observed`: afirma que en esos bytes hay una instrucción, alcanzada por el recorrido del código, que llama a la casilla de ese import. No afirma que se ejecute. Campos:
+
+| Campo | Contenido |
+| --- | --- |
+| `component` | `api_calls`. |
+| `location` | La instrucción de llamada: `offset`, `rva`, `length` y `section`, que debe ser la única sección ejecutable que contiene esos bytes en disco. |
+| `data.via` | `direct` (`call [casilla]`), `thunk` (`call rel32` a un `jmp [casilla]`) o `register` (`mov reg, [casilla]` inmediatamente antes de `call reg`). |
+| `data.raw_hex` | Los bytes de la instrucción de llamada. |
+| `data.helper` | Solo `thunk` y `register`: el `jmp` del thunk o la carga del registro, con `offset`, `rva` y `raw_hex`. |
+| `provenance.evidence_ids` | Exactamente el `import` al que llama. |
+
+**Verificación en el propio informe.** Sin la muestra, el modelo ya vuelve a derivar la casilla desde los bytes citados con las formas canónicas de `src/dissect/evidence/call_forms.py` y exige que sea el `iat_rva` del import citado. En x86 la dirección es absoluta (menos la base de imagen de la cabecera); en x64, relativa a la instrucción siguiente. En un thunk, el destino del `call` debe ser el `jmp` citado; en la vía por registro, la carga debe terminar justo donde empieza la llamada y usar el mismo registro. También comprueba que cada `offset` corresponde a su `rva` según la tabla de secciones.
+
+**Verificación en el host.** El launcher y `dissect explain --sample` comparan los bytes de cada instrucción citada con los de la muestra. El host no lleva desensamblador: una prueba comprueba que ni la CLI ni el runner cargan capstone. Lo que ninguna comprobación puede demostrar es que el recorrido llegó a esa instrucción (y no a unos bytes que solo lo parecen). Eso es una regla del worker, probada con casos negativos y medida en binarios benignos.
+
+`call_argument` (entrega 2) es `inferred`: afirma que una instrucción del mismo tramo lineal que la llamada, anterior a ella, fija ese argumento a una constante, y que el recorrido no vio nada que lo cambie antes de la llamada. Solo se publica para las funciones del catálogo `dissect-api-semantics-v3` (`src/dissect/evidence/api_catalog.py`: las 72 funciones de la sección 4 del diseño, de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía, importadas de una DLL que su página de Microsoft Learn declara como exportadora) y solo si el valor es del tipo del parámetro. Campos:
+
+| Campo | Contenido |
+| --- | --- |
+| `component` | `call_arguments`. |
+| `location` | La instrucción que fija el argumento, en la misma sección ejecutable que la llamada y antes de ella. |
+| `data.catalog`, `data.method` | `dissect-api-semantics-v4` (v1: `RegOpenKeyExA/W`; v2: más `RegCreateKeyExA/W`; v3: más `GetProcAddress`; v4: el resto de la sección 4. Ninguna versión anterior llegó a publicarse). Método `block-constant-v1` (registro o `push`) o `stack-slot-v1` (ranura de la pila en x64, del quinto argumento en adelante). |
+| `data.position`, `data.name`, `data.type` | Posición (desde 0), nombre y tipo del parámetro según el catálogo: `hkey`, `string` o `integer`. |
+| `data.value` | `hkey`: el valor tal como se fija (en x64, extendido con signo: `0xffffffff80000001`). `integer`: módulo el ancho del parámetro (32 bits para `REGSAM`). `string`: el puntero tal como se fija (dirección absoluta en x86, RVA de un `lea` relativo a rip en x64). |
+| `data.raw_hex` | Los bytes de la instrucción que lo fija: `lea r64, [rip+disp32]`, `mov r32, imm32`, `mov r64, simm32` o `xor r32, r32` en x64; `push imm32` o `push imm8` en x86 (`src/dissect/evidence/argument_forms.py`). Con `stack-slot-v1`, la escritura en la ranura `[rsp+8·i]`: `mov dword/qword ptr [rsp+d], imm32`, `and dword/qword ptr [rsp+d], 0` o `mov [rsp+d], r32/r64`. |
+| `data.constant` | Solo `hkey`: el nombre de la clave predefinida. Se aceptan las cinco que Learn lista para `hKey` (`HKEY_CLASSES_ROOT`, `HKEY_CURRENT_USER`, `HKEY_LOCAL_MACHINE`, `HKEY_USERS`, `HKEY_CURRENT_CONFIG`). |
+| `data.source` | Solo con `stack-slot-v1` y cuando se copia un registro: la instrucción (forma canónica, ahora sobre cualquiera de los 16 registros) que fijó ese registro antes de la escritura, con `offset`, `rva` y `raw_hex`. Un puntero exige escribir los 8 bytes de la ranura; un entero de 32 bits admite 4 u 8. |
+| `data.string` | Solo `string`: `offset`, `rva`, `raw_hex` (texto más su terminador NUL) y `text` imprimible ASCII, en una sección que no se puede escribir: el programa podría cambiar una cadena escribible antes de la llamada. |
+| `provenance.evidence_ids` | Exactamente el `api_call` al que pertenece. |
+
+**Verificación.** El modelo vuelve a derivar el valor desde `raw_hex` con las formas canónicas, exige que en x64 el registro fijado sea el del parámetro, que la clave sea una de las aceptadas, que el entero coincida, que el puntero lleve exactamente a la cadena citada y que la cadena decodifique sus bytes con su terminador. También exige que la función llamada y el parámetro estén en el catálogo, y que no haya dos valores para el mismo argumento de una llamada. El host compara además con la muestra los bytes de la instrucción y de la cadena. Lo que no puede comprobar sin desensamblar es que ninguna instrucción intermedia cambie el valor, ni que otro camino no entre en medio. Por eso el hecho es `inferred`, y el método es una regla del worker probada con casos negativos (`tests/test_code_args.py`).
+
+Componentes y limitaciones de `code`:
+
+| Componente | Revisa | Limitaciones propias |
+| --- | --- | --- |
+| `disassembly` | Instrucciones decodificadas por descenso recursivo en secciones ejecutables (`examined`) | `code_instruction_limit` (8.000.000), `call_site_limit` (1.048.576 llamadas examinadas), `code_entry_limit` (262.144 puntos de partida), `code_time_limit` (el análisis lleva 15 s, o la mitad de `timeout_seconds`) |
+| `api_calls` | Instrucciones `call` examinadas (`examined`) | Las del recorrido, más `api_call_limit` (4.096 publicadas) y `dependency_omitted` si la tabla de imports no se leyó completa |
+| `call_arguments` | Llamadas publicadas a funciones del catálogo cuyo tramo se examinó (`examined`) | `argument_instruction_limit` (65.536 instrucciones en modo detallado, en total), `code_time_limit` (la misma marca que el recorrido), `call_argument_limit` (4.096 publicados) y `dependency_omitted` si `api_calls` no es completo |
+
+Los puntos de partida del recorrido son el punto de entrada, los exports y tablas que escribe el compilador o el enlazador: callbacks TLS, `.pdata` (x64), la tabla de funciones de Control Flow Guard y los manejadores SafeSEH (x86). Ninguno se adivina.
+
+**Límites de tiempo.** La búsqueda XOR y el recorrido del código se detienen al llegar a su marca de tiempo, contada desde el inicio del análisis (`analysis.limits.decode.seconds` y `analysis.limits.code.seconds`), y lo declaran con su código. Así una máquina lenta o una entrada diseñada contra ellos deja el informe parcial en vez de agotar el tiempo del worker y perderlo entero. Consecuencia: en una máquina más lenta, el mismo archivo puede dar un resultado parcial distinto. Lo publicado sigue siendo cierto, pero ya no es idéntico entre máquinas cuando aparece uno de estos códigos.
+
+`api_calls` solo puede ser completo si también lo son `disassembly` y los dos componentes de imports, y `call_arguments` solo si lo es `api_calls`. Un argumento ausente con cobertura completa significa que ninguna instrucción del tramo lo fija con una forma canónica, no que no tenga valor. Con la cuota agotada, se publica primero la primera llamada de cada import y después las repetidas, para cubrir el máximo de funciones distintas. Arquitecturas distintas de x86/x64 bloquean la fuente (`unsupported_architecture`), igual que las correspondencias ambiguas entre memoria y archivo (`unsafe_mapping`) y las entradas que no son PE. Cero llamadas con cobertura completa no demuestra que el programa no llame a nada: el código al que solo se llega por saltos indirectos no se recorre.
+
+## Antecedente: contrato 0.4.0
+
+La Fase 2 añadió al contrato 0.3.0 una cuarta fuente, `decode`, y el tipo `decoded_string`. Su esquema histórico está en `docs/schemas/0.4.0.json`; sus reglas siguen vigentes en 0.5.0. Diseño, mediciones y límites: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
 
 `decoded_string` es la única evidencia con `confidence="inferred"`: afirma que unos bytes, transformados con un algoritmo y unos parámetros exactos, producen un texto. No afirma que el programa realice la transformación ni que el texto tenga significado. Campos:
 
@@ -24,7 +76,7 @@ Componentes y limitaciones de `decode`:
 | Componente | Revisa | Limitaciones propias |
 | --- | --- | --- |
 | `decode_strings` | Todas las cadenas extraídas y completas | `decode_strings_limit` (2.000 resultados) |
-| `decode_xor` | Todas las apariciones de los patrones del catálogo en los bytes | `decode_xor_limit` (256 resultados), `decode_xor_examined_limit` (200.000 apariciones examinadas), `decoded_length_limit` (texto recortado a 1.024 caracteres) |
+| `decode_xor` | Todas las apariciones de los patrones del catálogo en los bytes | `decode_xor_limit` (256 resultados), `decode_xor_examined_limit` (200.000 apariciones examinadas), `decoded_length_limit` (texto recortado a 1.024 caracteres), `decode_time_limit` (desde 0.5.0: el análisis lleva 10 s, o un tercio de `timeout_seconds`) |
 
 Los límites efectivos aparecen en `analysis.limits.decode`. Cero decodificaciones con cobertura completa es el caso habitual y no significa nada sobre la muestra. El estado global considera las cuatro fuentes con la regla existente.
 

@@ -23,7 +23,9 @@ ABSENCE = (
 )
 EXTRA = {
     "functions": "Funciones",
+    "sites": "Desde (RVA)",
     "names": "Primeros nombres",
+    "unlisted": "Sin import con ese nombre",
     "description": "Qué significa, según el catálogo",
     "text": "Texto",
 }
@@ -88,7 +90,10 @@ def to_text(
         lines += _wrap(visible(note.statement), "     ", "   • ")
     sections = (
         ("2. Hechos observados en los bytes", "observed"),
-        ("3. Inferencias: resultados de aplicar una transformación a los bytes", "inferred"),
+        (
+            "3. Inferencias: resultados de aplicar un método a los bytes, no lecturas directas",
+            "inferred",
+        ),
     )
     for title, level in sections:
         lines += ["", title]
@@ -162,7 +167,10 @@ def to_markdown(
     lines += [f"- {markdown_text(note.statement)}" for note in explanation.notes]
     sections = (
         ("## 2. Hechos observados en los bytes", "observed"),
-        ("## 3. Inferencias: resultados de aplicar una transformación a los bytes", "inferred"),
+        (
+            "## 3. Inferencias: resultados de aplicar un método a los bytes, no lecturas directas",
+            "inferred",
+        ),
     )
     for title, level in sections:
         lines += ["", title, ""]
