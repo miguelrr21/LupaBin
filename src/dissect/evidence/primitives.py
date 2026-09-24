@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 UInt = Annotated[int, Field(ge=0, le=0xFFFFFFFF)]
 NonNegative = Annotated[int, Field(ge=0)]
 EvidenceId = Annotated[str, Field(pattern=r"^E[1-9][0-9]*$", max_length=16)]
-Source = Literal["pe", "strings", "yara", "decode"]
+Source = Literal["pe", "strings", "yara", "decode", "code"]
 Status = Literal["completed", "partial", "failed"]
 Component = Literal[
     "headers",
@@ -22,6 +22,9 @@ Component = Literal[
     "yara_evidence",
     "decode_strings",
     "decode_xor",
+    "disassembly",
+    "api_calls",
+    "call_arguments",
 ]
 COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "pe": (
@@ -36,6 +39,7 @@ COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "strings": ("ascii", "utf16le"),
     "yara": ("yara_rules", "yara_scan", "yara_evidence"),
     "decode": ("decode_strings", "decode_xor"),
+    "code": ("disassembly", "api_calls", "call_arguments"),
 }
 
 
@@ -62,11 +66,29 @@ class DecodeLimits(Model):
     strings: Annotated[int, Field(gt=0, le=2000)] = 2000
     xor: Annotated[int, Field(gt=0, le=256)] = 256
     xor_examined: Annotated[int, Field(gt=0, le=200000)] = 200000
+    # The XOR scan stops once the analysis has run this long (or a third of
+    # timeout_seconds, if less), leaving time for the code walk and the report.
+    seconds: Annotated[int, Field(gt=0, le=30)] = 10
+
+
+class CodeLimits(Model):
+    instructions: Annotated[int, Field(gt=0, le=8000000)] = 8000000
+    entries: Annotated[int, Field(gt=0, le=262144)] = 262144
+    call_sites: Annotated[int, Field(gt=0, le=1048576)] = 1048576
+    # The walk stops once the analysis has run this long (or half of timeout_seconds, if
+    # less): it is the last source, and a timeout would lose the whole report.
+    seconds: Annotated[int, Field(gt=0, le=30)] = 15
+    calls: Annotated[int, Field(gt=0, le=4096)] = 4096
+    arguments: Annotated[int, Field(gt=0, le=4096)] = 4096
+    # Instructions decoded in capstone's detail mode to recover arguments, across all
+    # calls of the catalog (design section 10.2).
+    argument_instructions: Annotated[int, Field(gt=0, le=262144)] = 65536
 
 
 class Limits(Model):
     yara: YaraLimits = Field(default_factory=YaraLimits)
     decode: DecodeLimits = Field(default_factory=DecodeLimits)
+    code: CodeLimits = Field(default_factory=CodeLimits)
     input_bytes: Annotated[int, Field(gt=0, le=20971520)] = 20971520
     timeout_seconds: Annotated[int, Field(gt=0, le=30)] = 30
     memory_bytes: Literal[536870912] = 536870912

@@ -35,6 +35,7 @@ def test_original_imports(bits, delay, ordinal):
     )
     assert fact.location.offset == 0x320
     assert fact.location.rva == 0x1120
+    assert fact.data.iat_rva == 0x1140  # the slot calls go through, not the lookup entry
     assert fact.location.section.text == ".idata"
     assert fact.confidence == "observed"
 

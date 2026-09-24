@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
 ## Estado y alcance
 
-Contrato de hechos 0.4.0 (Fases 1A, 1B y 2): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA y decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes), producidos en un worker Docker aislado. Fase 3 (en la rama `feat/didactic-glossary`): un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario de 38 entradas con fuentes verificadas. No ejecuta ni emula la muestra. No incluye todavía web, LLM, VirusTotal, capa, FLOSS ni desempaquetado.
+Contrato de hechos 0.5.0 (Fases 1A, 1B, 2 y primera entrega de la 4): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y, en la rama `feat/static-api-calls`, qué funciones importadas llama el código x86/x64 y desde qué instrucción, producidos en un worker Docker aislado. Fase 3 (en la rama `feat/didactic-glossary`): un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario de 39 entradas con fuentes verificadas. No ejecuta ni emula la muestra. No incluye todavía web, LLM, VirusTotal, capa, FLOSS ni desempaquetado.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -24,7 +24,7 @@ Desde la raíz del repositorio, con una entrada local disponible:
 
 ```text
 uv sync --frozen
-docker build --load -f docker/Dockerfile -t dissect-worker:0.4.0 .
+docker build --load -f docker/Dockerfile -t dissect-worker:0.5.0 .
 uv run --frozen dissect analyze "ruta/al/archivo.exe"
 ```
 
@@ -98,9 +98,9 @@ También se acotan secciones (96), entradas EAT (5.000), asociaciones de nombres
 
 Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, sin borrar las cabeceras y descriptores comprobados. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
 
-La CLI 0.4.0 exige el esquema 0.4.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0, 0.2.0 y 0.3.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
+La CLI 0.5.0 exige el esquema 0.5.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 a 0.4.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
 
-Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' dissect-worker:0.4.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
+Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' dissect-worker:0.5.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
 
 ## Qué aporta YARA
 
@@ -175,7 +175,7 @@ uv run --frozen python -m dissect.explain.schema --check
 uv build
 uv run --frozen python -m tests.check_yara_distribution
 docker compose config --quiet
-docker build --load -f docker/Dockerfile -t dissect-worker:0.4.0 .
+docker build --load -f docker/Dockerfile -t dissect-worker:0.5.0 .
 uv run --frozen pytest -m docker
 ```
 
