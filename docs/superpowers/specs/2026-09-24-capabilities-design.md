@@ -1,6 +1,6 @@
 # Fase 5: capacidades a partir de llamadas y argumentos
 
-Estado: revisión 2 (2026-09-24). Petición del usuario: que Dissect diga "exactamente lo que hace" el programa. Con permiso para avanzar por secciones (5.0 a 5.7).
+Estado: revisión 2 (2026-09-24), implementada en las entregas 5.1, 5.2, 5.3 y 5.5 (sección 9). Petición del usuario: que Dissect diga "exactamente lo que hace" el programa. Con permiso para avanzar por secciones (5.0 a 5.7), confirmado por el usuario el 2026-09-24.
 
 Revisión 2, aprobada por el usuario el 2026-09-24 tras revisar la revisión 1:
 - T1547.001 solo se asocia a una escritura real en la clave `Run` hecha con una sola llamada (`RegSetKeyValue`). Abrir la clave para escribir se describe sin técnica hasta la entrega 5.4.
@@ -47,7 +47,7 @@ Los nombres de las constantes (tipos de inicio de servicio, protecciones `PAGE_*
 | Clave `Run` abierta para escribir | `RegOpenKeyEx`/`RegCreateKeyEx` con la misma `lpSubKey` y un `samDesired` que contenga `KEY_SET_VALUE` (sola o dentro de `KEY_WRITE` o `KEY_ALL_ACCESS`), `GENERIC_WRITE` o `GENERIC_ALL` | — (hasta la entrega 5.4) |
 | Clave `Winlogon` abierta para escribir | la condición anterior con `\CurrentVersion\Winlogon` | — (hasta la entrega 5.4) |
 | Creación de un servicio | `CreateService` con nombre o ruta del binario conocidos; también el tipo y el inicio | T1543.003 |
-| Ejecución de una orden | `WinExec`, `CreateProcess` o `ShellExecute` con el programa o la orden conocidos. La técnica solo se asocia si el programa es un intérprete de órdenes o de scripts (`cmd`, `powershell`, `wscript`/`cscript`) | T1059.003, T1059.001, T1059.005 |
+| Ejecución de una orden | `WinExec`, `CreateProcess` o `ShellExecute` con el programa o la orden conocidos. La técnica solo se asocia si el programa es un intérprete de órdenes (`cmd`, `powershell`, `pwsh`). `wscript` y `cscript` quedan sin técnica: ejecutan VBScript (T1059.005) o JScript (T1059.007), y la llamada no dice cuál (sección 9.1) | T1059.003, T1059.001 |
 | Descarga a un archivo | `URLDownloadToFile` con la URL o el archivo conocidos | T1105 |
 | Destino de red | `InternetConnect`/`WinHttpConnect` con servidor (y puerto), o `InternetOpenUrl` con URL | — |
 | Agente de usuario | `InternetOpen`/`WinHttpOpen` con agente | — |
@@ -123,3 +123,44 @@ Solo esta entrega podrá asociar T1547.001 a abrir una clave `Run` y escribir en
 4. `tests/capability_eval.py`: prevalencia benigna y revisión de cada caso (5.3).
 5. Sección de resumen en texto y Markdown (5.5).
 6. Demostración, documentación y PR (5.7). La entrega 5.4 (capacidades de varias llamadas) y la 5.6 (más cobertura) quedan para después.
+
+## 9. Implementación y mediciones (2026-09-24)
+
+### 9.1 Qué se implementó y qué cambió respecto a las secciones anteriores
+
+- **5.1.** `src/dissect/explain/capabilities.py` (catálogo `dissect-capabilities-v1`, fijado por digest) y `src/dissect/explain/winapi.py` (constantes copiadas de `winnt.h` y `WinBase.h` del SDK 10.0.26100.0; un test comprueba las máscaras compuestas). Cada capacidad declara qué parámetros del catálogo de APIs lee, y un test comprueba que existen en `dissect-api-semantics-v4`. Una capacidad es una regla `capability.<id>@1` que cita todas las llamadas del informe que cumplen su condición, cada una con todos sus argumentos publicados. El motor la regenera al validar, así que una cita de menos, un caso oculto o una frase alterada no se muestran.
+- **5.2.** Siete entradas de glosario (revisión 1.3.0): `capability.static`, `attack.technique` y una por técnica, con sus páginas de attack.mitre.org y de Microsoft Learn comprobadas el 2026-09-24. El caso con técnica la muestra entre paréntesis y el ítem enumera las técnicas. Diferencia con la sección 3: **`wscript` y `cscript` quedan sin técnica**, porque ejecutan VBScript (T1059.005) o JScript (T1059.007) y la llamada no dice cuál. El programa se identifica por el nombre de archivo, sin ruta ni `.exe`: el de `lpApplicationName`, el primer elemento de la línea de órdenes (entre comillas si las hay) o `lpFile` de `ShellExecute`. Una ruta con espacios sin comillas (`C:\Program Files\cmd.exe`) se parte donde la parte Windows y no da técnica.
+- **Protección con bits que Dissect no nombra.** Learn permite combinar `PAGE_TARGETS_INVALID`/`PAGE_TARGETS_NO_UPDATE` (0x40000000) con una protección ejecutable. Dissect solo acepta los modificadores `PAGE_GUARD`, `PAGE_NOCACHE` y `PAGE_WRITECOMBINE` y se abstiene con cualquier otro bit. Coste medido (sección 9.2): 13 llamadas en todo el corpus.
+- **Redacción corregida al revisar los casos.** El destino de `ShellExecute` no siempre es un archivo o un programa: puede ser una URL (`https://aka.ms/msdtretire` en msdt.exe), un esquema (`ms-settings:fonts`) o un elemento del shell (`::{26EE0668-…}` en devmgr.dll). Ahora el caso dice «destino» y la capacidad, "pedir al shell de Windows que abra algo".
+- **5.5.** El informe abre con "Resumen: qué contiene el código", sin número para no renumerar las secciones 1 a 5. Agrupa las capacidades por táctica, con sus técnicas, y termina con los avisos: no se reconoció ninguna (y eso no demuestra nada), el código no se pudo recorrer, la densidad del recorrido es baja, las llamadas o los argumentos están incompletos, hay llamadas a `CreateProcessW` cuya línea de órdenes no se lee, y aún no se reconocen capacidades de varias llamadas.
+
+### 9.2 Medición (`uv run python -m tests.capability_eval corpus … --jobs 8 --out …`)
+
+Corpus: System32 (`--stride 3`, 1.363 PE), SysWOW64 (`--stride 5`, 521) y Program Files con Program Files (x86) (`--recursive --stride 40`, 1.203). En total, 3.087 PE: 0 informes inválidos, 0 fallos de verificación de bytes y 0 errores al generar y validar las explicaciones.
+
+| Capacidad | Binarios con algún caso | % de 3.087 | Casos | Binarios que llaman a alguna de sus funciones |
+| --- | --- | --- | --- | --- |
+| Escribir un valor en una clave `Run` | 0 | 0 % | 0 | 111 |
+| Abrir una clave `Run` para escribir | 9 | 0,29 % | 11 | 1.058 |
+| Abrir `Winlogon` para escribir | 1 | 0,03 % | 1 | 1.058 |
+| Crear un servicio | 2 | 0,06 % | 2 | 12 |
+| Ejecutar un programa u orden, o abrir algo con el shell | 26 | 0,84 % | 55 | 214 |
+| Descargar una URL a un archivo | 0 | 0 % | 0 | 2 |
+| Servidor o URL de destino | 3 | 0,10 % | 3 | 71 |
+| Agente de usuario | 39 | 1,26 % | 45 | 75 |
+| Memoria ejecutable y escribible | 69 | 2,24 % | 105 | 342 |
+| Proceso abierto con derechos sobre su memoria | 22 | 0,71 % | 27 | 312 |
+| Mover o borrar al reiniciar | 9 | 0,29 % | 11 | 89 |
+| Mutex con nombre | 105 | 3,40 % | 200 | 205 |
+| Algoritmo o proveedor criptográfico | 152 | 4,92 % | 343 | 230 |
+
+**Revisión manual de los 803 casos**, uno a uno (los de mutex y criptografía, además, contrastando por programa que el texto cita exactamente el argumento): **ninguno describe algo que sus argumentos no digan.** Ejemplos: las 11 claves `Run` abiertas para escribir son `RunOnce` o `Run` con `KEY_SET_VALUE` directo o incluido (`0x2`, `0x3`, `0x20006`, `0x2001f`); `profsvc.dll` abre `Winlogon` con `KEY_ALL_ACCESS` desde una clave que no es predefinida, y la frase lo dice; los 27 `OpenProcess` piden `PROCESS_ALL_ACCESS` o incluyen `PROCESS_VM_OPERATION`/`PROCESS_VM_WRITE`. Ningún caso de ejecución lanzó `cmd` ni PowerShell, así que en el corpus solo aparece la técnica T1543.003 (dos servicios de controlador).
+
+**Abstenciones contadas** (coste en cobertura, no en error):
+- 190 llamadas a `CreateProcessW` sin nombre de aplicación: su línea de órdenes nunca se lee (sección 3), y el resumen lo avisa.
+- 13 protecciones ejecutables y escribibles con bits que Dissect no nombra (sección 9.1).
+- 1 clave `Run` cuyo permiso no se recuperó.
+
+**Coste.** Calcular las 13 capacidades en shell32.dll (7.936 hechos) tarda 0,10 s. Generar y validar todas sus explicaciones tarda 14,41 s con capacidades y 14,46 s sin ellas, así que las capacidades no añaden coste medible. Los 14 s ya existían, y parecen deberse a reglas que recorren el informe entero por cada uno de sus ~2.860 ítems (sin comprobar); queda como mejora pendiente en la hoja de ruta.
+
+Cambiar una condición, una redacción o una cifra exige una nueva versión del catálogo y repetir esta medición.
