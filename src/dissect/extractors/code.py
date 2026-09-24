@@ -185,6 +185,13 @@ def _argument(
     setting = found.setting
     rva, size = found.setter
     offset, _ = layout.locate(rva, size)
+    if parameter.bits is None and found.width != 8:
+        return None  # a pointer needs the whole stack slot
+    source = None
+    if found.source is not None:
+        start, length = found.source
+        at, _ = layout.locate(start, length)
+        source = Instruction(offset=at, rva=start, raw_hex=layout.data[at : at + length].hex())
     value = setting.value
     constant: str | None = None
     string: ArgumentString | None = None
@@ -202,6 +209,8 @@ def _argument(
         if string is None:
             return None
     return CallArgumentData(
+        method="stack-slot-v1" if found.method == "stack-slot-v1" else "block-constant-v1",
+        source=source,
         position=parameter.position,
         name=parameter.name,
         type=parameter.type,

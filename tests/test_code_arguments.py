@@ -275,20 +275,27 @@ def test_the_fixture_generator_writes_the_arguments_demo(tmp_path, monkeypatch):
 # --- RegCreateKeyExW: arguments past the fourth are on the stack in x64 ----------
 
 
-def registry_create(bits):
-    """RegCreateKeyExW(HKCU, subkey, 0, NULL, REG_OPTION_VOLATILE, KEY_WRITE, NULL, &k, NULL)."""
+def registry_create(bits, stack=True):
+    """RegCreateKeyExW(HKCU, subkey, 0, NULL, REG_OPTION_VOLATILE, KEY_WRITE, NULL, &k, NULL).
+
+    In x64 the fifth and later arguments go to the stack: samDesired as an immediate
+    store, dwOptions through esi (`stack=False` leaves them out)."""
     slot = 0x1140
     if bits == 32:
-        body = b"\x6a\x00\x50\x6a\x00"  # lpdwDisposition, phkResult (eax), lpSecurityAttributes
-        body += b"\x68" + struct.pack("<I", 0x20006)  # samDesired = KEY_WRITE
-        body += b"\x6a\x01\x6a\x00\x6a\x00"  # dwOptions = REG_OPTION_VOLATILE, lpClass, Reserved
-        body += b"\x68" + struct.pack("<I", 0x400000 + ARGS_STRING_RVA) + HKCU32
-        body += b"\xff\x15" + struct.pack("<I", 0x400000 + slot)
+        body = bytes.fromhex("6a00506a00")  # lpdwDisposition, phkResult, lpSecurityAttributes
+        body += bytes.fromhex("68") + struct.pack("<I", 0x20006)  # samDesired = KEY_WRITE
+        body += bytes.fromhex("6a016a006a00")  # dwOptions = 1, lpClass, Reserved
+        body += bytes.fromhex("68") + struct.pack("<I", 0x400000 + ARGS_STRING_RVA) + HKCU32
+        body += bytes.fromhex("ff15") + struct.pack("<I", 0x400000 + slot)
     else:
-        body = b"\x48\x8d\x15" + struct.pack("<i", ARGS_STRING_RVA - (0x2000 + 7))
-        body += HKCU64 + b"\x45\x33\xc0\x45\x33\xc9"  # Reserved, lpClass
-        body += b"\xff\x15" + struct.pack("<i", slot - (0x2000 + len(body) + 6))
-    code = body + b"\xc3"
+        body = bytes.fromhex("488d15") + struct.pack("<i", ARGS_STRING_RVA - (0x2000 + 7))
+        body += HKCU64 + bytes.fromhex("4533c04533c9")  # Reserved, lpClass
+        if stack:
+            body += bytes.fromhex("be01000000")  # mov esi, REG_OPTION_VOLATILE
+            body += bytes.fromhex("c744242806000200")  # mov dword ptr [rsp+0x28], KEY_WRITE
+            body += bytes.fromhex("89742420")  # mov dword ptr [rsp+0x20], esi
+        body += bytes.fromhex("ff15") + struct.pack("<i", slot - (0x2000 + len(body) + 6))
+    code = body + bytes.fromhex("c3")
     return build_args_demo(bits=bits, code=code, function=b"RegCreateKeyExW")
 
 
@@ -302,5 +309,67 @@ def test_registry_create_arguments_in_x86_come_from_all_nine_pushes():
     assert found["lpSubKey"].data.string.text == ARGS_SUBKEY
 
 
-def test_registry_create_stack_arguments_are_not_recovered_in_x64():
-    assert set(arguments(analyze_bytes(registry_create(64)))) == {"hKey", "lpSubKey"}
+def test_registry_create_stack_arguments_are_recovered_in_x64():
+    found = arguments(analyze_bytes(registry_create(64)))
+    assert {name: fact.data.method for name, fact in found.items()} == {
+        "hKey": "block-constant-v1",
+        "lpSubKey": "block-constant-v1",
+        "dwOptions": "stack-slot-v1",
+        "samDesired": "stack-slot-v1",
+    }
+    assert found["dwOptions"].data.value == 1 and found["dwOptions"].data.source is not None
+    assert found["samDesired"].data.value == 0x20006 and found["samDesired"].data.source is None
+    without = arguments(analyze_bytes(registry_create(64, stack=False)))
+    assert set(without) == {"hKey", "lpSubKey"}
+
+
+def create64_payload():
+    return json.loads(analyze_bytes(registry_create(64)).model_dump_json())
+
+
+@pytest.mark.parametrize(
+    "tamper,reason",
+    [
+        (
+            lambda d: argument(d, "dwOptions")["data"]["source"].update(raw_hex="bf01000000"),
+            "not a canonical setting",  # mov edi, 1: not the register that is stored
+        ),
+        (
+            lambda d: argument(d, "samDesired")["data"].update(raw_hex="c744243006000200"),
+            "not a canonical setting",  # [rsp+0x30] is slot 6, not samDesired's 5
+        ),
+        (
+            lambda d: argument(d, "samDesired")["data"].update(method="block-constant-v1"),
+            "not a canonical setting",
+        ),
+        (
+            lambda d: argument(d, "hKey")["data"].update(
+                source=argument(d, "dwOptions")["data"]["source"]
+            ),
+            "only a stack slot copies a register",
+        ),
+        (
+            lambda d: argument(d, "dwOptions")["data"]["source"].update(
+                rva=argument(d, "dwOptions")["location"]["rva"] + 4,
+                offset=argument(d, "dwOptions")["location"]["offset"] + 4,
+            ),
+            "set before the store",
+        ),
+    ],
+)
+def test_report_rejects_stack_arguments_its_bytes_do_not_support(tamper, reason):
+    data = create64_payload()
+    tamper(data)
+    with pytest.raises(ValueError, match=reason):
+        Report.model_validate_json(json.dumps(data))
+
+
+def test_host_compares_the_copied_register_setter_with_the_sample():
+    sample = registry_create(64)
+    data = create64_payload()
+    source = argument(data, "dwOptions")["data"]["source"]
+    source["raw_hex"] = "be04000000"  # mov esi, 4: coherent, but not the sample's bytes
+    argument(data, "dwOptions")["data"]["value"] = 4
+    report = Report.model_validate_json(json.dumps(data))
+    with pytest.raises(ValueError, match="code evidence bytes differ from the sample"):
+        verify_calls(report.evidence, sample)

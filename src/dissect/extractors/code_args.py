@@ -7,7 +7,10 @@ is executed: an argument is known only when an instruction of a canonical form
 (evidence/argument_forms.py) sets it and no later instruction can change it.
 
 - x64 (rcx, rdx, r8, r9): any write of the register or of a subregister, explicit
-  or implicit, forgets it.
+  or implicit, forgets it. From the fifth argument on, the stack slot [rsp + 8*i]
+  holds it (design section 11): a canonical store of an immediate, or of a register
+  that a canonical form set earlier, fills the slot; a write of rsp, a store that
+  overlaps it, or a memory write through any other base forgets it.
 - x86 (stack): the i-th 32-bit `push` counting back from the call is argument i. Any
   other write of esp, or any write to memory addressed from esp, forgets every push.
 
@@ -45,13 +48,24 @@ _TRUSTED = frozenset(
         " JA JAE JB JBE JE JG JGE JL JLE JNE JNO JNP JNS JO JP JS"
     ).split()
 )
-_ARGUMENT_REGISTERS = {
-    **dict.fromkeys(("RCX", "ECX", "CX", "CL", "CH"), 0),
-    **dict.fromkeys(("RDX", "EDX", "DX", "DL", "DH"), 1),
-    **dict.fromkeys(("R8", "R8D", "R8W", "R8B"), 2),
-    **dict.fromkeys(("R9", "R9D", "R9W", "R9B"), 3),
+# capstone register id -> x64 general register number (0 rax ... 15 r15), for the
+# register and every subregister
+_NAMES = (
+    ("RAX", "EAX", "AX", "AL", "AH"),
+    ("RCX", "ECX", "CX", "CL", "CH"),
+    ("RDX", "EDX", "DX", "DL", "DH"),
+    ("RBX", "EBX", "BX", "BL", "BH"),
+    ("RSP", "ESP", "SP", "SPL"),
+    ("RBP", "EBP", "BP", "BPL"),
+    ("RSI", "ESI", "SI", "SIL"),
+    ("RDI", "EDI", "DI", "DIL"),
+    *((f"R{n}", f"R{n}D", f"R{n}W", f"R{n}B") for n in range(8, 16)),
+)
+_FAMILY = {
+    getattr(x86, f"X86_REG_{name}"): number for number, names in enumerate(_NAMES) for name in names
 }
-_FAMILY = {getattr(x86, f"X86_REG_{name}"): index for name, index in _ARGUMENT_REGISTERS.items()}
+_ARGUMENTS = {1: 0, 2: 1, 8: 2, 9: 3}  # rcx, rdx, r8, r9 -> argument index
+_RSP = 4
 _STACK = frozenset((x86.X86_REG_ESP, x86.X86_REG_SP))
 _CLOCK_EVERY = 256
 
@@ -62,7 +76,12 @@ class Found:
 
     position: int
     setting: Setting
-    setter: tuple[int, int]  # (rva, size)
+    setter: tuple[int, int]  # (rva, size): for a stack slot, the store
+    # a stack slot (design section 11): bytes the store wrote, and the instruction
+    # that set the register it copies, if any
+    width: int = 8
+    source: tuple[int, int] | None = None
+    method: str = "block-constant-v1"
 
 
 @dataclass
@@ -95,7 +114,8 @@ class ArgumentFinder:
         if entry is not None:
             start = entry
         window = bytes(region.data[start - region.rva : call - region.rva])
-        tracked: dict[int, Found] = {}
+        registers: dict[int, Found] = {}  # x64 general register number -> constant
+        slots: dict[int, Found] = {}  # x64 argument position (4..15) -> constant
         pushes: list[Found | None] = []
         budget, address = self.budget, start
         for insn in self.engine.disasm(window, start):
@@ -110,30 +130,80 @@ class ArgumentFinder:
                 return {}
             address += insn.size
             if self.bits == 64:
-                _track_registers(insn, tracked)
+                _track_registers(insn, registers, slots)
             else:
                 _track_pushes(insn, pushes)
         if address != call:
             return {}  # undecodable bytes, or the call is on another instruction stream
         if self.bits == 32:
-            tracked = {
+            return {
                 position: Found(position, pushed.setting, pushed.setter)
                 for position, pushed in enumerate(reversed(pushes))
                 if pushed is not None
             }
-        return tracked
+        tracked = {
+            _ARGUMENTS[register]: Found(
+                _ARGUMENTS[register],
+                found.setting._replace(target=_ARGUMENTS[register]),
+                found.setter,
+            )
+            for register, found in registers.items()
+            if register in _ARGUMENTS
+        }
+        return tracked | slots
 
 
-def _track_registers(insn: capstone.CsInsn, tracked: dict[int, Found]) -> None:
+def _track_registers(
+    insn: capstone.CsInsn, registers: dict[int, Found], slots: dict[int, Found]
+) -> None:
     written = _written(insn)
     if written is None:
-        tracked.clear()
+        registers.clear()
+        slots.clear()
         return
     for register in written:
-        tracked.pop(_FAMILY.get(register, -1), None)
-    setting = argument_forms.x64_setting(bytes(insn.bytes), insn.address)
-    if setting is not None:
-        tracked[setting.target] = Found(setting.target, setting, (insn.address, insn.size))
+        number = _FAMILY.get(register)
+        registers.pop(-1 if number is None else number, None)
+        if number == _RSP:
+            slots.clear()  # every slot moves with rsp
+    for operand in _written_memory(insn):
+        memory = operand.mem
+        if memory.base == x86.X86_REG_RIP and memory.index == x86.X86_REG_INVALID:
+            continue  # the image, not the stack
+        if memory.base == x86.X86_REG_RSP and memory.index == x86.X86_REG_INVALID:
+            low, high = memory.disp, memory.disp + operand.size
+            for position in [p for p in slots if low < 8 * p + 8 and 8 * p < high]:
+                del slots[position]
+        else:
+            slots.clear()  # another register may point into the frame
+    raw, where = bytes(insn.bytes), (insn.address, insn.size)
+    found = argument_forms.x64_register(raw, insn.address)
+    if found is not None:
+        registers[found[0]] = Found(found[0], found[1], where)
+    store = argument_forms.x64_stack_store(raw)
+    if store is None:
+        return
+    source: Found | None = None
+    if store.value is not None:
+        setting = Setting(store.position, "immediate", store.value)
+    else:
+        source = None if store.register is None else registers.get(store.register)
+        if source is None:
+            return  # the slot holds a value that is not constant
+        kind, value = source.setting.kind, source.setting.value
+        if store.width == 4:
+            if kind == "address":
+                return  # the low half of an address is not the address
+            value &= 0xFFFFFFFF
+        setting = Setting(store.position, kind, value)
+    slots[store.position] = Found(
+        store.position,
+        setting,
+        where,
+        store.width,
+        None if source is None else source.setter,
+        "stack-slot-v1",
+    )
 
 
 def _track_pushes(insn: capstone.CsInsn, pushes: list[Found | None]) -> None:

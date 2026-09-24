@@ -59,7 +59,8 @@ def test_trusted_instructions_report_their_argument_register_writes(raw, positio
     insn = next(engine.disasm(bytes.fromhex(raw), 0x1000))
     written = code_args._written(insn)
     assert written is not None
-    assert {code_args._FAMILY[r] for r in written if r in code_args._FAMILY} == positions
+    registers = {code_args._FAMILY[r] for r in written if r in code_args._FAMILY}
+    assert {code_args._ARGUMENTS[r] for r in registers if r in code_args._ARGUMENTS} == positions
 
 
 @pytest.mark.parametrize("raw", ["0f05", "0f01ee", "f3480f1ec9", "cd2e", "e800000000"])
@@ -217,3 +218,74 @@ def test_x86_a_push_from_stack_memory_is_an_unknown_argument_not_a_reset():
     # push dword ptr [esp+8] only reads the stack; it still takes its place
     found, _ = find(push32(0x80000001) + b"\xff\x74\x24\x08" + CALL32, 32)
     assert found == {1: (0x80000001, 0x1000)}
+
+
+# --- x64 stack slots (design section 11) -----------------------------------------
+
+SLOT5_IMM = b"\xc7\x44\x24\x28\x06\x00\x02\x00"  # mov dword ptr [rsp+0x28], 0x20006
+SLOT4_ZERO = b"\x83\x64\x24\x20\x00"  # and dword ptr [rsp+0x20], 0
+ESI_ONE = b"\xbe\x01\x00\x00\x00"  # mov esi, 1
+SLOT4_ESI = b"\x89\x74\x24\x20"  # mov dword ptr [rsp+0x20], esi
+
+
+def stack(code):
+    found, _ = find(code + CALL64, 64)
+    return {position: value for position, (value, _) in found.items()}
+
+
+def constants64(code):
+    """The finder's own records for the call that ends `code`."""
+    code += CALL64
+    region = Region(0x1000, bytearray(code))
+    targets = Targets([0x1000], [bytearray(len(code))])
+    finder = ArgumentFinder([region], targets, 64, Budget(10_000))
+    return finder.constants(0x1000, 0x1000 + len(code) - len(CALL64))
+
+
+def test_x64_stack_slots_hold_immediates_and_zeros():
+    assert stack(SLOT5_IMM + SLOT4_ZERO) == {5: 0x20006, 4: 0}
+
+
+def test_x64_a_register_stored_to_its_slot_carries_its_constant():
+    code = ESI_ONE + SLOT4_ESI
+    found = constants64(code)
+    assert found[4].setting.value == 1 and found[4].method == "stack-slot-v1"
+    assert found[4].source == (0x1000, 5) and found[4].setter == (0x1005, 4)
+    # the register may change once it is stored
+    assert stack(code + b"\x31\xf6") == {4: 1}  # xor esi, esi afterwards
+
+
+@pytest.mark.parametrize(
+    "between",
+    [
+        b"\x8b\x30",  # mov esi, [rax]: the register is no longer the constant
+        b"\x40\xb6\x02",  # mov sil, 2: a subregister
+    ],
+)
+def test_x64_a_register_changed_before_its_store_is_not_a_constant(between):
+    assert stack(ESI_ONE + between + SLOT4_ESI) == {}
+
+
+@pytest.mark.parametrize(
+    ("after", "left"),
+    [
+        (b"\x48\x83\xec\x08", {}),  # sub rsp, 8: every slot moves
+        (b"\x50", {}),  # push rax
+        (b"\xc6\x44\x24\x29\x00", {4: 0}),  # mov byte ptr [rsp+0x29], 0: slot 5 only
+        (b"\x0f\x11\x44\x24\x20", {}),  # movups [rsp+0x20], xmm0: slots 4 and 5
+        (b"\x4c\x89\x33", {}),  # mov [rbx], r14: rbx may point into the frame
+        (b"\x89\x45\xf8", {}),  # mov [rbp-8], eax
+        (b"\x89\x05\x00\x10\x00\x00", {4: 0, 5: 0x20006}),  # mov [rip+x], eax: the image
+        (b"\x48\x8b\x44\x24\x30", {4: 0, 5: 0x20006}),  # mov rax, [rsp+0x30]: a read
+        (b"\xf3\xaa", {}),  # rep stosb: not trusted
+    ],
+)
+def test_x64_what_forgets_a_stack_slot(after, left):
+    assert stack(SLOT5_IMM + SLOT4_ZERO + after) == left
+
+
+def test_x64_the_low_half_of_an_address_is_not_stored():
+    lea = b"\x48\x8d\x05\x00\x10\x00\x00"  # lea rax, [rip+0x1000]
+    assert stack(lea + b"\x89\x44\x24\x38") == {}  # mov dword ptr [rsp+0x38], eax
+    found = constants64(lea + b"\x48\x89\x44\x24\x38")  # the whole qword
+    assert found[7].setting.kind == "address" and found[7].setting.value == 0x2007
