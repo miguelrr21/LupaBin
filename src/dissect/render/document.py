@@ -26,6 +26,7 @@ ABSENCE = (
 EXTRA = {
     "functions": "Funciones",
     "sites": "Desde (RVA)",
+    "cases": "Casos (RVA de la llamada)",
     "names": "Primeros nombres",
     "unlisted": "Sin import con ese nombre",
     "description": "Qué significa, según el catálogo",
