@@ -24,7 +24,7 @@ from dissect.explain.models import SlotValue
 from dissect.explain.text import hexadecimal, name, number
 
 CATALOG_ID = "dissect-capabilities-v1"
-CATALOG_SHA256 = "a3adb2325143ec02a96cfac866754cf06318d9af2eb98611e417066c11af63ea"
+CATALOG_SHA256 = "656f8e5dd5cb8ca1a5262c9d21c979f842d20304ecd267bb11dd331ea3297c3f"
 API_CATALOG = "dissect-api-semantics-v4"
 
 Arguments = dict[str, CallArgumentEvidence]
@@ -42,6 +42,21 @@ TACTICS = {
 CASES_SHOWN = 20
 TEXT_SHOWN = 200
 
+# MITRE ATT&CK techniques whose definition a case's mechanism meets (design section 4),
+# with their names as attack.mitre.org gives them on 2026-09-24.
+TECHNIQUES = {
+    "T1547.001": "Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder",
+    "T1543.003": "Create or Modify System Process: Windows Service",
+    "T1059.003": "Command and Scripting Interpreter: Windows Command Shell",
+    "T1059.001": "Command and Scripting Interpreter: PowerShell",
+    "T1105": "Ingress Tool Transfer",
+}
+
+
+def technique_entry(technique: str) -> str:
+    """The glossary entry of a technique: T1547.001 -> attack.t1547_001."""
+    return "attack." + technique.lower().replace(".", "_")
+
 
 @dataclass(frozen=True)
 class Capability:
@@ -54,6 +69,13 @@ class Capability:
     describe: Callable[[str, Arguments], str | None]
     caveat: str  # why this is not proof of intent: legitimate uses
     glossary_ids: tuple[str, ...]
+    # the ATT&CK technique of every case, or a function that gives it for each case
+    technique: str | Callable[[str, Arguments], str | None] | None = None
+
+    def technique_of(self, function: str, args: Arguments) -> str | None:
+        if self.technique is None or isinstance(self.technique, str):
+            return self.technique
+        return self.technique(function, args)
 
     @property
     def rule_id(self) -> str:
@@ -213,6 +235,41 @@ def _execution(function: str, args: Arguments) -> str | None:
     )
 
 
+# Interpreters whose use is the mechanism of a technique. wscript and cscript are left
+# out: they run VBScript (T1059.005) or JScript (T1059.007), and the call does not say
+# which.
+INTERPRETERS = {"cmd": "T1059.003", "powershell": "T1059.001", "pwsh": "T1059.001"}
+
+
+def _first_token(command: str) -> str:
+    command = command.lstrip()
+    if command.startswith('"'):
+        return command[1:].partition('"')[0]
+    return command.split(maxsplit=1)[0] if command else ""
+
+
+def program(function: str, args: Arguments) -> str | None:
+    """The file name that the call runs, lowercase and without directory or ".exe"."""
+    if function.startswith("ShellExecute"):
+        path = _text(args, "lpFile")
+    elif function == "WinExec":
+        command = _text(args, "lpCmdLine")
+        path = None if command is None else _first_token(command)
+    else:  # CreateProcess: the application name, else the start of the command line
+        path = _text(args, "lpApplicationName")
+        if path is None:
+            command = _text(args, "lpCommandLine")
+            path = None if command is None else _first_token(command)
+    if not path:
+        return None
+    base = path.replace("/", "\\").rsplit("\\", 1)[-1].lower()
+    return base.removesuffix(".exe")
+
+
+def _interpreter(function: str, args: Arguments) -> str | None:
+    return INTERPRETERS.get(program(function, args) or "")
+
+
 # --- network -------------------------------------------------------------------------
 
 
@@ -323,7 +380,7 @@ def _aw(names: tuple[str, ...], reads: tuple[str, ...]) -> dict[str, tuple[str, 
     return {f"{base}{suffix}": reads for base in names for suffix in ("A", "W")}
 
 
-EVIDENCE = ("code.call_argument", "code.import_call", "evidence.confidence")
+EVIDENCE = ("capability.static", "code.call_argument", "code.import_call", "evidence.confidence")
 REGISTRY_OPEN = ("hKey", "lpSubKey", "samDesired")
 
 CAPABILITIES: tuple[Capability, ...] = (
@@ -335,6 +392,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         _run_value,
         "Muchos instaladores y programas legítimos se registran así para arrancar con Windows.",
         ("api.family.registry", *EVIDENCE),
+        "T1547.001",
     ),
     Capability(
         "run_key_open_write",
@@ -367,6 +425,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         _service,
         "Instaladores, controladores y programas de administración legítimos crean servicios.",
         ("api.family.services", *EVIDENCE),
+        "T1543.003",
     ),
     Capability(
         "command_execution",
@@ -383,6 +442,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         "memoria escribible), así que no ver esta capacidad no demuestra que el código no "
         "lance procesos.",
         ("api.family.process_creation", *EVIDENCE),
+        _interpreter,
     ),
     Capability(
         "download_to_file",
@@ -393,6 +453,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Actualizadores e instaladores legítimos descargan archivos; la llamada no dice qué "
         "contendría la descarga.",
         ("api.family.http", *EVIDENCE),
+        "T1105",
     ),
     Capability(
         "network_destination",
@@ -487,6 +548,12 @@ def catalog_digest() -> str:
         "run_keys": RUN_KEYS,
         "winlogon_keys": WINLOGON_KEYS,
         "key_write_rights": KEY_WRITE_RIGHTS,
+        "techniques": TECHNIQUES,
+        "interpreters": INTERPRETERS,
+        "technique_of": {
+            c.id: c.technique if not callable(c.technique) else c.technique.__name__
+            for c in CAPABILITIES
+        },
         "capabilities": [
             [c.id, c.tactic, c.template, c.not_proven, c.reads, c.glossary_ids]
             for c in CAPABILITIES
@@ -504,6 +571,7 @@ class Case:
     arguments: tuple[CallArgumentEvidence, ...]  # all the call's published arguments
     function: str
     details: str
+    technique: str | None
 
     @property
     def cited(self) -> tuple[Evidence, ...]:
@@ -528,9 +596,11 @@ def cases(capability: Capability, report: Report) -> list[Case]:
         if function not in capability.reads:
             continue
         published = tuple(arguments.get(fact.id, ()))
-        details = capability.describe(function, {a.data.name: a for a in published})
+        args = {a.data.name: a for a in published}
+        details = capability.describe(function, args)
         if details is not None:
-            found.append(Case(fact, published, function, details))
+            technique = capability.technique_of(function, args)
+            found.append(Case(fact, published, function, details, technique))
     return found
 
 
@@ -542,6 +612,7 @@ def derive(capability: Capability) -> Callable[[tuple[Evidence, ...], Report], D
             return None  # every case of the report, each with all its arguments, in order
         shown = tuple(
             f"{hexadecimal(case.call.location.rva or 0)} {case.function}: {case.details}"
+            + (f" ({case.technique})" if case.technique else "")
             for case in found[:CASES_SHOWN]
         )
         if len(found) > CASES_SHOWN:
@@ -551,6 +622,11 @@ def derive(capability: Capability) -> Callable[[tuple[Evidence, ...], Report], D
             "noun": "llamada" if len(found) == 1 else "llamadas",
             "cases": shown,
         }
-        return slots, capability.glossary_ids
+        techniques = tuple(dict.fromkeys(case.technique for case in found if case.technique))
+        if not techniques:
+            return slots, capability.glossary_ids
+        slots["techniques"] = tuple(f"{t} ({TECHNIQUES[t]})" for t in techniques)
+        entries = ("attack.technique", *(technique_entry(t) for t in techniques))
+        return slots, (*capability.glossary_ids, *entries)
 
     return rule

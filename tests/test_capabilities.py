@@ -83,21 +83,21 @@ POSITIVE = [
         {0: HKCU, 1: RUN, 2: "DissectTraining"},
         "run_key_value",
         "RegSetKeyValueW: «HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run»"
-        ", valor «DissectTraining»",
+        ", valor «DissectTraining» (T1547.001)",
     ),
     (
         "RegSetKeyValueA",
         {0: HKLM, 1: r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce"},
         "run_key_value",
         "RegSetKeyValueA: «HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\"
-        "CurrentVersion\\RunOnce»",
+        "CurrentVersion\\RunOnce» (T1547.001)",
     ),
     (
         "RegSetKeyValueW",
         {0: HKU, 1: "S-1-5-21-1\\" + RUN + "\\"},
         "run_key_value",
         "RegSetKeyValueW: «HKEY_USERS\\S-1-5-21-1\\Software\\Microsoft\\Windows\\"
-        "CurrentVersion\\Run\\»",
+        "CurrentVersion\\Run\\» (T1547.001)",
     ),
     (
         "RegOpenKeyExW",
@@ -124,7 +124,7 @@ POSITIVE = [
         "WinExec",
         {0: "cmd.exe /c echo dissect", 1: 0},
         "command_execution",
-        "WinExec: orden «cmd.exe /c echo dissect»",
+        "WinExec: orden «cmd.exe /c echo dissect» (T1059.003)",
     ),
     (
         "CreateProcessA",
@@ -150,7 +150,7 @@ POSITIVE = [
         {1: "http://training.invalid/file.txt", 2: r"C:\Dissect\file.txt"},
         "download_to_file",
         "URLDownloadToFileW: URL «http://training.invalid/file.txt», archivo "
-        "«C:\\Dissect\\file.txt»",
+        "«C:\\Dissect\\file.txt» (T1105)",
     ),
     (
         "InternetConnectW",
@@ -254,7 +254,7 @@ def test_service_creation_names_the_service_binary_and_start(bits):
     assert rule == "capability.service_create@1"
     assert cases[0].split(" ", 1)[1] == (
         "CreateServiceW: servicio «DissectTraining», binario «C:\\Dissect\\training.exe», "
-        "inicio SERVICE_AUTO_START, tipo SERVICE_WIN32_OWN_PROCESS"
+        "inicio SERVICE_AUTO_START, tipo SERVICE_WIN32_OWN_PROCESS (T1543.003)"
     )
 
 
@@ -262,9 +262,89 @@ def test_a_run_key_under_an_unknown_root_says_so():
     _, cases = only_case(build_call_demo("RegSetKeyValueW", {1: RUN}))
     assert cases[0].endswith(
         "«Software\\Microsoft\\Windows\\CurrentVersion\\Run», bajo una clave que no se pudo "
-        "determinar"
+        "determinar (T1547.001)"
     )
     assert "HKEY_" not in cases[0]
+
+
+# --- MITRE ATT&CK -------------------------------------------------------------------------
+
+
+def test_every_technique_has_its_glossary_entry_with_its_attack_page():
+    for technique, title in capabilities.TECHNIQUES.items():
+        entry = GLOSSARY.entries[capabilities.technique_entry(technique)]
+        page = "https://attack.mitre.org/techniques/" + technique.replace(".", "/") + "/"
+        assert (title.split(": ")[-1], page) in {
+            (s.title.split(": ")[-1], s.url) for s in entry.sources
+        }
+    attack = {ref for ref in GLOSSARY.entries if ref.startswith("attack.t") and ref[8:9].isdigit()}
+    assert attack == {capabilities.technique_entry(t) for t in capabilities.TECHNIQUES}
+
+
+@pytest.mark.parametrize(
+    ("function", "call", "technique"),
+    [
+        ("WinExec", {0: "cmd /c dir"}, "T1059.003"),
+        ("CreateProcessA", {1: '"C:\\Windows\\System32\\cmd.exe" /c echo'}, "T1059.003"),
+        (
+            "CreateProcessW",
+            {0: r"C:\Windows\System32\WindowsPowerShell\v1.0\PowerShell.EXE"},
+            "T1059.001",
+        ),
+        ("ShellExecuteW", {2: "pwsh", 3: "-File training.ps1"}, "T1059.001"),
+        ("ShellExecuteA", {2: "C:/Windows/System32/cmd.exe"}, "T1059.003"),
+    ],
+)
+def test_an_interpreter_is_associated_with_its_technique(function, call, technique):
+    _, _, items = found(build_call_demo(function, call))
+    item = items["capability.command_execution@1"]
+    assert item.slots["cases"][0].endswith(f" ({technique})")
+    assert item.slots["techniques"] == (f"{technique} ({capabilities.TECHNIQUES[technique]})",)
+    assert {"attack.technique", capabilities.technique_entry(technique)} <= set(item.glossary_ids)
+    assert len(item.glossary_ids) <= 8
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        r"C:\Windows\System32\rundll32.exe dissect.dll,Training",  # T1218.011 is its abuse
+        "regsvr32 /s dissect.dll",
+        "mshta training.hta",
+        "wscript training.js",  # VBScript or JScript: the call does not say which
+        "cscript //nologo training.vbs",
+        "cmdtool.exe",
+        "C:\\Program Files\\cmd.exe",  # unquoted: the program is C:\Program
+        "notepad.exe powershell.exe",
+    ],
+)
+def test_other_programs_are_described_without_a_technique(command):
+    _, _, items = found(build_call_demo("WinExec", {0: command}))
+    item = items["capability.command_execution@1"]
+    assert "techniques" not in item.slots
+    assert not item.slots["cases"][0].endswith(")")
+    assert not any(ref.startswith("attack.") for ref in item.glossary_ids)
+
+
+def test_only_the_cases_that_meet_a_technique_carry_it():
+    _, _, items = found(build_call_demo("WinExec", {0: "notepad.exe"}, {0: "cmd.exe /c dir"}))
+    cases = items["capability.command_execution@1"].slots["cases"]
+    assert not cases[0].endswith(")") and cases[1].endswith(" (T1059.003)")
+
+
+@pytest.mark.parametrize(
+    ("function", "call"),
+    [
+        ("RegOpenKeyExW", {0: HKCU, 1: RUN, 3: winapi.KEY_WRITE}),  # opening writes nothing
+        ("RegOpenKeyExA", {0: HKLM, 1: WINLOGON, 3: winapi.KEY_WRITE}),
+        ("VirtualAlloc", {3: winapi.PAGE_EXECUTE_READWRITE}),  # not injection by itself
+        ("OpenProcess", {0: winapi.PROCESS_ALL_ACCESS}),
+    ],
+)
+def test_capabilities_without_a_matching_technique_name_none(function, call):
+    _, _, items = found(build_call_demo(function, call))
+    (item,) = items.values()
+    assert "techniques" not in item.slots
+    assert not any(ref.startswith("attack.") for ref in item.glossary_ids)
 
 
 NEGATIVE = [
