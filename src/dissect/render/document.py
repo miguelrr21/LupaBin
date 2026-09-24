@@ -27,6 +27,7 @@ EXTRA = {
     "functions": "Funciones",
     "sites": "Desde (RVA)",
     "cases": "Casos (RVA de la llamada)",
+    "techniques": "Técnicas de MITRE ATT&CK con el mismo mecanismo",
     "names": "Primeros nombres",
     "unlisted": "Sin import con ese nombre",
     "description": "Qué significa, según el catálogo",
