@@ -251,7 +251,7 @@ El caso `nop` es también el peor combinado: agota a la vez el tiempo de la bús
 | System32 | 1.363 | 1.230.385 | 0 | 0 | 0 de 1.230.245 | 90,4 % (sin cambio: ya tenía `.pdata`) |
 | SysWOW64 | 520 | 412.834 (antes 145.084) | 0 | 0 | 3 de 2.369 (los de `edit.exe`, auténticos) | **90,7 %** (antes 43,8 %) |
 
-## 10. Entrega 2: argumentos constantes (implementada para `RegOpenKeyExA/W` y `RegCreateKeyExA/W`)
+## 10. Entrega 2: argumentos constantes (implementada: las 72 funciones de la sección 4)
 
 Responde a "con qué constantes llama el código a una función del catálogo". Publica `call_argument` (`inferred`, componente `call_arguments`) dentro del contrato 0.5.0, que no se había publicado. El catálogo `dissect-api-semantics-v1` empieza con `RegOpenKeyExA/W`; el resto de la sección 4 se añadirá en cambios separados, comprobando cada firma.
 
@@ -373,6 +373,43 @@ Mismo corpus que la sección 10.2:
 - "El código pasa N nombres de función a GetProcAddress (M distintos)", con la lista de nombres.
 - Solo cuando la tabla de imports se leyó completa añade cuáles de esos nombres no tienen un import con el mismo nombre. La sección 6 decía que no aparecen nunca en la tabla, y eso no siempre es cierto: el cálculo se hace sobre el informe.
 - Límite: pasar un nombre no demuestra que la llamada se ejecute, que esa función exista ni que se use. Además, resolver por ordinal o con nombres construidos o descifrados al ejecutarse no se ve.
+
+### 10.6 Catálogo v4: el resto de la sección 4 (2026-09-24)
+
+Se añaden 67 entradas, versiones A y W, de 38 funciones: registro (`RegSetValueEx`, `RegQueryValueEx`, `RegDeleteValue`, `RegDeleteKey`, `RegGetValue`, `RegSetKeyValue`, `RegOpenKey`, `RegCreateKey`), servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía. El catálogo tiene ahora 72 entradas.
+
+**Comprobación de cada entrada:**
+- Nombres, orden y número de parámetros: contra el origen de su página de Learn (`MicrosoftDocs/sdk-api`, el contenido que Learn publica). `URLDownloadToFile`, que está en la referencia archivada de Internet Explorer, contra la página misma. El generador de las entradas falla si algún parámetro interpretado no está en su posición con su nombre exacto.
+- Anchos: contra el prototipo de las cabeceras del Windows SDK 10.0.26100.0. DWORD, UINT, INT y ULONG son de 32 bits; INTERNET_PORT es un WORD (16 bits).
+- DLL: el `api_location` de cada página.
+- Claves: todas las páginas del registro listan al menos las cinco claves aceptadas. Algunas listan además las `HKEY_PERFORMANCE_*`, y en esas Dissect se abstiene.
+
+**Qué se deja fuera:**
+- `OpenMutexA`, que no tiene página propia en Learn.
+- Los identificadores (handles), las estructuras, los tamaños `SIZE_T` y los `BOOL`: no se interpretan.
+- `CreateProcessW`: Learn exige que `lpCommandLine` sea memoria escribible. Como la regla de cadenas solo admite secciones no escribibles, esa línea de órdenes nunca se publica.
+
+**Medición** (mismo corpus que la sección 10.2; `code_eval --dump` guarda todo lo publicado y lo rechazado):
+
+| Conjunto | Argumentos publicados (antes, con v3) | Informes inválidos | Fallos de bytes | `argument_instruction_limit` |
+| --- | --- | --- | --- | --- |
+| System32 | 54.151 (23.279) | 0 | 0 | 0 archivos |
+| SysWOW64 | 18.207 (7.513) | 0 | 0 | 0 archivos |
+
+Indicadores de error, revisados de forma exhaustiva (sobre todos los casos, no sobre una muestra):
+- **Enteros con valores documentados** (`coherence.py`, 27 parámetros; conjuntos sacados de las cabeceras del SDK: `PAGE_*`, `MEM_*`, `CREATE_NEW`…`TRUNCATE_EXISTING`, `SW_*`, `SERVICE_*`, `REG_*`, `RRF_*`, `LOAD_*`, `MOVEFILE_*`, `INTERNET_*`, `WINHTTP_ACCESS_TYPE_*`, `PROV_*` y las máscaras de acceso).
+  - En la primera pasada, 115 valores de `LoadLibraryEx.dwFlags` salieron fuera. Todos eran 0x4000, que es `LOAD_LIBRARY_SEARCH_SYSTEM32_NO_FORWARDER`, un flag documentado que faltaba en la tabla. El desensamblado confirma el valor (`mov r8d, 0x4000`).
+  - Corregida la tabla, queda un único valor fuera: `dwProvType = 0` en certreq.exe. Es auténtico: el código hace `xor r9d, r9d` junto a `CRYPT_VERIFYCONTEXT`.
+  - **Ningún valor apunta a un error del seguimiento.**
+- **Punteros que el tipo cadena rechaza:**
+  - Los 3.630 rechazos por "no es una dirección" son 3.402 `NULL` y 228 ordinales de `GetProcAddress`.
+  - De los 67 rechazos por "no es una cadena", 66 son cadenas vacías, como el valor predeterminado de una clave (`lpValueName` vacío). El otro es `"Accept: */*
+"`, rechazado por el salto de línea.
+  - Los 96 rechazos por "fuera de los bytes del archivo" son búferes de `.data` sin inicializar, y los 240 por "sección escribible" son cadenas en `.data`.
+  - **Ningún puntero señala algo que no sea el argumento.**
+- **Revisión manual de 93 argumentos** de 31 funciones de los nueve grupos (dos por patrón y conjunto, semillas 21 y 22): **93 correctos**. Entre ellos, tramos con `push -1; pop edx`, `xchg [ecx], eax` o `stosd` antes de los `push` (vulkan-1.dll, nettrace.dll), y escrituras en la pila a través de registros en x64 (`xor ebx, ebx` … `mov [rsp+0x28], ebx` en notepad.exe).
+
+Coste: 371.312 instrucciones detalladas en System32 (13,5 s en total con la máquina cargada) y 124.640 en SysWOW64, sin que ningún archivo agote el presupuesto de 65.536.
 
 ## 11. Argumentos de la pila en x64 (implementado y adoptado, 2026-09-24)
 
