@@ -5,13 +5,16 @@ import pytest
 from dissect.analysis import analyze_bytes
 from dissect.evidence import api_catalog
 from dissect.evidence.facts import CallArgumentData
+from dissect.evidence.models import Limits
+from dissect.evidence.primitives import CodeLimits
 from dissect.explain import capabilities, winapi
-from dissect.explain.engine import check_item, explain
+from dissect.explain.engine import check_item, explain, validate
 from dissect.explain.rules import RULES
 from dissect.glossary.catalog import load_glossary
+from dissect.render import document
 from dissect.render.document import to_markdown, to_text
 from dissect.render.safe import code_span
-from tests.fixtures.pe_builder import build_call_demo
+from tests.fixtures.pe_builder import build_call_demo, build_code_pe
 from tests.test_code_arguments import create_service
 
 GLOSSARY = load_glossary()
@@ -447,3 +450,57 @@ def test_capabilities_are_rendered_with_their_cases_and_sample_text_is_inert():
     assert f"Casos (RVA de la llamada): {case}" in text
     markdown = to_markdown(explanation, chosen, report, GLOSSARY)
     assert f"  - Casos (RVA de la llamada): {code_span(case)}" in markdown.splitlines()
+
+
+# --- the summary that opens the didactic report (design section 6) -----------------------
+
+
+def rendered(data, kind="text", limits=None):
+    report = analyze_bytes(data) if limits is None else analyze_bytes(data, limits)
+    explanation = explain(report, GLOSSARY)
+    items = validate(explanation, report, GLOSSARY)
+    render = to_text if kind == "text" else to_markdown
+    return render(explanation, items, report, GLOSSARY)
+
+
+def summary_of(output):
+    return output.split(document.SUMMARY_TITLE)[1].split("1. Qué se pudo analizar")[0]
+
+
+@pytest.mark.parametrize("kind", ["text", "markdown"])
+def test_the_summary_comes_first_and_groups_capabilities_by_tactic(kind):
+    output = rendered(build_call_demo("WinExec", {0: "cmd.exe /c dir"}), kind)
+    marks = [document.SUMMARY_TITLE, "1. Qué se pudo", "2. Hechos", "3. Inferencias"]
+    positions = [output.index(mark) for mark in marks]
+    assert positions == sorted(positions)
+    part = summary_of(output)
+    assert "Ejecución" in part and "de este tipo: ejecutar un programa" in part
+    assert "T1059" in part and document.ONE_CALL.split(":")[0] in part
+    assert document.NO_CAPABILITY.split(".")[0] not in part
+
+
+def test_the_summary_says_when_nothing_was_recognised_and_why_that_proves_nothing():
+    part = summary_of(rendered(build_call_demo("CreateMutexW", {})))
+    assert "No se reconoció ninguna capacidad" in part and "no demuestra" in part
+
+
+def test_the_summary_says_when_the_code_could_not_be_walked():
+    part = summary_of(rendered(b"just some text, not a PE file at all " * 4))
+    assert "El código no se pudo recorrer" in part
+
+
+def test_the_summary_warns_about_create_process_w_command_lines():
+    part = summary_of(rendered(build_call_demo("CreateProcessW", {})))
+    assert "CreateProcessW, cuya línea de órdenes Dissect no lee" in part
+
+
+def test_the_summary_warns_when_the_arguments_are_partial():
+    limits = Limits(code=CodeLimits(argument_instructions=1))
+    part = summary_of(rendered(build_call_demo("CreateMutexW", {2: "Dissect"}), limits=limits))
+    assert "quedaron incompletos" in part
+
+
+def test_the_summary_repeats_the_low_walk_density_note():
+    data = build_code_pe(bytes.fromhex("c3") + bytes.fromhex("cc") * 0xFFFF)
+    part = " ".join(summary_of(rendered(data)).split())
+    assert "se queda por debajo de 20 por KiB" in part
