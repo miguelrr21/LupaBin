@@ -10,6 +10,8 @@ PINNED = {
     "dissect-api-semantics-v1": "19e41f8f93976c5ebaf5270cdf2ef40812f8199a14ad968038d3b5d3a2bf8abb",
     # v2: + RegCreateKeyExA/W, checked on Microsoft Learn on 2026-09-24
     "dissect-api-semantics-v2": "238568b92b75a849ffe0d8fdf75ac5877fe4b86d8d1ba9b75022cc4006579420",
+    # v3: + GetProcAddress, checked on Microsoft Learn on 2026-09-24
+    "dissect-api-semantics-v3": "7648350dc53ec4234e65902b06bdbde64827df0a0554792f5aa5046d33f82c56",
 }
 
 
@@ -41,6 +43,15 @@ def test_registry_create_signature_as_published():
         ]
     # unlike RegOpenKeyExA, the page does not list kernel32.dll
     assert lookup(b"kernel32.dll", b"RegCreateKeyExA") is None
+
+
+def test_get_proc_address_signature_as_published():
+    entry = api_catalog.FUNCTIONS["GetProcAddress"]
+    assert entry.arity == 2 and entry.encoding == "ascii"  # LPCSTR: never wide
+    assert [(p.position, p.name, p.type) for p in entry.parameters] == [(1, "lpProcName", "string")]
+    assert lookup(b"KERNEL32.dll", b"GetProcAddress") is not None
+    assert lookup(b"api-ms-win-core-libraryloader-l1-2-0.dll", b"GetProcAddress") is not None
+    assert lookup(b"advapi32.dll", b"GetProcAddress") is None
 
 
 def test_x64_keys_are_the_sign_extended_constants_only():

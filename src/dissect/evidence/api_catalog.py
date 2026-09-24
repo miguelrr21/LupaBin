@@ -1,4 +1,4 @@
-"""Catalog `dissect-api-semantics-v2`: which parameters of which imported functions
+"""Catalog `dissect-api-semantics-v3`: which parameters of which imported functions
 Dissect interprets, with their type (design section 4).
 
 Each entry's arity, parameter names and exporting DLLs were checked against the page
@@ -31,7 +31,7 @@ class Function(NamedTuple):
     source: str
 
 
-CATALOG_ID = "dissect-api-semantics-v2"
+CATALOG_ID = "dissect-api-semantics-v3"
 
 # The predefined keys that Microsoft Learn lists for the hKey parameter of the
 # functions below, with their values in winreg.h (Windows SDK 10.0.26100.0):
@@ -111,6 +111,35 @@ def _registry_create(name: str, encoding: Encoding) -> Function:
     )
 
 
+_LIBRARY_LOADER_DLLS = frozenset(
+    {
+        "kernel32.dll",
+        "kernelbase.dll",
+        "minkernelbase.dll",
+        "vertdll.dll",
+        "api-ms-win-core-libraryloader-l1-1-0.dll",
+        "api-ms-win-core-libraryloader-l1-1-1.dll",
+        "api-ms-win-core-libraryloader-l1-2-0.dll",
+        "api-ms-win-core-libraryloader-l1-2-1.dll",
+        "api-ms-win-core-libraryloader-l1-2-2.dll",
+        "api-ms-win-core-libraryloader-l1-2-3.dll",
+        "api-ms-win-downlevel-kernel32-l1-1-0.dll",
+    }
+)
+
+# GetProcAddress(hModule, lpProcName): the name is always ANSI. Learn: lpProcName may
+# instead be an ordinal in the low-order word, which is not an address in the image,
+# so the string type abstains on it.
+_GET_PROC_ADDRESS = Function(
+    "GetProcAddress",
+    2,
+    "ascii",
+    (Parameter(1, "lpProcName", "string", None),),
+    _LIBRARY_LOADER_DLLS,
+    _LEARN + "libloaderapi/nf-libloaderapi-getprocaddress",
+)
+
+
 FUNCTIONS: dict[str, Function] = {
     function.name: function
     for function in (
@@ -119,6 +148,7 @@ FUNCTIONS: dict[str, Function] = {
         _registry_open("RegOpenKeyExW", "utf-16-le", _REGISTRY_DLLS),
         _registry_create("RegCreateKeyExA", "ascii"),
         _registry_create("RegCreateKeyExW", "utf-16-le"),
+        _GET_PROC_ADDRESS,
     )
 }
 
