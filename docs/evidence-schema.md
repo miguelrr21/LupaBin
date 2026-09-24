@@ -27,11 +27,12 @@ Cambio en un tipo existente: `import` gana `iat_rva`, la dirección de su casill
 | --- | --- |
 | `component` | `call_arguments`. |
 | `location` | La instrucción que fija el argumento, en la misma sección ejecutable que la llamada y antes de ella. |
-| `data.catalog`, `data.method` | `dissect-api-semantics-v2` y `block-constant-v1`. La versión 1 solo tenía `RegOpenKeyExA/W` y no llegó a publicarse. |
+| `data.catalog`, `data.method` | `dissect-api-semantics-v2` (la versión 1 solo tenía `RegOpenKeyExA/W` y no llegó a publicarse). Método `block-constant-v1` (registro o `push`) o `stack-slot-v1` (ranura de la pila en x64, del quinto argumento en adelante). |
 | `data.position`, `data.name`, `data.type` | Posición (desde 0), nombre y tipo del parámetro según el catálogo: `hkey`, `string` o `integer`. |
 | `data.value` | `hkey`: el valor tal como se fija (en x64, extendido con signo: `0xffffffff80000001`). `integer`: módulo el ancho del parámetro (32 bits para `REGSAM`). `string`: el puntero tal como se fija (dirección absoluta en x86, RVA de un `lea` relativo a rip en x64). |
-| `data.raw_hex` | Los bytes de la instrucción que lo fija: `lea r64, [rip+disp32]`, `mov r32, imm32`, `mov r64, simm32` o `xor r32, r32` en x64; `push imm32` o `push imm8` en x86 (`src/dissect/evidence/argument_forms.py`). |
+| `data.raw_hex` | Los bytes de la instrucción que lo fija: `lea r64, [rip+disp32]`, `mov r32, imm32`, `mov r64, simm32` o `xor r32, r32` en x64; `push imm32` o `push imm8` en x86 (`src/dissect/evidence/argument_forms.py`). Con `stack-slot-v1`, la escritura en la ranura `[rsp+8·i]`: `mov dword/qword ptr [rsp+d], imm32`, `and dword/qword ptr [rsp+d], 0` o `mov [rsp+d], r32/r64`. |
 | `data.constant` | Solo `hkey`: el nombre de la clave predefinida. Se aceptan las cinco que Learn lista para `hKey` (`HKEY_CLASSES_ROOT`, `HKEY_CURRENT_USER`, `HKEY_LOCAL_MACHINE`, `HKEY_USERS`, `HKEY_CURRENT_CONFIG`). |
+| `data.source` | Solo con `stack-slot-v1` y cuando se copia un registro: la instrucción (forma canónica, ahora sobre cualquiera de los 16 registros) que fijó ese registro antes de la escritura, con `offset`, `rva` y `raw_hex`. Un puntero exige escribir los 8 bytes de la ranura; un entero de 32 bits admite 4 u 8. |
 | `data.string` | Solo `string`: `offset`, `rva`, `raw_hex` (texto más su terminador NUL) y `text` imprimible ASCII, en una sección que no se puede escribir: el programa podría cambiar una cadena escribible antes de la llamada. |
 | `provenance.evidence_ids` | Exactamente el `api_call` al que pertenece. |
 

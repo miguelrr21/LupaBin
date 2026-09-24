@@ -300,8 +300,11 @@
           "title": "Constant"
         },
         "method": {
-          "const": "block-constant-v1",
           "default": "block-constant-v1",
+          "enum": [
+            "block-constant-v1",
+            "stack-slot-v1"
+          ],
           "title": "Method",
           "type": "string"
         },
@@ -321,6 +324,17 @@
           "pattern": "^(?:[a-f0-9]{2}){1,15}$",
           "title": "Raw Hex",
           "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Instruction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "string": {
           "anyOf": [

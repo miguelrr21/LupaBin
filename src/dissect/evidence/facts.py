@@ -327,19 +327,24 @@ class ArgumentString(Model):
 
 class CallArgumentData(Model):
     catalog: Literal["dissect-api-semantics-v2"] = "dissect-api-semantics-v2"
-    method: Literal["block-constant-v1"] = "block-constant-v1"
+    # block-constant-v1: a register or a push; stack-slot-v1: an x64 stack slot
+    method: Literal["block-constant-v1", "stack-slot-v1"] = "block-constant-v1"
     position: Annotated[int, Field(ge=0, le=15)]
     name: Annotated[str, Field(min_length=1, max_length=64)]
     type: Literal["hkey", "string", "integer"]
     # hkey: the value as set; integer: modulo the parameter's width; string: the
     # pointer as set (an address in x86, an RVA from a RIP-relative lea in x64)
     value: Annotated[int, Field(ge=0, le=0xFFFFFFFFFFFFFFFF)]
-    raw_hex: InstructionHex  # the instruction that sets it
+    raw_hex: InstructionHex  # the instruction that sets it (for a stack slot, the store)
     constant: Annotated[str, Field(max_length=64)] | None = None  # the predefined key
     string: ArgumentString | None = None
+    # stack-slot-v1 only: the instruction that set the register the store copies
+    source: Instruction | None = None
 
     @model_validator(mode="after")
     def shape_matches_type(self) -> Self:
+        if self.source is not None and self.method != "stack-slot-v1":
+            raise ValueError("only a stack slot copies a register set elsewhere")
         if (self.type == "hkey") != (self.constant is not None):
             raise ValueError("only a key argument names a predefined key")
         if (self.type == "string") != (self.string is not None):

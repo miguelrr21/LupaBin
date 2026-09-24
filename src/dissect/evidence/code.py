@@ -129,7 +129,10 @@ def validate_argument(
         raise ValueError("an argument must be set before its call, in the same section")
     bits = 32 if header.optional_magic == 267 else 64
     raw = bytes.fromhex(data.raw_hex)
-    if bits == 64:
+    setting: argument_forms.Setting | None
+    if data.method == "stack-slot-v1":
+        setting = _stack_setting(fact, raw, section, sections, bits, parameter)
+    elif bits == 64:
         setting = argument_forms.x64_setting(raw, where.rva)
         if setting is not None and setting.target != data.position:
             setting = None
@@ -152,6 +155,44 @@ def validate_argument(
         if string is None or data.value != setting.value or target != string.rva:
             raise ValueError("a string argument must point to its string")
         _validate_string(string, entry.encoding, sections, characters)
+
+
+def _stack_setting(
+    fact: CallArgumentEvidence,
+    raw: bytes,
+    section: SectionData,
+    sections: Sequence[SectionData],
+    bits: int,
+    parameter: api_catalog.Parameter,
+) -> argument_forms.Setting | None:
+    """The value an x64 stack store puts in its slot (design section 11), or None."""
+    data, where = fact.data, fact.location
+    store = argument_forms.x64_stack_store(raw) if bits == 64 else None
+    if store is None or store.position != data.position or where.rva is None:
+        return None
+    if parameter.bits is None and store.width != 8:
+        return None  # a pointer needs the whole slot
+    if store.value is not None:
+        if data.source is not None:
+            return None
+        return argument_forms.Setting(store.position, "immediate", store.value)
+    source = data.source
+    if source is None:
+        return None
+    size = len(source.raw_hex) // 2
+    if _mapped(source.rva, source.offset, size, sections) != section:
+        raise ValueError("a register an argument copies must be set in the same section")
+    if source.rva + size > where.rva:
+        raise ValueError("a register must be set before the store that copies it")
+    found = argument_forms.x64_register(bytes.fromhex(source.raw_hex), source.rva)
+    if found is None or found[0] != store.register:
+        return None
+    kind, value = found[1].kind, found[1].value
+    if store.width == 4:
+        if kind == "address":
+            return None  # the low half of an address is not the address
+        value &= 0xFFFFFFFF
+    return argument_forms.Setting(store.position, kind, value)
 
 
 def _validate_string(
@@ -182,6 +223,8 @@ def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
                 spans.append((fact.data.helper.offset, fact.data.helper.raw_hex))
         elif isinstance(fact, CallArgumentEvidence):
             spans = [(fact.location.offset, fact.data.raw_hex)]
+            if fact.data.source is not None:
+                spans.append((fact.data.source.offset, fact.data.source.raw_hex))
             if fact.data.string is not None:
                 spans.append((fact.data.string.offset, fact.data.string.raw_hex))
         else:
