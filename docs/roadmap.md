@@ -1,6 +1,6 @@
 # Hoja de ruta y trabajo pendiente
 
-Actualizado: 2026-09-23.
+Actualizado: 2026-09-24.
 
 ## Objetivo que guía todo lo siguiente
 
@@ -14,14 +14,13 @@ El usuario quiere que Dissect sea **lo más optimizado posible y con la tasa de 
 ## Estado actual
 
 - **Fase 2 (decodificación, contrato 0.4.0, catálogo de anclas v3)**: cerrada. Está publicada en `master` mediante el PR #2 (2026-09-23), con la CI remota en verde en Ubuntu, Windows y Docker. Ruido medido: 0 en XOR y 0 en Base64/hex sobre un corpus benigno ampliado (System32, SysWOW64, drivers, .NET y Program Files: más de 30.000 archivos, unos 13 GB). Todas las decodificaciones encontradas se revisaron a mano y son auténticas. Diseño y mediciones: [Fase 2](superpowers/specs/2026-09-22-static-decoding-design.md).
-- **Fase 3 (explicaciones didácticas y glosario con fuentes)**: implementada y verificada en local en la rama `feat/didactic-glossary`, sin publicar todavía. Incluye un glosario de 38 entradas con 75 fuentes verificadas, reglas deterministas regenerables para todos los tipos de hecho, contrato `Explanation` 0.1.0, renderizado de texto y Markdown que neutraliza el texto de la muestra, `dissect analyze` legible por defecto y `dissect explain` con contraste opcional contra la muestra. Hay dos cifras de contexto medidas en 55.000 binarios benignos: la entropía alta y la prevalencia de nueve familias de APIs. 447 tests y 11 pruebas en Docker real en verde. Diseño y mediciones: [Fase 3](superpowers/specs/2026-09-23-didactic-glossary-design.md).
+- **Fase 3 (explicaciones didácticas y glosario con fuentes)**: cerrada. Publicada en `master` mediante el PR #3 (2026-09-23), con la CI remota en verde en Ubuntu, Windows y Docker. Incluye un glosario de 38 entradas con 75 fuentes verificadas, reglas deterministas regenerables para todos los tipos de hecho, contrato `Explanation` 0.1.0, renderizado de texto y Markdown que neutraliza el texto de la muestra, `dissect analyze` legible por defecto y `dissect explain` con contraste opcional contra la muestra. Hay dos cifras de contexto medidas en 55.000 binarios benignos: la entropía alta y la prevalencia de nueve familias de APIs. 447 tests y 11 pruebas en Docker real en verde. Diseño y mediciones: [Fase 3](superpowers/specs/2026-09-23-didactic-glossary-design.md).
 - **Fase 4, entrega 1 (versión reducida)**: implementada y verificada en local en la rama `feat/static-api-calls`, sin publicar. Qué funciones importadas llama el código x86/x64 y desde qué instrucción (`api_call`, contrato 0.5.0), verificado por el propio informe y por el host sin desensamblador. Medido en 1.883 binarios benignos: 0 informes inválidos, 0 fallos de verificación y ninguna llamada falsa entre las señaladas para revisión. Con las tablas de Control Flow Guard y SafeSEH como puntos de partida, el 90,9 % de los imports por nombre en x86 y el 89,6 % en x64 tienen alguna llamada localizada (antes, 44,5 % en x86). La búsqueda XOR y el recorrido tienen tiempo máximo, para que una máquina lenta dé un informe parcial y no un timeout. Pendiente: imagen `dissect-worker:0.5.0`, pruebas `-m docker`, peor caso en el contenedor y publicación con autorización. Cifras: [Fase 4, sección 9.4](superpowers/specs/2026-09-23-static-api-calls-design.md).
 - **Fase 4, entrega 2 (argumentos constantes)**: implementada para `RegOpenKeyExA/W` y `RegCreateKeyExA/W` en la misma rama, sin publicar. `call_argument` (`inferred`) dice con qué clave predefinida, subclave y permisos se llama, citando la instrucción que fija cada valor. El informe lo vuelve a derivar desde los bytes y el host compara esos bytes con la muestra. Con `RegCreateKeyExA/W` (catálogo v2), medido en los mismos 1.883 binarios: 15.522 argumentos publicados, 0 informes inválidos y 0 fallos de bytes. Ninguna de las 5.077 claves recuperadas era errónea, y las dos revisiones manuales (30 argumentos por función) dieron 60 correctos. Pendiente: el resto del catálogo de la sección 4, una función por cambio y con su firma comprobada. Peores casos en el contenedor: 17,4 s de 30 como máximo. Cifras: [Fase 4, sección 10](superpowers/specs/2026-09-23-static-api-calls-design.md).
 - Mantenimiento: las ramas `feat/static-evidence` y `feat/yara-evidence` se borraron tras sus merges. `agent/` son las skills locales de *context-mode*, ignoradas en git. La rama `fiddler` pertenece a un worktree de Orca (`orca/workspaces/Dissect/fiddler`) y no se toca.
 
-## Pendiente para cerrar la Fase 3
+## Pendiente de la Fase 3
 
-- [ ] **Publicar**: subir `feat/didactic-glossary`, abrir el PR y comprobar la CI remota (requiere autorización del usuario).
 - [ ] **Revisión de contenido**: el glosario y los textos de las reglas se escribieron y verificaron con fuentes, pero conviene una lectura humana del tono didáctico.
 
 ## Límites conocidos de las explicaciones
