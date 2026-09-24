@@ -22,6 +22,7 @@ from tests.fixtures.pe_builder import (
     args_demo_bytes,
     build_args_demo,
     build_code_demo,
+    build_code_pe,
     build_resolve_demo,
     with_load_config,
 )
@@ -389,4 +390,76 @@ def test_get_proc_address_names_are_published_and_ordinals_are_not(bits):
     assert len(calls) == 2  # by name, then by ordinal 5
     assert [(f.data.name, f.data.string.text) for f in names] == [("lpProcName", RESOLVE_NAME)]
     assert names[0].provenance.evidence_ids == (calls[0].id,)
+    verify_calls(report.evidence, data)
+
+
+# --- CreateServiceW: strings in registers and on the x64 stack ---------------------
+
+SERVICE_STRINGS = {
+    0x1A00: "DissectTraining",
+    0x1A80: "Dissect Training",
+    0x1B00: r"C:\Dissect\training.exe",
+}
+
+
+def create_service(bits):
+    """CreateServiceW(scm, name, display, SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS,
+    SERVICE_AUTO_START, SERVICE_ERROR_NORMAL, path, NULL, NULL, NULL, NULL, NULL)."""
+    slot = 0x1140
+    if bits == 32:
+        body = bytes.fromhex("6a00" * 5)  # lpPassword ... lpLoadOrderGroup
+        body += bytes.fromhex("68") + struct.pack("<I", 0x400000 + 0x1B00)  # path
+        body += bytes.fromhex("6a016a026a10")  # error control, start type, type
+        body += bytes.fromhex("68ff010f00")  # SERVICE_ALL_ACCESS
+        body += bytes.fromhex("68") + struct.pack("<I", 0x400000 + 0x1A80)  # display name
+        body += bytes.fromhex("68") + struct.pack("<I", 0x400000 + 0x1A00)  # name
+        body += bytes.fromhex("56ff15") + struct.pack("<I", 0x400000 + slot)
+    else:
+
+        def rip(prefix, target):
+            at = 0x2000 + len(body)
+            return bytes.fromhex(prefix) + struct.pack("<i", target - (at + 7))
+
+        body = b""
+        body += rip("488d15", 0x1A00)  # lea rdx, name
+        body += rip("4c8d05", 0x1A80)  # lea r8, display name
+        body += bytes.fromhex("41b9ff010f00")  # mov r9d, SERVICE_ALL_ACCESS
+        body += bytes.fromhex("c744242010000000")  # [rsp+0x20] = SERVICE_WIN32_OWN_PROCESS
+        body += bytes.fromhex("c744242802000000")  # [rsp+0x28] = SERVICE_AUTO_START
+        body += bytes.fromhex("c744243001000000")  # [rsp+0x30] = SERVICE_ERROR_NORMAL
+        body += rip("488d05", 0x1B00)  # lea rax, path
+        body += bytes.fromhex("4889442438")  # mov [rsp+0x38], rax
+        body += bytes.fromhex("488bcbff15")  # mov rcx, rbx (scm); call
+        body += struct.pack("<i", slot - (0x2000 + len(body) + 4))
+    data = bytearray(
+        build_code_pe(
+            body + bytes.fromhex("c3"), bits=bits, dll=b"advapi32.dll", function=b"CreateServiceW"
+        )
+    )
+    for rva, text in SERVICE_STRINGS.items():
+        raw = text.encode("utf-16-le") + bytes(2)
+        data[0x200 + rva - 0x1000 : 0x200 + rva - 0x1000 + len(raw)] = raw
+    return bytes(data)
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+def test_create_service_arguments_include_the_binary_path(bits):
+    data = create_service(bits)
+    report = analyze_bytes(data)
+    found = arguments(report)
+    shown = {
+        name: (fact.data.string.text if fact.data.string else fact.data.value)
+        for name, fact in found.items()
+    }
+    assert shown == {
+        "lpServiceName": "DissectTraining",
+        "lpDisplayName": "Dissect Training",
+        "dwDesiredAccess": 0xF01FF,
+        "dwServiceType": 0x10,
+        "dwStartType": 2,
+        "lpBinaryPathName": SERVICE_STRINGS[0x1B00],
+    }
+    if bits == 64:  # the path reaches its stack slot through rax
+        path = found["lpBinaryPathName"].data
+        assert path.method == "stack-slot-v1" and path.source is not None
     verify_calls(report.evidence, data)
