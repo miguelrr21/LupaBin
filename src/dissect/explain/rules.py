@@ -416,6 +416,51 @@ def _argument_value(fact: CallArgumentEvidence) -> str:
     return f"{data.value:#x}"
 
 
+RESOLVED_NAMES_SHOWN = 50
+
+
+def procedure_name(fact: Evidence, facts: dict[str, Evidence]) -> str | None:
+    """The name a published GetProcAddress argument passes, or None."""
+    if not isinstance(fact, CallArgumentEvidence) or fact.data.string is None:
+        return None
+    if fact.data.name != "lpProcName":
+        return None
+    call = facts.get(fact.provenance.evidence_ids[0])
+    callee = None if call is None else facts.get(call.provenance.evidence_ids[0])
+    if not isinstance(callee, ImportEvidence) or callee.data.function is None:
+        return None
+    return fact.data.string.text if name(callee.data.function) == "GetProcAddress" else None
+
+
+def _resolved_names(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """Every name the code passes to GetProcAddress, in report order."""
+    facts = {fact.id: fact for fact in report.evidence}
+    group = tuple(f.id for f in report.evidence if procedure_name(f, facts) is not None)
+    if not cited or tuple(fact.id for fact in cited) != group:
+        return None
+    names = tuple(dict.fromkeys(procedure_name(fact, facts) or "" for fact in cited))
+    slots: Slots = {
+        "count": number(len(cited)),
+        "noun": "nombre" if len(cited) == 1 else "nombres",
+        "distinct": number(len(names)),
+        "dnoun": "distinto" if len(names) == 1 else "distintos",
+        "names": names[:RESOLVED_NAMES_SHOWN],
+    }
+    pe = next((run for run in report.extractor_runs if run.source == "pe"), None)
+    tables = [p for p in (pe.components if pe else ()) if p.name.startswith("imports_")]
+    if tables and all(part.status == "complete" for part in tables):
+        # only a complete import table can show that a name is absent from it
+        imported = {
+            name(fact.data.function)
+            for fact in report.evidence
+            if isinstance(fact, ImportEvidence) and fact.data.function is not None
+        }
+        slots["unlisted"] = tuple(text for text in names if text not in imported)[
+            :RESOLVED_NAMES_SHOWN
+        ]
+    return slots, ("pe.imports.runtime_linking", "code.call_argument", "evidence.confidence")
+
+
 def _arguments(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     """One call and every argument the report publishes for it, in report order."""
     if len(cited) < 2 or not isinstance(cited[0], ApiCallEvidence):
@@ -555,6 +600,15 @@ RULES: dict[str, Rule] = {
             "Estar en la lista no demuestra que el programa haga eso: muchos programas "
             "legítimos llaman a estas funciones. " + NOT_EXECUTED,
             _code_family,
+        ),
+        Rule(
+            "code.resolved_names@1",
+            "El código pasa {count} {noun} de función a GetProcAddress ({distinct} {dnoun}).",
+            "Que el código pase un nombre a GetProcAddress no demuestra que la llamada se "
+            "ejecute, que esa función exista ni que se use; y un programa también puede "
+            "resolver funciones por ordinal o con nombres que construye o descifra al "
+            "ejecutarse, que Dissect no ve.",
+            _resolved_names,
         ),
         Rule(
             "code.arguments@1",
