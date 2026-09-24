@@ -1,6 +1,6 @@
 services:
   worker:
-    image: dissect-worker:0.5.0
+    image: dissect-worker:0.6.0
     build:
       context: .
       dockerfile: docker/Dockerfile

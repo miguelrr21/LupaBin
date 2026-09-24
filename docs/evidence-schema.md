@@ -1,6 +1,22 @@
 # Dissect: contrato de evidencias
 
-## Contrato activo 0.5.0
+## Contrato activo 0.6.0
+
+La Fase 5 (entrega 5.4, [diseño, sección 11](superpowers/specs/2026-09-24-capabilities-design.md)) añade al contrato 0.5.0 un tipo, `code_function`, para que una explicación pueda decir que dos llamadas están en el mismo rango de función sin volver a la muestra. La CLI, el paquete y la imagen esperada usan 0.6.0; el esquema 0.5.0 se conserva en `docs/schemas/`. Todo lo demás es el contrato 0.5.0, descrito a continuación.
+
+`code_function` es `observed`: afirma que la tabla `.pdata` de un PE32+ declara, en esos 12 bytes, una entrada `RUNTIME_FUNCTION` con ese inicio, fin e información de desenrollado. No afirma que el rango sea una función completa: una función partida tiene varias entradas. Se publica, sin repetir, la entrada que contiene cada llamada publicada a una función del catálogo de argumentos; si dos entradas de la tabla se solapan, la tabla está malformada y no se publica ninguna. En x86 no hay `.pdata`. Campos:
+
+| Campo | Contenido |
+| --- | --- |
+| `component` | `api_calls` (la cuota es la de llamadas: como mucho una entrada por llamada). |
+| `location` | La entrada: `offset`, `rva`, `length` 12 y `section`. |
+| `data.begin`, `data.end`, `data.unwind` | Las tres RVA de la entrada, con `begin < end`. |
+| `data.raw_hex` | Los 12 bytes de la entrada. |
+| `provenance.evidence_ids` | Vacío. |
+
+**Verificación.** El modelo exige que los bytes codifiquen los tres valores, que la cabecera sea PE32+, que el desplazamiento corresponda a su RVA según la tabla de secciones, que el rango contenga al menos una llamada publicada y que cada inicio aparezca una sola vez. El informe no lleva los directorios de datos, así que no puede demostrar que la entrada esté dentro del directorio de excepciones; el host compara sus bytes con la muestra, igual que los de las llamadas.
+
+### Base: contrato 0.5.0
 
 La Fase 4 añade al contrato 0.4.0 una quinta fuente, `code`, con el tipo `api_call` (primera entrega: qué funciones importadas llama el código y desde dónde) y el tipo `call_argument` (segunda entrega: argumentos constantes de las llamadas a las funciones del catálogo). La versión 0.5.0 no se había publicado cuando se añadió `call_argument`, así que ambos forman parte de ella, como preveía la sección 5 del diseño. La CLI, el paquete y la imagen esperada usan 0.5.0; el esquema 0.4.0 se conserva en `docs/schemas/`. Diseño, mediciones y límites: [Fase 4](superpowers/specs/2026-09-23-static-api-calls-design.md).
 

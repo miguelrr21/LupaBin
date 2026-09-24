@@ -8,6 +8,7 @@ from dissect.evidence.facts import (
     AnomalyData,
     ApiCallData,
     CallArgumentData,
+    CodeFunctionData,
     DecodedStringData,
     EntropyData,
     Evidence,
@@ -42,6 +43,7 @@ KINDS = {
     DecodedStringData: "decoded_string",
     ApiCallData: "api_call",
     CallArgumentData: "call_argument",
+    CodeFunctionData: "code_function",
 }
 
 
@@ -118,6 +120,7 @@ class Collector:
             "decoded_string": limits.decode.strings + limits.decode.xor,
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
+            "code_function": limits.code.calls,  # at most one per published call
         }
         # Coverage of extractors that already ran, for those that depend on them.
         self.coverage: dict[tuple[Source, Component], Coverage] = {}

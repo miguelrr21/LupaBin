@@ -3,7 +3,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from dissect.evidence.code import validate_argument, validate_call
+from dissect.evidence.code import validate_argument, validate_call, validate_function
+from dissect.evidence.facts import ApiCallEvidence
 from dissect.evidence.facts import Evidence as Evidence
 from dissect.evidence.facts import ImportData as ImportData
 from dissect.evidence.primitives import (
@@ -63,7 +64,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.5.0"] = "0.5.0"
+    version: Literal["0.6.0"] = "0.6.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -128,7 +129,7 @@ class ExtractorError(Model):
 
 
 class Report(Model):
-    schema_version: Literal["0.5.0"] = "0.5.0"
+    schema_version: Literal["0.6.0"] = "0.6.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -158,6 +159,7 @@ class Report(Model):
             "yara_match": limits.yara.matches,
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
+            "code_function": limits.code.calls,
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
@@ -246,6 +248,8 @@ class Report(Model):
         degrees: dict[str, int] = {}
         children: dict[str, list[str]] = {key: [] for key in facts}
         parameters: set[tuple[str, int]] = set()
+        calls = [fact for fact in self.evidence if isinstance(fact, ApiCallEvidence)]
+        ranges: set[int] = set()
         for fact in self.evidence:
             if fact.source not in runs or runs[fact.source].status == "failed":
                 raise ValueError("evidence has no successful or partial source")
@@ -264,6 +268,20 @@ class Report(Model):
                 validate_call(fact, facts.get(refs[0]), sections, header)
                 degrees[fact.id] = 1
                 children[refs[0]].append(fact.id)
+                continue
+            if fact.kind == "code_function":
+                span = fact.location
+                if span.offset is None or span.length is None:
+                    raise ValueError("a function range must locate its entry")
+                if span.offset + span.length > self.sample.size:
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have code evidence")
+                validate_function(fact, calls, sections, header)
+                if fact.data.begin in ranges:
+                    raise ValueError("a function range is published once")
+                ranges.add(fact.data.begin)
+                degrees[fact.id] = 0
                 continue
             if fact.kind == "call_argument":
                 span = fact.location
