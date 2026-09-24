@@ -326,7 +326,7 @@ class ArgumentString(Model):
 
 
 class CallArgumentData(Model):
-    catalog: Literal["dissect-api-semantics-v3"] = "dissect-api-semantics-v3"
+    catalog: Literal["dissect-api-semantics-v4"] = "dissect-api-semantics-v4"
     # block-constant-v1: a register or a push; stack-slot-v1: an x64 stack slot
     method: Literal["block-constant-v1", "stack-slot-v1"] = "block-constant-v1"
     position: Annotated[int, Field(ge=0, le=15)]
