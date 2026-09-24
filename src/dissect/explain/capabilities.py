@@ -16,6 +16,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from dissect.evidence.facts import ApiCallEvidence, CallArgumentEvidence, Evidence, ImportEvidence
 from dissect.evidence.models import Report
@@ -23,8 +24,8 @@ from dissect.explain import winapi
 from dissect.explain.models import SlotValue
 from dissect.explain.text import hexadecimal, name, number
 
-CATALOG_ID = "dissect-capabilities-v1"
-CATALOG_SHA256 = "854b665c9b48ddbf8567cf7944749c96d82524f1d77d15b7fee9aa006931b478"
+CATALOG_ID = "dissect-capabilities-v2"
+CATALOG_SHA256 = "645d7769beda20be36df239f8241f760e1c5e1dd46261ccae9c6e94188cb5a13"
 API_CATALOG = "dissect-api-semantics-v4"
 
 Arguments = dict[str, CallArgumentEvidence]
@@ -34,18 +35,20 @@ Derived = tuple[Slots, tuple[str, ...]]  # slots and glossary entry ids
 # Benign context (design section 5): on 2026-09-24, binaries with at least one case among
 # 3,087 benign PE files (System32 --stride 3: 1,363; SysWOW64 --stride 5: 521; Program
 # Files and Program Files (x86) --recursive --stride 40: 1,203), measured with
-# `uv run python -m tests.capability_eval`. Each of the 803 cases was reviewed by hand.
+# `uv run python -m tests.capability_eval`. Each of the 816 cases was reviewed by hand
+# (803 with catalog v1, and the 13 that v2 adds; section 10 of the design).
 BENIGN_FILES = 3087
 BENIGN = {
     "run_key_value": 0,
     "run_key_open_write": 9,
     "winlogon_open_write": 1,
+    "winlogon_value": 0,
     "service_create": 2,
     "command_execution": 26,
     "download_to_file": 0,
     "network_destination": 3,
     "user_agent": 39,
-    "executable_writable_memory": 69,
+    "executable_writable_memory": 72,
     "process_memory_access": 22,
     "move_on_reboot": 9,
     "named_mutex": 105,
@@ -79,6 +82,7 @@ TEXT_SHOWN = 200
 # with their names as attack.mitre.org gives them on 2026-09-24.
 TECHNIQUES = {
     "T1547.001": "Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder",
+    "T1547.004": "Boot or Logon Autostart Execution: Winlogon Helper DLL",
     "T1543.003": "Create or Modify System Process: Windows Service",
     "T1059.003": "Command and Scripting Interpreter: Windows Command Shell",
     "T1059.001": "Command and Scripting Interpreter: PowerShell",
@@ -162,18 +166,41 @@ def _labelled(label: str, text: str | None) -> str | None:
 
 # --- registry ------------------------------------------------------------------------
 
+
 # Paths below HKEY_CURRENT_USER\Software or HKEY_LOCAL_MACHINE\Software (also through
 # Wow6432Node), compared without case as the registry does.
+class Key(NamedTuple):
+    """A registry key, as a path below Software, compared without case."""
+
+    path: str
+    # predefined roots under which Software\<path> is this key (HKEY_USERS: <SID>\Software)
+    roots: frozenset[str]
+    descendants: bool = False  # its subkeys count as well
+    # below a key that is not predefined (a handle), compare only the end of the subkey
+    unknown_root: bool = True
+
+
+USER_ROOTS = frozenset({"HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE", "HKEY_USERS"})
 RUN_KEYS = (
-    "microsoft\\windows\\currentversion\\run",
-    "microsoft\\windows\\currentversion\\runonce",
-    "microsoft\\windows\\currentversion\\runservices",
-    "microsoft\\windows\\currentversion\\runservicesonce",
-    "microsoft\\windows\\currentversion\\policies\\explorer\\run",
+    Key("microsoft\\windows\\currentversion\\run", USER_ROOTS),
+    Key("microsoft\\windows\\currentversion\\runonce", USER_ROOTS),
+    Key("microsoft\\windows\\currentversion\\runservices", USER_ROOTS),
+    Key("microsoft\\windows\\currentversion\\runservicesonce", USER_ROOTS),
+    Key("microsoft\\windows\\currentversion\\policies\\explorer\\run", USER_ROOTS),
+    # ATT&CK T1547.001 places RunOnceEx, and its subkeys such as 0001\Depend, in HKLM
+    Key(
+        "microsoft\\windows\\currentversion\\runonceex",
+        frozenset({"HKEY_LOCAL_MACHINE"}),
+        descendants=True,
+        unknown_root=False,
+    ),
 )
-WINLOGON_KEYS = ("microsoft\\windows nt\\currentversion\\winlogon",)
-# Roots under which Software\... is a per-user or per-machine configuration path.
-SOFTWARE_ROOTS = frozenset({"HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE"})
+WINLOGON = Key("microsoft\\windows nt\\currentversion\\winlogon", USER_ROOTS)
+# ATT&CK T1547.004: Winlogon\Notify and its subkeys, and the Shell and Userinit values
+WINLOGON_NOTIFY = Key(
+    "microsoft\\windows nt\\currentversion\\winlogon\\notify", USER_ROOTS, descendants=True
+)
+WINLOGON_VALUES = frozenset({"shell", "userinit"})
 KEY_WRITE_RIGHTS = winapi.KEY_SET_VALUE | winapi.GENERIC_WRITE | winapi.GENERIC_ALL
 KEY_ACCESS_NAMES = {
     winapi.KEY_WRITE: "KEY_WRITE",
@@ -184,32 +211,58 @@ KEY_ACCESS_NAMES = {
 }
 
 
-def _key_path(args: Arguments, keys: tuple[str, ...]) -> str | None:
-    """The key the call names, if it is one of `keys`; None otherwise.
+def _is(key: Key, rest: str) -> bool:
+    """Whether a path below Software is the key (or, if allowed, one of its subkeys)."""
+    return rest == key.path or (key.descendants and rest.startswith(key.path + "\\"))
+
+
+def _below_software(key: Key, path: str) -> bool:
+    return any(
+        path.startswith(prefix) and _is(key, path[len(prefix) :])
+        for prefix in ("software\\", "software\\wow6432node\\")
+    )
+
+
+def matched_key(args: Arguments, keys: tuple[Key, ...]) -> Key | None:
+    """The key of `keys` that the call names, or None.
 
     With a predefined root the whole path must be that key; with an unknown root (a
-    handle from another call) only the end of the subkey can be compared, and the
-    wording says the root is unknown."""
+    handle from another call) only the end of the subkey can be compared."""
     subkey = _text(args, "lpSubKey")
     if subkey is None:
         return None
     path = subkey.lower().rstrip("\\")
     root_fact = args.get("hKey")
     root = None if root_fact is None else root_fact.data.constant
-    if root is None:
-        if any(path == key or path.endswith("\\" + key) for key in keys):
-            return f"{_quoted(subkey)}, bajo una clave que no se pudo determinar"
+    for key in keys:
+        if root is None:
+            if not key.unknown_root:
+                continue
+            tail = "\\" + path
+            if tail.endswith("\\" + key.path) or (
+                key.descendants and "\\" + key.path + "\\" in tail
+            ):
+                return key
+        elif root in key.roots:
+            if root == "HKEY_USERS":  # <SID>\Software\...
+                user, _, rest = path.partition("\\")
+                if user and _below_software(key, rest):
+                    return key
+            elif _below_software(key, path):
+                return key
+    return None
+
+
+def _key_path(args: Arguments, keys: tuple[Key, ...]) -> str | None:
+    """How the case names the key, if it is one of `keys`; the root is said or said unknown."""
+    if matched_key(args, keys) is None:
         return None
-    if root in SOFTWARE_ROOTS:
-        full = any(path in (f"software\\{k}", f"software\\wow6432node\\{k}") for k in keys)
-    elif root == "HKEY_USERS":  # <SID>\Software\...
-        user, _, rest = path.partition("\\")
-        full = bool(user) and any(
-            rest in (f"software\\{k}", f"software\\wow6432node\\{k}") for k in keys
-        )
-    else:
-        full = False
-    return _quoted(f"{root}\\{subkey}") if full else None
+    subkey = _text(args, "lpSubKey") or ""
+    root_fact = args.get("hKey")
+    root = None if root_fact is None else root_fact.data.constant
+    if root is None:
+        return f"{_quoted(subkey)}, bajo una clave que no se pudo determinar"
+    return _quoted(f"{root}\\{subkey}")
 
 
 def _access(value: int) -> str:
@@ -217,7 +270,7 @@ def _access(value: int) -> str:
     return f"samDesired = {value:#x}" + (f" ({known})" if known else "")
 
 
-def _open_for_write(keys: tuple[str, ...]) -> Callable[[str, Arguments], str | None]:
+def _open_for_write(keys: tuple[Key, ...]) -> Callable[[str, Arguments], str | None]:
     def describe(function: str, args: Arguments) -> str | None:
         access = _integer(args, "samDesired")
         if access is None or not access & KEY_WRITE_RIGHTS:
@@ -226,6 +279,23 @@ def _open_for_write(keys: tuple[str, ...]) -> Callable[[str, Arguments], str | N
         return None if path is None else f"{path}, {_access(access)}"
 
     return describe
+
+
+def _winlogon_value(function: str, args: Arguments) -> str | None:
+    path = _key_path(args, (WINLOGON, WINLOGON_NOTIFY))
+    if path is None:
+        return None
+    return _parts(path, _labelled("valor", _text(args, "lpValueName")))
+
+
+def _winlogon_technique(function: str, args: Arguments) -> str | None:
+    """T1547.004 only for the keys and values its definition names."""
+    if matched_key(args, (WINLOGON_NOTIFY,)) is not None:
+        return "T1547.004"
+    value = _text(args, "lpValueName")
+    if value is not None and value.lower() in WINLOGON_VALUES:
+        return "T1547.004"
+    return None
 
 
 def _run_value(function: str, args: Arguments) -> str | None:
@@ -341,14 +411,17 @@ def _agent(function: str, args: Arguments) -> str | None:
 ANY_PROCESS = "la función admite otro proceso; cuál, no se determina"
 
 
-def _protection(value: int, allowed: tuple[int, ...]) -> str | None:
+def _protection(value: int, allowed: tuple[int, ...], targets: str) -> str | None:
     """The name of an executable and writable protection, with its modifiers; None if the
-    base protection is another one or an unknown bit is set."""
+    base protection is another one or an unknown bit is set. `targets` names the Control
+    Flow Guard bit as the function's documentation does."""
     base, modifiers = value & 0xFF, value & ~0xFF
-    if base not in allowed or modifiers & ~winapi.PAGE_MODIFIER_MASK:
+    if base not in allowed or modifiers & ~(winapi.PAGE_MODIFIER_MASK | winapi.PAGE_TARGETS):
         return None
     names = [winapi.PAGE_NAMES[base]]
     names += [text for bit, text in winapi.PAGE_MODIFIERS.items() if modifiers & bit]
+    if modifiers & winapi.PAGE_TARGETS:
+        names.append(targets)
     return " | ".join(names)
 
 
@@ -357,10 +430,12 @@ def _executable_writable(function: str, args: Arguments) -> str | None:
     if function.startswith("VirtualAlloc"):
         # Learn: PAGE_EXECUTE_WRITECOPY is not supported by VirtualAlloc(Ex)
         value, allowed = _integer(args, "flProtect"), (winapi.PAGE_EXECUTE_READWRITE,)
+        targets = "PAGE_TARGETS_INVALID"
     else:
         value = _integer(args, "flNewProtect")
         allowed = (winapi.PAGE_EXECUTE_READWRITE, winapi.PAGE_EXECUTE_WRITECOPY)
-    shown = None if value is None else _protection(value, allowed)
+        targets = "PAGE_TARGETS_NO_UPDATE"  # Learn: the same bit, as VirtualProtect reads it
+    shown = None if value is None else _protection(value, allowed, targets)
     if shown is None:
         return None
     return _parts(shown, ANY_PROCESS if function.endswith("Ex") else None)
@@ -445,10 +520,22 @@ CAPABILITIES: tuple[Capability, ...] = (
         "persistence",
         "abrir la clave Winlogon con permiso para escribir en ella",
         _aw(("RegOpenKeyEx", "RegCreateKeyEx"), REGISTRY_OPEN),
-        _open_for_write(WINLOGON_KEYS),
+        _open_for_write((WINLOGON,)),
         "Abrir la clave para escribir no escribe nada en ella, ni dice qué valor cambiaría; "
         "componentes de Windows y programas de administración legítimos la usan.",
         ("api.family.registry", *EVIDENCE),
+    ),
+    Capability(
+        "winlogon_value",
+        "persistence",
+        "escribir un valor en la clave Winlogon",
+        _aw(("RegSetKeyValue",), ("hKey", "lpSubKey", "lpValueName")),
+        _winlogon_value,
+        "Componentes de Windows y programas de administración legítimos escriben en ella; "
+        "solo los valores Shell y Userinit y la subclave Notify se usan para ejecutar "
+        "programas al iniciar sesión.",
+        ("api.family.registry", *EVIDENCE),
+        _winlogon_technique,
     ),
     Capability(
         "service_create",
@@ -583,8 +670,8 @@ def catalog_digest() -> str:
         "id": CATALOG_ID,
         "api_catalog": API_CATALOG,
         "run_keys": RUN_KEYS,
+        "winlogon": [WINLOGON, WINLOGON_NOTIFY, sorted(WINLOGON_VALUES)],
         "benign": [BENIGN_FILES, BENIGN],
-        "winlogon_keys": WINLOGON_KEYS,
         "key_write_rights": KEY_WRITE_RIGHTS,
         "techniques": TECHNIQUES,
         "interpreters": INTERPRETERS,
@@ -597,7 +684,8 @@ def catalog_digest() -> str:
             for c in CAPABILITIES
         ],
     }
-    return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
+    text = json.dumps(content, sort_keys=True, default=sorted)  # frozensets, in order
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 # --- matching and the explanation rule -----------------------------------------------

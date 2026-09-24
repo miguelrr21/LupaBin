@@ -83,6 +83,13 @@ def test_composite_constants_match_the_sdk_headers():
 POSITIVE = [
     (
         "RegSetKeyValueW",
+        {0: HKLM, 1: WINLOGON, 2: "Shell"},
+        "winlogon_value",
+        "RegSetKeyValueW: «HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\"
+        "Winlogon», valor «Shell» (T1547.004)",
+    ),
+    (
+        "RegSetKeyValueW",
         {0: HKCU, 1: RUN, 2: "DissectTraining"},
         "run_key_value",
         "RegSetKeyValueW: «HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run»"
@@ -385,7 +392,7 @@ NEGATIVE = [
     ("VirtualAlloc", {3: winapi.PAGE_EXECUTE_READ}),
     ("VirtualAlloc", {3: winapi.PAGE_EXECUTE_WRITECOPY}),
     ("VirtualAlloc", {3: 0x04}),
-    ("VirtualProtect", {2: 0x40000040}),
+    ("VirtualProtect", {2: 0x20000040}),  # a bit Dissect does not name
     ("VirtualProtect", {2: winapi.PAGE_EXECUTE_READWRITE | winapi.PAGE_EXECUTE}),
     ("VirtualProtect", {}),
     # rights that do not modify memory, or MAXIMUM_ALLOWED
@@ -538,3 +545,79 @@ def test_a_capability_never_seen_in_benign_binaries_says_so():
     _, _, items = found(build_call_demo("URLDownloadToFileW", {1: "http://training.invalid/"}))
     statement = items["capability.download_to_file@1"].statement
     assert statement.endswith("Ninguno de los 3.087 binarios benignos medidos contiene un caso.")
+
+
+# --- Phase 5.6: coverage (design section 10) ------------------------------------------------
+
+RUN_ONCE_EX = r"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx"
+
+
+@pytest.mark.parametrize(
+    ("function", "call", "ending"),
+    [
+        ("VirtualAlloc", {3: 0x40000040}, "PAGE_EXECUTE_READWRITE | PAGE_TARGETS_INVALID"),
+        (
+            "VirtualProtect",
+            {2: 0x40000040 | winapi.PAGE_GUARD},
+            "PAGE_EXECUTE_READWRITE | PAGE_GUARD | PAGE_TARGETS_NO_UPDATE",
+        ),
+    ],
+)
+def test_the_control_flow_guard_bit_is_named_as_each_function_documents_it(function, call, ending):
+    rule, cases = only_case(build_call_demo(function, call))
+    assert rule == "capability.executable_writable_memory@1"
+    assert cases[0].endswith(ending)
+
+
+@pytest.mark.parametrize(
+    "subkey",
+    [
+        RUN_ONCE_EX,
+        RUN_ONCE_EX + r"\0001\Depend",
+        r"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\RunOnceEx\0001",
+    ],
+)
+def test_run_once_ex_and_its_subkeys_below_the_machine_key_are_run_keys(subkey):
+    rule, cases = only_case(build_call_demo("RegSetKeyValueW", {0: HKLM, 1: subkey, 2: "1"}))
+    assert rule == "capability.run_key_value@1" and cases[0].endswith("(T1547.001)")
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        {0: HKCU, 1: RUN_ONCE_EX + r"\0001"},  # the source places it in HKLM only
+        {1: RUN_ONCE_EX + r"\0001"},  # an unknown root could be HKCU
+        {0: HKLM, 1: RUN_ONCE_EX + "tra"},
+        {0: HKLM, 1: RUN + r"\Dissect"},  # subkeys of Run are not Run
+    ],
+)
+def test_other_keys_near_run_once_ex_are_not_run_keys(call):
+    _, _, items = found(build_call_demo("RegSetKeyValueW", call))
+    assert items == {}
+
+
+@pytest.mark.parametrize(
+    ("call", "technique"),
+    [
+        ({0: HKLM, 1: WINLOGON, 2: "Userinit"}, True),
+        ({0: HKCU, 1: WINLOGON, 2: "shell"}, True),
+        ({0: HKLM, 1: WINLOGON + r"\Notify\Dissect", 2: "DllName"}, True),
+        ({1: WINLOGON + r"\Notify"}, True),  # unknown root: the end of the subkey
+        ({0: HKLM, 1: WINLOGON, 2: "AutoAdminLogon"}, False),
+        ({0: HKLM, 1: WINLOGON}, False),  # the value name is unknown
+    ],
+)
+def test_winlogon_values_carry_t1547_004_only_where_its_definition_says(call, technique):
+    rule, cases = only_case(build_call_demo("RegSetKeyValueW", call))
+    assert rule == "capability.winlogon_value@1"
+    assert cases[0].endswith(" (T1547.004)") == technique
+
+
+def test_other_winlogon_like_keys_are_not_winlogon():
+    for call in (
+        {0: HKCR, 1: WINLOGON, 2: "Shell"},
+        {0: HKLM, 1: WINLOGON + "Ex", 2: "Shell"},
+        {0: HKLM, 1: WINLOGON + r"\GPExtensions", 2: "Shell"},
+    ):
+        _, _, items = found(build_call_demo("RegSetKeyValueW", call))
+        assert items == {}, call
