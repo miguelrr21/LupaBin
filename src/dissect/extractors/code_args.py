@@ -160,10 +160,19 @@ def _written(insn: capstone.CsInsn) -> set[int] | None:
     return set(written)
 
 
+def _written_memory(insn: capstone.CsInsn) -> list[capstone.x86.X86Op]:
+    """Memory operands the instruction may write, by x86 semantics rather than capstone's
+    access flags, which call the destination of `movups [mem], xmm` or `movq [mem], xmm`
+    a read. In Intel order the destination is the first operand; `xchg` writes both.
+    A `cmp` or `test` of memory counts too: a lost argument, never a wrong one. `push`
+    only reads its memory operand; its own stack write is the push rule."""
+    operands = insn.operands
+    if insn.id == x86.X86_INS_XCHG:
+        return [operand for operand in operands if operand.type == x86.X86_OP_MEM]
+    if insn.id != x86.X86_INS_PUSH and operands and operands[0].type == x86.X86_OP_MEM:
+        return [operands[0]]
+    return []
+
+
 def _writes_stack_memory(insn: capstone.CsInsn) -> bool:
-    return any(
-        operand.type == x86.X86_OP_MEM
-        and operand.access & capstone.CS_AC_WRITE
-        and operand.mem.base in _STACK
-        for operand in insn.operands
-    )
+    return any(operand.mem.base in _STACK for operand in _written_memory(insn))
