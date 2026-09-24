@@ -5,6 +5,7 @@ from typing import Literal
 from dissect.evidence.collector import Collector, Progress
 from dissect.evidence.models import Analysis, Limits, Report, Sample
 from dissect.extractors.base import Extraction, Extractor
+from dissect.extractors.code import CodeExtractor
 from dissect.extractors.decode import DecodeExtractor
 from dissect.extractors.pe import PEExtractor
 from dissect.extractors.strings import StringsExtractor
@@ -31,7 +32,13 @@ def analyze_bytes(
     for extractor in (
         extractors
         if extractors is not None
-        else (PEExtractor(), StringsExtractor(), YaraExtractor(), DecodeExtractor())
+        else (
+            PEExtractor(),
+            StringsExtractor(),
+            YaraExtractor(),
+            DecodeExtractor(),
+            CodeExtractor(),
+        )
     ):
         progress = Progress(extractor.source, extractor.version)
         start_count = len(collector.facts)
@@ -51,6 +58,8 @@ def analyze_bytes(
                     known_type = "PE32" if fact.data.optional_magic == 267 else "PE32+"
             result = Extraction(known_type, progress)
         progress.block_remaining("extractor_failure")
+        for component, state in progress.states.items():
+            collector.coverage[(progress.source, component)] = state
         results.append(result)
     known_types = {result.sample_type for result in results if result.sample_type != "unknown"}
     if len(known_types) > 1:

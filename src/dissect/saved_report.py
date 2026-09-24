@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from dissect.errors import DissectError
+from dissect.evidence.code import verify_calls
 from dissect.evidence.models import Limits, Report
 from dissect.evidence.yara import validate_matches
 from dissect.extractors.decode import verify_decodings
@@ -56,6 +57,7 @@ def check_against_sample(report: Report, blob: Blob) -> None:
         raise DissectError("report_mismatch")
     try:
         verify_decodings(report.evidence, blob.data)
+        verify_calls(report.evidence, blob.data)
         context = report.yara_context
         if context is not None and context.catalog is not None:
             limits = report.analysis.limits.yara

@@ -9,6 +9,7 @@ bytes, never chosen among candidates. Design: docs/superpowers/specs/
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass, replace
 from typing import Literal, NamedTuple
 
@@ -225,6 +226,7 @@ class XorScan:
     examined: int
     examined_limit: bool
     hit_limit: bool
+    time_limit: bool = False  # the deadline stopped the scan between two searches
 
 
 def _step(encoding: str) -> int:
@@ -303,8 +305,16 @@ def _extend(data: bytes, candidate: _Candidate, max_chars: int) -> XorHit:
 
 
 class _Budget:
-    def __init__(self, limit: int) -> None:
+    def __init__(self, limit: int, deadline: float = float("inf")) -> None:
         self.limit, self.examined, self.exhausted = limit, 0, False
+        self.deadline, self.late = deadline, False
+
+    def expired(self) -> bool:
+        """Checked before each search of the whole buffer: a slow machine or an input
+        built against bytes.find stops here, partial, instead of timing out."""
+        if not self.late and time.monotonic() > self.deadline:
+            self.late = True
+        return self.late
 
     def take(self) -> bool:
         if self.examined >= self.limit:
@@ -318,6 +328,8 @@ def _self_verified(data: bytes, differentials: Differentials, budget: _Budget) -
     candidates: list[_Candidate] = []
     lag, diff = 0, b""
     for plan in PLANS:
+        if budget.expired():
+            break
         if plan.lag != lag:
             lag, diff = plan.lag, b""
             diff = differentials.lag(lag)
@@ -352,6 +364,8 @@ def _reused(
             for encoding in ENCODINGS:
                 if period in COVERAGE[index, encoding]:
                     continue  # the anchor verifies this period on its own (first pass)
+                if budget.expired():
+                    return candidates
                 encoded = crib.encode(encoding)
                 pattern = bytes(a ^ b for a, b in zip(encoded, encoded[period:], strict=False))
                 if sum(1 for byte in pattern if byte) >= _REUSE_SELECTIVE_BYTES:
@@ -414,10 +428,11 @@ def scan(
     max_examined: int = 200_000,
     max_chars: int = 1024,
     reuse_keys: int = MAX_REUSE_KEYS,
+    deadline: float = float("inf"),
 ) -> XorScan:
     if max_chars < 64:
         raise ValueError("max_chars must leave room for the longest crib")
-    budget = _Budget(max_examined)
+    budget = _Budget(max_examined, deadline)
     differentials = Differentials(data)
     hits: list[XorHit] = []
     hit_limit = _accept(
@@ -428,11 +443,11 @@ def scan(
         if len(hit.key) >= 2:  # every crib already verifies 1-byte keys on its own
             verifiers.setdefault(canonical_key(hit.key), hit)
     verifiers = dict(list(verifiers.items())[:reuse_keys])
-    if verifiers and not budget.exhausted and not hit_limit:
+    if verifiers and not budget.exhausted and not budget.late and not hit_limit:
         reused = _reused(data, differentials, verifiers, budget)
         hit_limit = _accept(data, reused, hits, max_hits, max_chars)
     hits.sort(key=lambda h: (h.start, h.end, ENCODINGS.index(h.encoding), h.key))
-    return XorScan(tuple(hits), budget.examined, budget.exhausted, hit_limit)
+    return XorScan(tuple(hits), budget.examined, budget.exhausted, hit_limit, budget.late)
 
 
 class XorParts(NamedTuple):

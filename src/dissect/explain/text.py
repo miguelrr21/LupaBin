@@ -7,6 +7,7 @@ SOURCES: dict[Source, str] = {
     "strings": "Cadenas",
     "yara": "Reglas YARA",
     "decode": "Decodificación",
+    "code": "Código",
 }
 
 COMPONENTS: dict[Component, str] = {
@@ -24,6 +25,9 @@ COMPONENTS: dict[Component, str] = {
     "yara_evidence": "coincidencias",
     "decode_strings": "Base64 y hexadecimal",
     "decode_xor": "XOR",
+    "disassembly": "recorrido del código",
+    "api_calls": "llamadas a funciones importadas",
+    "call_arguments": "argumentos constantes de las llamadas",
 }
 
 STATUSES = {
@@ -76,8 +80,35 @@ MESSAGES: dict[str, str] = {
         "Se alcanzó el máximo de apariciones XOR examinadas: parte del archivo no se revisó con"
         " este método."
     ),
+    "decode_time_limit": (
+        "Se agotó el tiempo reservado a la búsqueda XOR: parte del archivo no se revisó con "
+        "este método."
+    ),
     "decoded_length_limit": (
         "Algún texto decodificado superaba el máximo de caracteres y se conservó recortado."
+    ),
+    "unsupported_architecture": (
+        "El código no es x86 ni x64, las únicas arquitecturas que Dissect sabe recorrer."
+    ),
+    "code_instruction_limit": (
+        "Se alcanzó el máximo de instrucciones recorridas: parte del código no se revisó."
+    ),
+    "code_entry_limit": (
+        "Se alcanzó el máximo de puntos de partida del recorrido: parte del código no se revisó."
+    ),
+    "code_time_limit": (
+        "Se agotó el tiempo reservado al recorrido del código: parte del código no se revisó."
+    ),
+    "call_site_limit": (
+        "Se alcanzó el máximo de llamadas examinadas: parte del código no se revisó."
+    ),
+    "api_call_limit": ("Se alcanzó el máximo de llamadas conservadas: hay más que no aparecen."),
+    "call_argument_limit": (
+        "Se alcanzó el máximo de argumentos conservados: hay más que no aparecen."
+    ),
+    "argument_instruction_limit": (
+        "Se alcanzó el máximo de instrucciones examinadas en busca de argumentos:"
+        " algunas llamadas no se revisaron."
     ),
     "yara_catalog_invalid": (
         "El catálogo de reglas no superó su validación, así que no se evaluó ninguna regla."
