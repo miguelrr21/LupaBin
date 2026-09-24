@@ -24,6 +24,7 @@ from dissect.evidence.facts import (
     YaraEvidence,
 )
 from dissect.evidence.models import Report
+from dissect.explain.capabilities import CAPABILITIES, derive
 from dissect.explain.families import FAMILIES, PREVALENCE, family_of
 from dissect.explain.models import SlotValue
 from dissect.explain.text import hexadecimal, name, number, section_name
@@ -774,3 +775,12 @@ RULES: dict[str, Rule] = {
         ),
     )
 }
+# Phase 5: one rule per capability of the catalog (explain/capabilities.py).
+RULES.update(
+    {
+        capability.rule_id: Rule(
+            capability.rule_id, capability.template, capability.not_proven, derive(capability)
+        )
+        for capability in CAPABILITIES
+    }
+)

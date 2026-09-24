@@ -285,6 +285,60 @@ def build_resolve_demo(*, bits=32):
     return bytes(data)
 
 
+CALL_DLLS = (
+    "advapi32.dll",
+    "kernel32.dll",
+    "shell32.dll",
+    "wininet.dll",
+    "winhttp.dll",
+    "urlmon.dll",
+    "bcrypt.dll",
+)
+
+
+def build_call_demo(function, *calls, dll=None):
+    """x86 code that calls one catalog function once per entry of `calls`.
+
+    Each call maps a parameter position to a constant: an int is pushed as is, a str
+    is written in the function's encoding to the read-only .idata (from ARGS_STRING_RVA)
+    and its address is pushed. Other positions push eax, which is not a constant, so
+    those arguments stay unknown. Inert training data: never executed."""
+    from dissect.evidence.api_catalog import FUNCTIONS
+
+    entry = FUNCTIONS[function]
+    if dll is None:
+        dll = next((name for name in CALL_DLLS if name in entry.dlls), min(entry.dlls))
+    slot = struct.pack("<I", 0x400000 + 0x1140)
+    strings, rva, body = {}, ARGS_STRING_RVA, b""
+    for call in calls:
+        for position in reversed(range(entry.arity)):
+            value = call.get(position)
+            if isinstance(value, str):
+                if value not in strings:
+                    strings[value] = rva
+                    rva += len(value.encode(entry.encoding)) + 2
+                    rva += rva % 2
+                value = 0x400000 + strings[value]
+            body += b"\x50" if value is None else b"\x68" + struct.pack("<I", value)
+        body += b"\xff\x15" + slot  # call [slot]
+    assert rva <= 0x2000, "the strings must fit in .idata"
+    data = bytearray(build_code_pe(body + b"\xc3", dll=dll.encode(), function=function.encode()))
+    for text, at in strings.items():
+        raw = text.encode(entry.encoding) + b"\0\0"
+        data[0x200 + at - 0x1000 : 0x200 + at - 0x1000 + len(raw)] = raw
+    return bytes(data)
+
+
+# Inert training call for the capabilities demo: RegSetKeyValueW(HKEY_CURRENT_USER,
+# the Run key, a made-up value name, REG_SZ, ...). Never executed.
+CAPABILITY_VALUE = "DissectTraining"
+
+
+def build_capability_demo():
+    run = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    return build_call_demo("RegSetKeyValueW", {0: 0x80000001, 1: run, 2: CAPABILITY_VALUE, 3: 1})
+
+
 def build_code_demo(*, bits=32, **imports):
     """An entry point that calls the import once through each canonical form."""
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)
@@ -307,12 +361,17 @@ def main():
             "decode-demo",
             "code-demo",
             "args-demo",
+            "capability-demo",
         ),
         default="basic",
     )
     args = parser.parse_args()
     if args.scenario == "code-demo":
         data = build_code_demo(bits=args.bits)
+    elif args.scenario == "capability-demo":
+        if args.bits != 32:
+            parser.error("capability-demo is x86 only")
+        data = build_capability_demo()
     elif args.scenario == "args-demo":
         data = build_args_demo(bits=args.bits)
     elif args.scenario == "decode-demo":
