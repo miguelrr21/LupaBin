@@ -228,14 +228,18 @@ def args_demo_bytes(bits=32, hkey=None, before=b""):
     return body + b"\xc3"
 
 
-def build_args_demo(*, bits=32, code=None, writable=False, dll=b"advapi32.dll"):
-    """RegOpenKeyExW with constant arguments; `writable` marks .idata as writable."""
+def build_args_demo(
+    *, bits=32, code=None, writable=False, dll=b"advapi32.dll", function=b"RegOpenKeyExW"
+):
+    """RegOpenKeyExW with constant arguments; `writable` marks .idata as writable.
+
+    With `code` and `function`, the same layout for another imported function."""
     data = bytearray(
         build_code_pe(
             args_demo_bytes(bits) if code is None else code,
             bits=bits,
             dll=dll,
-            function=b"RegOpenKeyExW",
+            function=function,
         )
     )
     text = ARGS_SUBKEY.encode("utf-16-le") + b"\0\0"

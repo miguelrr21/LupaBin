@@ -281,8 +281,8 @@
       "additionalProperties": false,
       "properties": {
         "catalog": {
-          "const": "dissect-api-semantics-v1",
-          "default": "dissect-api-semantics-v1",
+          "const": "dissect-api-semantics-v2",
+          "default": "dissect-api-semantics-v2",
           "title": "Catalog",
           "type": "string"
         },

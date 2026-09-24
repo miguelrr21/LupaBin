@@ -114,14 +114,15 @@ class ArgumentProbe:
 
         def argument(parameter, entry, found, layout, characters):  # type: ignore[no-untyped-def]
             data = original_argument(parameter, entry, found, layout, characters)
-            key = (layout.bits, parameter.name)
+            label = f"{entry.name}.{parameter.name}"
+            key = (layout.bits, label)
             probe.recovered[key] += 1
             if data is not None:
                 probe.accepted[key] += 1
             else:
                 reason = probe.reason(parameter, found, layout)
                 probe.rejected.append(
-                    (layout.bits, parameter.name, reason, probe.name, found.setter[0],
+                    (layout.bits, label, reason, probe.name, found.setter[0],
                      found.setting.value, found.setting.kind)
                 )  # fmt: skip
             return data
@@ -179,14 +180,22 @@ class ArgumentProbe:
             if fact.kind != "call_argument":
                 continue
             call = facts[fact.provenance.evidence_ids[0]]
+            callee = facts[call.provenance.evidence_ids[0]]
+            function = (
+                callee.data.function.text
+                if callee.kind == "import" and callee.data.function
+                else "?"
+            )
             data = fact.data
             shown = data.constant or (data.string.text if data.string else hex(data.value))
             rva = call.location.rva or 0
             self.starts[(str(path), rva)] = self.stretches.get(rva, rva - 64)
-            self.published.append((str(path), bits, rva, fact.location.rva or 0, data.name, shown))
+            self.published.append(
+                (str(path), bits, rva, fact.location.rva or 0, f"{function}.{data.name}", shown)
+            )
         self.stretches.clear()
 
-    def report(self, review: int, seed: int) -> None:
+    def report(self, review: int, seed: int, match: str = "") -> None:
         for bits in (32, 64):
             names = sorted({name for b, name in self.recovered if b == bits})
             print(f"x{'86' if bits == 32 else '64'}: catalog calls examined {self.examined[bits]}")
@@ -202,7 +211,8 @@ class ArgumentProbe:
             print(f"  REJECTED x{bits} {name} {reason}: {path} setter {rva:#x} {kind} {value:#x}")
         print(f"argument pass: {self.detail} detail instructions, {self.seconds:.2f} s")
         rng = random.Random(seed)  # noqa: S311 - a reproducible review sample
-        chosen = rng.sample(self.published, min(review, len(self.published)))
+        pool = [item for item in self.published if match in item[4]]
+        chosen = rng.sample(pool, min(review, len(pool)))
         for path, bits, call, setter, name, shown in chosen:
             print(
                 f"\nREVIEW {path} x{'86' if bits == 32 else '64'} call {call:#x}: {name} = {shown}"
@@ -304,7 +314,7 @@ def corpus(args: argparse.Namespace) -> None:
         print("PE+code seconds p50/p90/p99/max:", ", ".join(f"{t:.2f}" for t, _, _ in pick))
         for seconds, name, instructions in times[-5:]:
             print(f"  {seconds:6.2f}s {instructions:>9} instr  {name}")
-    probe.report(args.review, args.seed)
+    probe.report(args.review, args.seed, args.review_match)
 
 
 def peak_memory() -> int:
@@ -419,6 +429,9 @@ def main() -> None:
     )
     run.add_argument("--review", type=int, default=0, help="arguments to print for review")
     run.add_argument("--seed", type=int, default=2026)
+    run.add_argument(
+        "--review-match", default="", help="review only Function.parameter labels containing this"
+    )
     run.set_defaults(handler=corpus)
     case = commands.add_parser("worst")
     case.add_argument("--case", choices=WORST)

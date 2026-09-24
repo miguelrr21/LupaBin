@@ -21,13 +21,13 @@ Cambio en un tipo existente: `import` gana `iat_rva`, la dirección de su casill
 
 **Verificación en el host.** El launcher y `dissect explain --sample` comparan los bytes de cada instrucción citada con los de la muestra. El host no lleva desensamblador: una prueba comprueba que ni la CLI ni el runner cargan capstone. Lo que ninguna comprobación puede demostrar es que el recorrido llegó a esa instrucción (y no a unos bytes que solo lo parecen). Eso es una regla del worker, probada con casos negativos y medida en binarios benignos.
 
-`call_argument` (entrega 2) es `inferred`: afirma que una instrucción del mismo tramo lineal que la llamada, anterior a ella, fija ese argumento a una constante, y que el recorrido no vio nada que lo cambie antes de la llamada. Solo se publica para las funciones del catálogo `dissect-api-semantics-v1` (`src/dissect/evidence/api_catalog.py`; por ahora `RegOpenKeyExA/W`, importadas de una DLL que Microsoft Learn declara como exportadora) y solo si el valor es del tipo del parámetro. Campos:
+`call_argument` (entrega 2) es `inferred`: afirma que una instrucción del mismo tramo lineal que la llamada, anterior a ella, fija ese argumento a una constante, y que el recorrido no vio nada que lo cambie antes de la llamada. Solo se publica para las funciones del catálogo `dissect-api-semantics-v2` (`src/dissect/evidence/api_catalog.py`; por ahora `RegOpenKeyExA/W` y `RegCreateKeyExA/W`, importadas de una DLL que Microsoft Learn declara como exportadora) y solo si el valor es del tipo del parámetro. Campos:
 
 | Campo | Contenido |
 | --- | --- |
 | `component` | `call_arguments`. |
 | `location` | La instrucción que fija el argumento, en la misma sección ejecutable que la llamada y antes de ella. |
-| `data.catalog`, `data.method` | `dissect-api-semantics-v1` y `block-constant-v1`. |
+| `data.catalog`, `data.method` | `dissect-api-semantics-v2` y `block-constant-v1`. La versión 1 solo tenía `RegOpenKeyExA/W` y no llegó a publicarse. |
 | `data.position`, `data.name`, `data.type` | Posición (desde 0), nombre y tipo del parámetro según el catálogo: `hkey`, `string` o `integer`. |
 | `data.value` | `hkey`: el valor tal como se fija (en x64, extendido con signo: `0xffffffff80000001`). `integer`: módulo el ancho del parámetro (32 bits para `REGSAM`). `string`: el puntero tal como se fija (dirección absoluta en x86, RVA de un `lea` relativo a rip en x64). |
 | `data.raw_hex` | Los bytes de la instrucción que lo fija: `lea r64, [rip+disp32]`, `mov r32, imm32`, `mov r64, simm32` o `xor r32, r32` en x64; `push imm32` o `push imm8` en x86 (`src/dissect/evidence/argument_forms.py`). |
