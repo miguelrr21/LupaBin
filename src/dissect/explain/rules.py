@@ -13,6 +13,7 @@ from dissect.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
     CallArgumentEvidence,
+    CodeFunctionEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -489,6 +490,28 @@ def _arguments(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("code.call_argument", "code.import_call", "evidence.confidence")
 
 
+RANGES_SHOWN = 20
+
+
+def _functions(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """Every x64 .pdata range the report publishes, in report order (Phase 5.4)."""
+    group = tuple(fact for fact in report.evidence if isinstance(fact, CodeFunctionEvidence))
+    if not group or tuple(fact.id for fact in cited) != tuple(fact.id for fact in group):
+        return None
+    ranges = tuple(
+        f"{hexadecimal(fact.data.begin)}-{hexadecimal(fact.data.end)}"
+        for fact in group[:RANGES_SHOWN]
+    )
+    if len(group) > RANGES_SHOWN:
+        ranges += (f"y {number(len(group) - RANGES_SHOWN)} más",)
+    slots: Slots = {
+        "count": number(len(group)),
+        "noun": "rango" if len(group) == 1 else "rangos",
+        "ranges": ranges,
+    }
+    return slots, ("code.function_range", "code.import_call")
+
+
 # Didactic context, not a detector (design section 12): on 2026-09-24, among 1,053
 # native benign binaries (System32 --stride 3, SysWOW64 --stride 5) with a complete
 # walk and at least 64 KiB of executable sections, 3 (0.28 %) had fewer than 20 walked
@@ -682,6 +705,14 @@ RULES: dict[str, Rule] = {
             "mismo tramo: no demuestra que la llamada se ejecute, ni descarta que un camino "
             "que el recorrido no ve llegue a ella con otros valores.",
             _arguments,
+        ),
+        Rule(
+            "code.functions@1",
+            "La tabla .pdata declara {count} {noun} de función con llamadas a funciones del "
+            "catálogo de argumentos de Dissect.",
+            "Es lo que declara el archivo: un binario manipulado puede declarar rangos falsos. "
+            "Cada rango es un tramo contiguo de una función, y una función puede ocupar varios.",
+            _functions,
         ),
         Rule(
             "exports.table@1",

@@ -18,14 +18,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from dissect.evidence.facts import ApiCallEvidence, CallArgumentEvidence, Evidence, ImportEvidence
+from dissect.evidence.facts import (
+    ApiCallEvidence,
+    CallArgumentEvidence,
+    CodeFunctionEvidence,
+    Evidence,
+    ImportEvidence,
+)
 from dissect.evidence.models import Report
 from dissect.explain import winapi
 from dissect.explain.models import SlotValue
 from dissect.explain.text import hexadecimal, name, number
 
-CATALOG_ID = "dissect-capabilities-v2"
-CATALOG_SHA256 = "645d7769beda20be36df239f8241f760e1c5e1dd46261ccae9c6e94188cb5a13"
+CATALOG_ID = "dissect-capabilities-v3"
+CATALOG_SHA256 = "99d79b5540f17257a2f19a2717f8020cdea0665e51f246e0c0d66be75f6ce905"
 API_CATALOG = "dissect-api-semantics-v4"
 
 Arguments = dict[str, CallArgumentEvidence]
@@ -35,14 +41,17 @@ Derived = tuple[Slots, tuple[str, ...]]  # slots and glossary entry ids
 # Benign context (design section 5): on 2026-09-24, binaries with at least one case among
 # 3,087 benign PE files (System32 --stride 3: 1,363; SysWOW64 --stride 5: 521; Program
 # Files and Program Files (x86) --recursive --stride 40: 1,203), measured with
-# `uv run python -m tests.capability_eval`. Each of the 816 cases was reviewed by hand
-# (803 with catalog v1, and the 13 that v2 adds; section 10 of the design).
+# `uv run python -m tests.capability_eval`. Each of the 821 cases was reviewed by hand
+# (803 with catalog v1, the 13 that v2 adds and the 5 same-function pairs of v3, each
+# reviewed by disassembly; sections 10 and 11 of the design).
 BENIGN_FILES = 3087
 BENIGN = {
     "run_key_value": 0,
     "run_key_open_write": 9,
+    "run_key_open_and_set": 5,
     "winlogon_open_write": 1,
     "winlogon_value": 0,
+    "winlogon_open_and_set": 0,
     "service_create": 2,
     "command_execution": 26,
     "download_to_file": 0,
@@ -108,6 +117,10 @@ class Capability:
     glossary_ids: tuple[str, ...]
     # the ATT&CK technique of every case, or a function that gives it for each case
     technique: str | Callable[[str, Arguments], str | None] | None = None
+    # Phase 5.4: functions that write through a key opened in the same .pdata range;
+    # `describe` then decides which calls open it
+    writes: frozenset[str] = frozenset()
+    unit: tuple[str, str] = ("llamada", "llamadas")  # what a case is, singular and plural
 
     def technique_of(self, function: str, args: Arguments) -> str | None:
         if self.technique is None or isinstance(self.technique, str):
@@ -493,6 +506,14 @@ def _aw(names: tuple[str, ...], reads: tuple[str, ...]) -> dict[str, tuple[str, 
 
 EVIDENCE = ("capability.static", "code.call_argument", "code.import_call", "evidence.confidence")
 REGISTRY_OPEN = ("hKey", "lpSubKey", "samDesired")
+SET_VALUE = _aw(("RegSetValueEx",), ("hKey", "lpValueName"))
+
+
+def _written_winlogon_value(function: str, args: Arguments) -> str | None:
+    """T1547.004 when the value written is one its definition names."""
+    value = _text(args, "lpValueName")
+    return "T1547.004" if value is not None and value.lower() in WINLOGON_VALUES else None
+
 
 CAPABILITIES: tuple[Capability, ...] = (
     Capability(
@@ -536,6 +557,36 @@ CAPABILITIES: tuple[Capability, ...] = (
         "programas al iniciar sesión.",
         ("api.family.registry", *EVIDENCE),
         _winlogon_technique,
+    ),
+    Capability(
+        "run_key_open_and_set",
+        "persistence",
+        "abrir una clave de arranque automático (Run) para escribir y llamar a "
+        "RegSetValueEx en el mismo rango de función que declara .pdata",
+        {**_aw(("RegOpenKeyEx", "RegCreateKeyEx"), REGISTRY_OPEN), **SET_VALUE},
+        _open_for_write(RUN_KEYS),
+        "Dissect no sigue el identificador de la clave entre las dos llamadas, así que no "
+        "sabe si la escritura usa la clave abierta, y el rango lo declara el archivo. Muchos "
+        "instaladores y programas legítimos se registran así para arrancar con Windows.",
+        ("api.family.registry", "code.function_range", *EVIDENCE),
+        "T1547.001",
+        frozenset(SET_VALUE),
+        ("rango de función", "rangos de función"),
+    ),
+    Capability(
+        "winlogon_open_and_set",
+        "persistence",
+        "abrir la clave Winlogon para escribir y llamar a RegSetValueEx en el mismo rango "
+        "de función que declara .pdata",
+        {**_aw(("RegOpenKeyEx", "RegCreateKeyEx"), REGISTRY_OPEN), **SET_VALUE},
+        _open_for_write((WINLOGON,)),
+        "Dissect no sigue el identificador de la clave entre las dos llamadas, así que no "
+        "sabe si la escritura usa la clave abierta, y el rango lo declara el archivo. "
+        "Componentes de Windows y programas de administración legítimos escriben en ella.",
+        ("api.family.registry", "code.function_range", *EVIDENCE),
+        _written_winlogon_value,
+        frozenset(SET_VALUE),
+        ("rango de función", "rangos de función"),
     ),
     Capability(
         "service_create",
@@ -679,6 +730,7 @@ def catalog_digest() -> str:
             c.id: c.technique if not callable(c.technique) else c.technique.__name__
             for c in CAPABILITIES
         },
+        "pairs": {c.id: [sorted(c.writes), c.unit] for c in CAPABILITIES if c.writes},
         "capabilities": [
             [c.id, c.tactic, c.template, c.not_proven, c.reads, c.glossary_ids]
             for c in CAPABILITIES
@@ -693,19 +745,16 @@ def catalog_digest() -> str:
 
 @dataclass(frozen=True)
 class Case:
-    call: ApiCallEvidence
-    arguments: tuple[CallArgumentEvidence, ...]  # all the call's published arguments
-    function: str
+    cited: tuple[Evidence, ...]  # in report order: facts, each call with all its arguments
+    heading: str  # where: a call site and function, or a .pdata range
     details: str
     technique: str | None
 
-    @property
-    def cited(self) -> tuple[Evidence, ...]:
-        return (self.call, *self.arguments)
 
-
-def cases(capability: Capability, report: Report) -> list[Case]:
-    """Every call of the report that meets the condition, in report order."""
+def _calls(
+    report: Report,
+) -> list[tuple[ApiCallEvidence, str, tuple[CallArgumentEvidence, ...]]]:
+    """Every published call to a function imported by name, with its arguments."""
     facts = {fact.id: fact for fact in report.evidence}
     arguments: dict[str, list[CallArgumentEvidence]] = {}
     for fact in report.evidence:
@@ -716,17 +765,75 @@ def cases(capability: Capability, report: Report) -> list[Case]:
         if not isinstance(fact, ApiCallEvidence):
             continue
         target = facts.get(fact.provenance.evidence_ids[0])
-        if not isinstance(target, ImportEvidence) or target.data.function is None:
-            continue
-        function = name(target.data.function)
+        if isinstance(target, ImportEvidence) and target.data.function is not None:
+            found.append((fact, name(target.data.function), tuple(arguments.get(fact.id, ()))))
+    return found
+
+
+def _by_name(published: tuple[CallArgumentEvidence, ...]) -> Arguments:
+    return {argument.data.name: argument for argument in published}
+
+
+def _site(call: ApiCallEvidence) -> str:
+    return hexadecimal(call.location.rva or 0)
+
+
+def cases(capability: Capability, report: Report) -> list[Case]:
+    """Every case of the report that meets the condition, in report order."""
+    if capability.writes:
+        return _same_function(capability, report)
+    found = []
+    for call, function, published in _calls(report):
         if function not in capability.reads:
             continue
-        published = tuple(arguments.get(fact.id, ()))
-        args = {a.data.name: a for a in published}
+        args = _by_name(published)
         details = capability.describe(function, args)
         if details is not None:
             technique = capability.technique_of(function, args)
-            found.append(Case(fact, published, function, details, technique))
+            heading = f"{_site(call)} {function}"
+            found.append(Case((call, *published), heading, details, technique))
+    return found
+
+
+def _same_function(capability: Capability, report: Report) -> list[Case]:
+    """Per x64 .pdata range the report publishes: the calls that open the key for
+    writing and the calls to a writing function whose key is not a predefined one."""
+    calls = _calls(report)
+    found = []
+    for fact in report.evidence:
+        if not isinstance(fact, CodeFunctionEvidence):
+            continue
+        begin, end = fact.data.begin, fact.data.end
+        opened: list[str] = []
+        written: list[str] = []
+        cited: list[Evidence] = [fact]
+        technique = None
+        for call, function, published in calls:
+            if not begin <= (call.location.rva or 0) < end or function not in capability.reads:
+                continue
+            args = _by_name(published)
+            if function in capability.writes:
+                if "hKey" in args:  # a predefined key: it writes somewhere else
+                    continue
+                value = _labelled("valor", _text(args, "lpValueName"))
+                written.append(f"{function} en {_site(call)}" + (f" ({value})" if value else ""))
+                technique = technique or capability.technique_of(function, args)
+            else:
+                details = capability.describe(function, args)
+                if details is None:
+                    continue
+                opened.append(f"{function} en {_site(call)}: {details}")
+            cited += [call, *published]
+        if opened and written:
+            details = (
+                "abre "
+                + "; ".join(opened)
+                + ". Escribe con "
+                + "; ".join(written)
+                + ". No se sabe si la escritura usa la clave abierta"
+            )
+            heading = f"{hexadecimal(begin)}-{hexadecimal(end)} (rango de .pdata)"
+            found.append(Case(tuple(cited), heading, details, technique))
     return found
 
 
@@ -735,17 +842,17 @@ def derive(capability: Capability) -> Callable[[tuple[Evidence, ...], Report], D
         found = cases(capability, report)
         expected = tuple(fact.id for case in found for fact in case.cited)
         if not found or tuple(fact.id for fact in cited) != expected:
-            return None  # every case of the report, each with all its arguments, in order
+            return None  # every case of the report, with all it rests on, in order
         shown = tuple(
-            f"{hexadecimal(case.call.location.rva or 0)} {case.function}: {case.details}"
-            + (f" ({case.technique})" if case.technique else "")
+            f"{case.heading}: {case.details}" + (f" ({case.technique})" if case.technique else "")
             for case in found[:CASES_SHOWN]
         )
         if len(found) > CASES_SHOWN:
             shown += (f"y {number(len(found) - CASES_SHOWN)} más",)
+        one, many = capability.unit
         slots: Slots = {
             "count": number(len(found)),
-            "noun": "llamada" if len(found) == 1 else "llamadas",
+            "noun": one if len(found) == 1 else many,
             "cases": shown,
         }
         techniques = tuple(dict.fromkeys(case.technique for case in found if case.technique))

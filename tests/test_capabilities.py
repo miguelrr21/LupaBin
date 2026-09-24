@@ -254,7 +254,8 @@ def test_a_call_that_meets_the_condition_is_described(function, call, capability
 
 def test_every_capability_has_a_positive_fixture():
     tested = {capability for _, _, capability, _ in POSITIVE}
-    assert tested | {"service_create"} == {c.id for c in capabilities.CAPABILITIES}
+    elsewhere = {"service_create", "run_key_open_and_set", "winlogon_open_and_set"}  # x64 files
+    assert tested | elsewhere == {c.id for c in capabilities.CAPABILITIES}
 
 
 @pytest.mark.parametrize("bits", [32, 64])
@@ -469,9 +470,9 @@ def test_capabilities_are_rendered_with_their_cases_and_sample_text_is_inert():
     text = to_text(explanation, chosen, report, GLOSSARY)
     assert "de este tipo: crear o abrir un mutex con nombre." in text
     (case,) = items["capability.named_mutex@1"].slots["cases"]
-    assert f"Casos (RVA de la llamada): {case}" in text
+    assert f"Casos: {case}" in text
     markdown = to_markdown(explanation, chosen, report, GLOSSARY)
-    assert f"  - Casos (RVA de la llamada): {code_span(case)}" in markdown.splitlines()
+    assert f"  - Casos: {code_span(case)}" in markdown.splitlines()
 
 
 # --- the summary that opens the didactic report (design section 6) -----------------------

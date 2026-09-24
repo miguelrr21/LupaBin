@@ -6,6 +6,7 @@ from dissect.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
     CallArgumentEvidence,
+    CodeFunctionEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -119,6 +120,9 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
             values.setdefault(fact.provenance.evidence_ids[0], []).append(fact)
     for call_id, group in values.items():
         yield "code.arguments@1", (facts[call_id], *group)
+    functions = tuple(fact for fact in evidence if isinstance(fact, CodeFunctionEvidence))
+    if functions:
+        yield "code.functions@1", functions
     sections = executable_sections(report)
     if sections and RULES["code.walk_density@1"].derive(sections, report) is not None:
         yield "code.walk_density@1", sections
