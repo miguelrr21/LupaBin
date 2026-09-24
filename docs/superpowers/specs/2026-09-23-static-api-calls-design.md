@@ -251,7 +251,7 @@ El caso `nop` es también el peor combinado: agota a la vez el tiempo de la bús
 | System32 | 1.363 | 1.230.385 | 0 | 0 | 0 de 1.230.245 | 90,4 % (sin cambio: ya tenía `.pdata`) |
 | SysWOW64 | 520 | 412.834 (antes 145.084) | 0 | 0 | 3 de 2.369 (los de `edit.exe`, auténticos) | **90,7 %** (antes 43,8 %) |
 
-## 10. Entrega 2: argumentos constantes (implementada para `RegOpenKeyExA/W`)
+## 10. Entrega 2: argumentos constantes (implementada para `RegOpenKeyExA/W` y `RegCreateKeyExA/W`)
 
 Responde a "con qué constantes llama el código a una función del catálogo". Publica `call_argument` (`inferred`, componente `call_arguments`) dentro del contrato 0.5.0, que no se había publicado. El catálogo `dissect-api-semantics-v1` empieza con `RegOpenKeyExA/W`; el resto de la sección 4 se añadirá en cambios separados, comprobando cada firma.
 
@@ -317,3 +317,36 @@ El paso de argumentos no mueve el peor caso: el más lento sigue siendo el recor
 - `code.arguments@1`: una por llamada con argumentos. Cita la llamada y todos sus argumentos, en orden del informe, y hereda `inferred`. Por ejemplo: "En 0x00002017 el código llama a «RegOpenKeyExW» con hKey = HKEY_CURRENT_USER, lpSubKey = «Software\Dissect\Training», samDesired = 0x20019". Las cadenas de más de 200 caracteres se recortan indicando su longitud.
 - Nueva entrada `code.call_argument` (glosario 1.2.0), con cinco fuentes de Learn comprobadas el 2026-09-24. Su límite recoge además que `RegOverridePredefKey` puede redirigir una clave predefinida: `hKey = HKEY_CURRENT_USER` no demuestra qué clave se abre.
 - El título de la sección 3 del informe pasa a "resultados de aplicar un método a los bytes": un argumento no es una transformación.
+
+### 10.4 Catálogo v2: `RegCreateKeyExA/W` (2026-09-24)
+
+Firma comprobada en Microsoft Learn el 2026-09-24: 9 parámetros (`hKey`, `lpSubKey`, `Reserved`, `lpClass`, `dwOptions`, `samDesired`, `lpSecurityAttributes`, `phkResult`, `lpdwDisposition`). Las mismas cinco claves para `hKey` y las mismas DLL exportadoras que `RegOpenKeyEx`, salvo que la página ANSI no lista `kernel32.dll`. Se interpretan `hKey`, `lpSubKey`, `dwOptions` y `samDesired`. En x64, `dwOptions` y `samDesired` son el 5.º y el 6.º argumento y van en la pila, que Dissect no lee: solo se recuperan en x86. El catálogo pasa a `dissect-api-semantics-v2`, con su digest fijado.
+
+Mismo corpus y método que la sección 10.2:
+
+| Conjunto | Llamadas del catálogo examinadas | Argumentos publicados | Informes inválidos | Fallos de bytes | `argument_instruction_limit` |
+| --- | --- | --- | --- | --- | --- |
+| System32 | 6.938 (antes 5.309) | 10.822 (antes 9.510) | 0 | 0 | 0 archivos (79.147 instrucciones detalladas en total, 2,07 s) |
+| SysWOW64 | 2.472 (antes 1.839) | 4.700 (antes 3.514) | 0 | 0 | 0 archivos (28.442 en total, 0,96 s) |
+
+| `RegCreateKeyEx`, parámetro | x64: recuperados / aceptados | x86: recuperados / aceptados |
+| --- | --- | --- |
+| `hKey` | 715 / 715 (A 37, W 677, más 1 en SysWOW64) | 303 / 303 |
+| `lpSubKey` | 617 / 598 | 296 / 288 |
+| `dwOptions` | no se recupera (pila) | 82 / 82 |
+| `samDesired` | no se recupera (pila) | 512 / 512 |
+
+- **Ninguna clave recuperada era errónea.**
+- **`dwOptions`** solo toma valores documentados: 33 × 0 (`REG_OPTION_NON_VOLATILE`), 47 × 1 (`REG_OPTION_VOLATILE`) y 2 × 4 (`REG_OPTION_BACKUP_RESTORE`).
+- **`samDesired`**: el tipo entero acepta cualquier valor, así que aquí la coherencia de tipos no prueba nada. Lo que respalda estos valores es la revisión manual. Los más frecuentes son 0x2001f (164), 0x20006 (`KEY_WRITE`, 75), 0x2 (63), 0xf003f (`KEY_ALL_ACCESS`, 61) y 0x2000000 (`MAXIMUM_ALLOWED`, 30).
+- **Los 27 `lpSubKey` rechazados:**
+  - 22 están en una sección escribible;
+  - 4 son una cadena vacía en `.rdata` de schedsvc.dll, que Learn permite pero Dissect no publica;
+  - 1 apunta a un búfer sin bytes en disco.
+  - Ninguno es `NULL`, coherente con Learn: "This parameter cannot be NULL".
+
+**Revisión manual de 30 argumentos de `RegCreateKeyEx`** (15 x64, semilla 64; 15 x86, semilla 32; `--review-match RegCreateKeyEx`): **30 correctos**.
+- En x86, `samDesired` es el 6.º `push` hacia atrás. En stobject.dll, un `mov [esp+0x10], 0x1f` entre los `push` reinicia la lista, y aun así las posiciones 0 a 7 que quedan son las correctas.
+- Abstenciones vistas en las muestras: hKey copiada entre registros (`mov rcx, r15` en rtutils.dll) y valores desde registros o memoria (`push edi`, `push [ebp+8]`).
+
+Con la suma de las dos funciones, el corpus de System32 usó en total más instrucciones detalladas (79.147) que el presupuesto por archivo (65.536). Pero el presupuesto se aplica a cada archivo, y ninguno lo alcanzó.
