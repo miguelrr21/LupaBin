@@ -30,7 +30,8 @@ ABSENCE = (
 EXTRA = {
     "functions": "Funciones",
     "sites": "Desde (RVA)",
-    "cases": "Casos (RVA de la llamada)",
+    "cases": "Casos",
+    "ranges": "Rangos (RVA)",
     "techniques": "Técnicas de MITRE ATT&CK con el mismo mecanismo",
     "names": "Primeros nombres",
     "unlisted": "Sin import con ese nombre",

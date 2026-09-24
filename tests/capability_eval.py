@@ -127,17 +127,18 @@ def measure(path_text: str) -> dict[str, Any]:
             result["item_mismatch"] = capability.id
         result["capabilities"][capability.id] = [
             {
-                "rva": case.call.location.rva,
-                "function": case.function,
+                "heading": case.heading,
                 "details": case.details,
                 "technique": case.technique,
-                "arguments": {
-                    a.data.name: (a.data.string.text if a.data.string else a.data.value)
-                    for a in case.arguments
-                },
+                "arguments": [
+                    {a.data.name: (a.data.string.text if a.data.string else a.data.value)}
+                    for a in case.cited
+                    if isinstance(a, CallArgumentEvidence)
+                ],
             }
             for case in found
         ]
+    result["functions"] = sum(fact.kind == "code_function" for fact in report.evidence)
     result["abstentions"] = dict(_abstentions(report))
     result["seconds"] = round(time.perf_counter() - start, 3)
     return result
@@ -174,6 +175,7 @@ def corpus(args: argparse.Namespace) -> None:
                 print("EXPLAIN", result["path"], result["explanation_error"])
                 continue
             abstentions.update(result["abstentions"])
+            totals["function_ranges"] += result["functions"]
             for capability in CAPABILITIES:
                 if set(result["calls"]) & set(capability.reads):
                     callers[capability.id] += 1
@@ -211,8 +213,8 @@ def review(args: argparse.Namespace) -> None:
                     continue
                 for case in found:
                     print(
-                        f"{capability_id} | {Path(result['path']).name} | {case['rva']:#010x} "
-                        f"{case['function']}: {case['details']}"
+                        f"{capability_id} | {Path(result['path']).name} | {case['heading']}: "
+                        f"{case['details']}"
                         + (f" ({case['technique']})" if case["technique"] else "")
                         + f" | {json.dumps(case['arguments'], ensure_ascii=False)}"
                     )
