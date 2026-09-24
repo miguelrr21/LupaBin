@@ -17,7 +17,11 @@ DISCLAIMER = (
     "VirusTotal, en su entorno y en su momento, no en tu equipo."
 )
 PROBLEMS = {
-    "key_missing": "no hay clave de API: define la variable de entorno VT_API_KEY.",
+    "key_missing": (
+        "no hay clave de API: define la variable de entorno VT_API_KEY o escríbela en un"
+        " archivo .env (VT_API_KEY=...). Para no consultar VirusTotal, usa --no-virustotal"
+        " o DISSECT_VIRUSTOTAL=off."
+    ),
     "auth_failed": "VirusTotal rechazó la clave de API.",
     "quota_exceeded": (
         "se agotó la cuota de la API (la pública permite 4 consultas por minuto y 500 al día)."

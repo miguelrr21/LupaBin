@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sys
 from enum import StrEnum
@@ -80,6 +81,16 @@ def main() -> None:
     pass
 
 
+# VirusTotal is consulted by default (user request, 2026-09-24), by SHA-256 only and
+# from the host; without a key it answers "key_missing" without touching the network.
+# DISSECT_VIRUSTOTAL=off turns the default off, and --no-virustotal one analysis.
+DEFAULT_SWITCH = "DISSECT_VIRUSTOTAL"
+
+
+def virustotal_default() -> bool:
+    return os.environ.get(DEFAULT_SWITCH, "").strip().lower() not in ("0", "off", "no", "false")
+
+
 @app.command()
 def analyze(
     file: Annotated[Path, typer.Argument(help="Archivo a analizar sin ejecutarlo.")],
@@ -90,12 +101,13 @@ def analyze(
         bool, typer.Option("--markdown", help="Emitir el informe didáctico en Markdown.")
     ] = False,
     virustotal: Annotated[
-        bool,
+        bool | None,
         typer.Option(
-            "--virustotal",
-            help="Consultar VirusTotal por el SHA-256 (clave en VT_API_KEY). Fuente externa.",
+            "--virustotal/--no-virustotal",
+            help="Consultar VirusTotal por el SHA-256 (clave en VT_API_KEY). Activo por defecto"
+            " salvo con --json o DISSECT_VIRUSTOTAL=off. Fuente externa.",
         ),
-    ] = False,
+    ] = None,
     upload: Annotated[
         bool,
         typer.Option(
@@ -109,6 +121,9 @@ def analyze(
         raise typer.BadParameter("usa solo una de --json y --markdown")
     if json_output and (virustotal or upload):
         raise typer.BadParameter("para el JSON de VirusTotal usa: dissect virustotal --format json")
+    if virustotal is None:
+        # the JSON output is the fact report; VirusTotal has its own document
+        virustotal = not json_output and virustotal_default()
     try:
         limits = Limits()
         blob = read_sample(file, limits)
@@ -134,11 +149,13 @@ def explain_saved(
         Output.text
     ),
     virustotal: Annotated[
-        bool,
+        bool | None,
         typer.Option(
-            "--virustotal", help="Consultar VirusTotal por el SHA-256 del informe (VT_API_KEY)."
+            "--virustotal/--no-virustotal",
+            help="Consultar VirusTotal por el SHA-256 del informe (VT_API_KEY). Activo por"
+            " defecto salvo con --format json o DISSECT_VIRUSTOTAL=off.",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Explica un informe guardado sin volver a analizar la muestra.
 
@@ -154,6 +171,8 @@ def explain_saved(
     except DissectError as error:
         raise fail(error) from None
     external = None
+    if virustotal is None:
+        virustotal = virustotal_default()
     if virustotal and output is not Output.json:
         external = virustotal_client.consult(report.sample.sha256)
     emit(report, output, origin, report_json=False, external=external)
