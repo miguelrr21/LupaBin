@@ -109,8 +109,9 @@ def test_explanations_are_deterministic_and_round_trip(reports, sample):
 
 
 def test_the_fixtures_exercise_every_rule(reports):
+    """Capability rules have one fixture each in test_capabilities.py, which checks them."""
     used = set().union(*(rules_used(explain(r, GLOSSARY)) for r in reports.values()))
-    assert used == set(RULES)
+    assert used == {rule for rule in RULES if not rule.startswith("capability.")}
 
 
 def test_every_report_code_has_reviewed_wording():
