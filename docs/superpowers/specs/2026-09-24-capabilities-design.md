@@ -184,7 +184,7 @@ Mismo corpus y herramienta que la sección 9.2 (3.087 PE). Resultado: 0 informes
 
 **Adoptado** como `dissect-capabilities-v2`. Glosario 1.4.0 con la entrada `attack.t1547_004`.
 
-## 11. Entrega 5.4, camino a): abrir y escribir en la misma función (diseño, 2026-09-24)
+## 11. Entrega 5.4, camino a): abrir y escribir en la misma función (2026-09-24, implementada)
 
 El usuario eligió el camino a) de la sección 7. Esta sección concreta qué exige.
 
@@ -214,3 +214,15 @@ Las capacidades se derivan solo del informe, para que `validate` pueda regenerar
 ### 11.4 Criterio de adopción
 
 Mismo corpus que la sección 9, más una **revisión por desensamblado de cada caso**: comprobar si el `hKey` de `RegSetValueEx` es el identificador que devolvió la llamada que abre la clave. La capacidad solo se adopta si la frase es cierta en todos los casos. La técnica, además, solo si en todos los casos revisados la escritura usa la clave abierta; si no, la capacidad se queda sin técnica. También se miden el tamaño que añade al informe y el coste en tiempo.
+
+### 11.5 Implementación, medición y adopción (2026-09-25)
+
+- **Contrato 0.6.0.** `code_function` como en la sección 11.2. Si dos entradas de la tabla se solapan, el worker no publica ninguna: Learn documenta la tabla ordenada, y así cada búsqueda es una bisección y no una exploración de toda la tabla. Peor caso medido: 262.144 entradas (el límite de puntos de partida) se ordenan y comprueban en 0,45 s, y 4.096 búsquedas tardan 6,7 ms.
+- **Catálogo `dissect-capabilities-v3`**, con `run_key_open_and_set` y `winlogon_open_and_set`. Un caso es un rango: cita la entrada de `.pdata`, cada llamada que abre la clave para escribir y cada `RegSetValueEx` sin clave predefinida publicada, todas con sus argumentos. La regla `code.functions@1` explica todos los rangos publicados, y la entrada de glosario `code.function_range` cita las dos secciones de Learn. Glosario 1.5.0.
+- **Medición.** Mismo corpus y herramienta que las secciones 9 y 10, con 4 procesos después de que el sistema detuviera una ejecución por falta de memoria.
+  - System32 y SysWOW64: resultados idénticos, archivo por archivo, a los de la v2, más los rangos (23.210 publicados en System32 y 25 en los tres x64 de SysWOW64). 0 informes inválidos y 0 fallos de verificación.
+  - Program Files había cambiado desde la medición anterior (1.207 PE en vez de 1.203), y `--stride 40` eligió otras muestras; las diferencias del resto de capacidades se deben solo a eso. En el corpus de referencia la pareja solo puede darse donde también se da "abrir `Run`/`Winlogon` para escribir", que en Program Files tenía 0 binarios, así que su cifra es exacta: **5 de 3.087 (0,16 %) para `Run` y 0 para `Winlogon`**.
+- **Revisión por desensamblado de los 5 casos** (inseng, ndfapi, netid, nettrace y setupapi, con 6 `RegSetValueEx` en total): en los 6, el `hKey` de la escritura es el identificador que la llamada que abre la clave guardó en su `phkResult` (por ejemplo, `lea rax, [rsp+0x30]` … `mov rcx, [rsp+0x30]`). **Ninguna frase es falsa y todas las escrituras usan la clave abierta**, así que se cumplen los dos criterios de la sección 11.4 y la técnica T1547.001 se adopta. La muestra es pequeña (es todo el corpus): la frase sigue diciendo que no se sabe si la escritura usa la clave abierta.
+- **Docker.** Imagen `dissect-worker:0.6.0`; las 11 pruebas `-m docker` pasan.
+
+**Límites:** solo x64; un rango lo declara el archivo; la pareja no ordena las llamadas ni sigue el identificador (eso sería el camino b).
