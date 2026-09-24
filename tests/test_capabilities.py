@@ -142,7 +142,7 @@ POSITIVE = [
         "ShellExecuteW",
         {1: "open", 2: "notepad.exe", 3: "training.txt"},
         "command_execution",
-        "ShellExecuteW: archivo o programa «notepad.exe», parámetros «training.txt», "
+        "ShellExecuteW: archivo, programa o URL «notepad.exe», parámetros «training.txt», "
         "operación «open»",
     ),
     (
