@@ -8,6 +8,7 @@ from dissect.evidence.facts import (
     ApiCallData,
     ArgumentString,
     CallArgumentData,
+    CodeFunctionData,
     ExportEvidence,
     ImportEvidence,
     Instruction,
@@ -18,7 +19,7 @@ from dissect.extractors.base import Extraction
 from dissect.extractors.code_args import ArgumentFinder, Budget, Found
 from dissect.extractors.code_calls import Call, CallFinder
 from dissect.extractors.code_disasm import Region, Targets, walk
-from dissect.extractors.code_entries import entries, regions
+from dissect.extractors.code_entries import FunctionRanges, entries, regions
 from dissect.extractors.pe_layout import InvalidPE, InvalidTable, Layout, parse_layout
 
 _ARCHITECTURES = {(32, 0x14C), (64, 0x8664)}
@@ -104,7 +105,6 @@ class CodeExtractor:
                 refs=(slots[call.slot],),
             ):
                 return Extraction("unknown", progress)  # the collector recorded why
-        progress.complete("api_calls")
         catalog = {
             fact.data.iat_rva: entry
             for fact in collector.facts
@@ -118,10 +118,43 @@ class CodeExtractor:
             )
             is not None
         }
+        if not _functions(layout, finder.calls(), catalog, limits.entries, collector, progress):
+            return Extraction("unknown", progress)
+        progress.complete("api_calls")
         _arguments(
             layout, code, result.targets, catalog, finder.calls(), collector, progress, deadline
         )
         return Extraction("unknown", progress)
+
+
+def _functions(
+    layout: Layout,
+    calls: list[Call],
+    catalog: dict[int, Function],
+    max_functions: int,
+    collector: Collector,
+    progress: Progress,
+) -> bool:
+    """Publish the x64 `.pdata` entry that holds each published call to a catalog
+    function, once (design section 11 of Phase 5). False if the collector refused one."""
+    ranges = FunctionRanges(layout, max_functions)
+    for call in calls:
+        if call.slot not in catalog or f"code:call:{call.rva}" not in collector.ids:
+            continue
+        entry = ranges.holding(call.rva)
+        if entry is None or f"code:function:{entry[0]}" in collector.ids:
+            continue
+        begin, end, unwind, rva = entry
+        raw = layout.data[layout.locate(rva, 12)[0] :][:12]
+        if not collector.add(
+            f"code:function:{begin}",
+            progress,
+            "api_calls",
+            CodeFunctionData(begin=begin, end=end, unwind=unwind, raw_hex=raw.hex()),
+            layout.location(rva, 12),
+        ):
+            return False
+    return True
 
 
 def _arguments(

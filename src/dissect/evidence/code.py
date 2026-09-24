@@ -15,6 +15,7 @@ from dissect.evidence.facts import (
     ApiCallEvidence,
     ArgumentString,
     CallArgumentEvidence,
+    CodeFunctionEvidence,
     Evidence,
     HeaderData,
     ImportEvidence,
@@ -213,11 +214,33 @@ def _validate_string(
         raise ValueError("argument string exceeds character limit")
 
 
+def validate_function(
+    fact: CodeFunctionEvidence,
+    calls: Sequence[ApiCallEvidence],
+    sections: Sequence[SectionData],
+    header: HeaderData | None,
+) -> None:
+    """Raise unless a published function range is an x64 entry that holds a published
+    call. The report cannot prove that the entry lies in the exception directory (it
+    does not carry the data directories); the host compares its bytes with the sample."""
+    if header is None or header.optional_magic != 523:
+        raise ValueError("function ranges come from x64 .pdata")
+    where = fact.location
+    if where.offset is None or where.rva is None or where.length is None:
+        raise ValueError("a function range must locate its entry")
+    _named(where, _holder(where.rva, where.offset, where.length, sections))
+    begin, end = fact.data.begin, fact.data.end
+    if not any(begin <= (call.location.rva or 0) < end for call in calls):
+        raise ValueError("a function range is published only for a call it holds")
+
+
 def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
-    """Raise unless the bytes every call and argument cite are the sample's bytes at
-    their offsets."""
+    """Raise unless the bytes every call, argument and function range cite are the
+    sample's bytes at their offsets."""
     for fact in evidence:
-        if isinstance(fact, ApiCallEvidence):
+        if isinstance(fact, CodeFunctionEvidence):
+            spans = [(fact.location.offset, fact.data.raw_hex)]
+        elif isinstance(fact, ApiCallEvidence):
             spans = [(fact.location.offset, fact.data.raw_hex)]
             if fact.data.helper is not None:
                 spans.append((fact.data.helper.offset, fact.data.helper.raw_hex))

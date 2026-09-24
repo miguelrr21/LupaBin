@@ -15,7 +15,7 @@ from dissect.rules.catalog import CatalogError, load_catalog
 from dissect.transport import Completed as Completed
 from dissect.transport import DockerCLI, Transport
 
-IMAGE = "dissect-worker:0.5.0"
+IMAGE = "dissect-worker:0.6.0"
 SOURCES = ("pe", "strings", "yara", "decode", "code")
 LABEL = "org.dissect.analysis"
 
@@ -109,7 +109,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         try:
             envelope = json.loads(response.stdout)
             if isinstance(envelope, dict) and isinstance(envelope.get("schema_version"), str):
-                if envelope["schema_version"] != "0.5.0":
+                if envelope["schema_version"] != "0.6.0":
                     raise DissectError("incompatible_worker")
             report = Report.model_validate_json(response.stdout)
         except (ValidationError, ValueError, RecursionError):

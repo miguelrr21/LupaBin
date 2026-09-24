@@ -25,7 +25,7 @@ from dissect.evidence.primitives import COMPONENTS, Provenance, Transform, minim
 
 def report_dict():
     return {
-        "schema_version": "0.5.0",
+        "schema_version": "0.6.0",
         "analysis": {
             "started_at": "2026-09-20T12:00:00Z",
             "finished_at": "2026-09-20T12:00:01Z",
