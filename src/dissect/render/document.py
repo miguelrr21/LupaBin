@@ -13,7 +13,9 @@ from dissect.explain.models import Explanation, Item, SlotValue
 from dissect.explain.rules import RULES
 from dissect.glossary.catalog import Glossary
 from dissect.glossary.models import Entry
+from dissect.render import external as vt
 from dissect.render.safe import code_span, markdown_text, visible
+from dissect.virustotal.models import VirusTotalReport
 
 WIDTH = 100
 STATUS = {"completed": "completo", "partial": "parcial", "failed": "fallido"}
@@ -56,7 +58,7 @@ def _source_line(entry: Entry) -> list[str]:
 # --- terminal ---------------------------------------------------------------------
 
 
-def _wrap(text: str, indent: str, first: str | None = None) -> list[str]:
+def wrap(text: str, indent: str, first: str | None = None) -> list[str]:
     return textwrap.wrap(
         text,
         WIDTH,
@@ -73,6 +75,7 @@ def to_text(
     report: Report,
     glossary: Glossary,
     origin: str | None = None,
+    external: VirusTotalReport | None = None,
 ) -> str:
     sample = report.sample
     lines = [
@@ -84,10 +87,10 @@ def to_text(
         f"Análisis  {STATUS[explanation.status]}",
     ]
     if origin:
-        lines += _wrap(origin, "          ", "Origen    ")
+        lines += wrap(origin, "          ", "Origen    ")
     lines += ["", "1. Qué se pudo analizar"]
     for note in explanation.notes:
-        lines += _wrap(visible(note.statement), "     ", "   • ")
+        lines += wrap(visible(note.statement), "     ", "   • ")
     sections = (
         ("2. Hechos observados en los bytes", "observed"),
         (
@@ -101,14 +104,14 @@ def to_text(
         if not chosen:
             lines.append("   (ninguno)")
         for item in chosen:
-            lines += _wrap(visible(item.statement), "        ", f"   {item.id:<5}")
+            lines += wrap(visible(item.statement), "        ", f"   {item.id:<5}")
             for label, value in _extras(item):
                 shown = ", ".join(value) if isinstance(value, tuple) else str(value)
                 if label == "Texto":
                     shown = f"«{shown}»" + ("" if item.slots.get("complete") else " (recortado)")
-                lines += _wrap(visible(f"{label}: {shown}"), "          ", "        ")
-            lines += _wrap(visible(f"Límite: {item.not_proven}"), "          ", "        ")
-            lines += _wrap(
+                lines += wrap(visible(f"{label}: {shown}"), "          ", "        ")
+            lines += wrap(visible(f"Límite: {item.not_proven}"), "          ", "        ")
+            lines += wrap(
                 f"Evidencia: {', '.join(item.evidence_ids[:12])}"
                 + (f" y {len(item.evidence_ids) - 12} más" if len(item.evidence_ids) > 12 else "")
                 + f" · Glosario: {', '.join(item.glossary_ids)}",
@@ -121,12 +124,14 @@ def to_text(
     lines += ["", "4. Glosario de los términos usados"]
     for entry_id in _glossary_order(explanation, items):
         entry = glossary.entries[entry_id]
-        lines += _wrap(visible(f"{entry.title} ({entry.id}): {entry.summary}"), "     ", "   • ")
+        lines += wrap(visible(f"{entry.title} ({entry.id}): {entry.summary}"), "     ", "   • ")
         if entry.not_proven:
-            lines += _wrap(visible(f"Límite: {entry.not_proven}"), "       ")
+            lines += wrap(visible(f"Límite: {entry.not_proven}"), "       ")
         for source in _source_line(entry):
-            lines += _wrap(visible(f"Fuente: {source}"), "         ", "       ")
-    lines += ["", *_wrap(ABSENCE, "")]
+            lines += wrap(visible(f"Fuente: {source}"), "         ", "       ")
+    if external is not None:
+        lines += vt.to_text_lines(external, wrap)
+    lines += ["", *wrap(ABSENCE, "")]
     return "\n".join(lines) + "\n"
 
 
@@ -149,6 +154,7 @@ def to_markdown(
     report: Report,
     glossary: Glossary,
     origin: str | None = None,
+    external: VirusTotalReport | None = None,
 ) -> str:
     sample = report.sample
     lines = [
@@ -204,5 +210,7 @@ def to_markdown(
                 f"- {markdown_text(source.title)} ({markdown_text(source.publisher)}): {where}"
             )
         lines.append("")
+    if external is not None:
+        lines += [*vt.to_markdown_lines(external), ""]
     lines += [markdown_text(ABSENCE)]
     return "\n".join(lines) + "\n"
