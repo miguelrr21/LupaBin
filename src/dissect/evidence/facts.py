@@ -1,3 +1,4 @@
+import struct
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
@@ -374,6 +375,48 @@ class CallArgumentEvidence(Model):
         return self
 
 
+class CodeFunctionData(Model):
+    """An x64 `.pdata` RUNTIME_FUNCTION entry: one contiguous range of one function,
+    as the file declares it (Phase 5, design section 11)."""
+
+    begin: UInt
+    end: UInt
+    unwind: UInt
+    raw_hex: Annotated[str, Field(pattern=r"^[a-f0-9]{24}$")]  # the entry's 12 bytes
+
+    @model_validator(mode="after")
+    def decoded(self) -> Self:
+        if struct.unpack("<III", bytes.fromhex(self.raw_hex)) != (
+            self.begin,
+            self.end,
+            self.unwind,
+        ):
+            raise ValueError("a function range must be what its entry's bytes say")
+        if self.begin >= self.end:
+            raise ValueError("a function range must not be empty")
+        return self
+
+
+class CodeFunctionEvidence(Model):
+    id: EvidenceId
+    source: Literal["code"] = "code"
+    component: Literal["api_calls"] = "api_calls"
+    kind: Literal["code_function"] = "code_function"
+    location: Location  # the .pdata entry
+    confidence: Literal["observed"] = "observed"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: CodeFunctionData
+
+    @model_validator(mode="after")
+    def locates_its_entry(self) -> Self:
+        where = self.location
+        if where.offset is None or where.rva is None or where.length != 12:
+            raise ValueError("a function range must locate its 12-byte .pdata entry")
+        if self.provenance.evidence_ids:
+            raise ValueError("a function range cites nothing but its own bytes")
+        return self
+
+
 class AnomalyEvidence(Fact):
     kind: Literal["header_anomaly"] = "header_anomaly"
     data: AnomalyData
@@ -409,7 +452,8 @@ Evidence = Annotated[
     | YaraEvidence
     | DecodedStringEvidence
     | ApiCallEvidence
-    | CallArgumentEvidence,
+    | CallArgumentEvidence
+    | CodeFunctionEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -424,4 +468,5 @@ Payload = (
     | DecodedStringData
     | ApiCallData
     | CallArgumentData
+    | CodeFunctionData
 )

@@ -1,5 +1,6 @@
 """Executable regions and the known entry points the code walk starts from."""
 
+import bisect
 import struct
 from collections.abc import Iterable
 
@@ -98,6 +99,40 @@ def _function_starts(layout: Layout, max_functions: int) -> list[int]:
         struct.unpack_from("<I", layout.data, offset + index * _RUNTIME_FUNCTION)[0]
         for index in range(count)
     ]
+
+
+class FunctionRanges:
+    """The x64 `.pdata` entries (Phase 5, design section 11), to find the one entry that
+    holds an address. Learn documents the table as sorted and without overlaps; if two
+    entries overlap the table is malformed and no address has an entry (never guessed)."""
+
+    def __init__(self, layout: Layout, max_functions: int):
+        self.entries: list[tuple[int, int, int, int]] = []  # begin, end, unwind, entry RVA
+        self.overlap = False
+        rva, size = _directory(layout, _EXCEPTION)
+        count = min(size // _RUNTIME_FUNCTION, max_functions)
+        if layout.bits != 64 or not rva or not count:
+            return
+        try:
+            offset, _ = layout.locate(rva, count * _RUNTIME_FUNCTION)
+        except InvalidTable:
+            return
+        for index in range(count):
+            begin, end, unwind = struct.unpack_from(
+                "<III", layout.data, offset + index * _RUNTIME_FUNCTION
+            )
+            if begin < end:
+                self.entries.append((begin, end, unwind, rva + index * _RUNTIME_FUNCTION))
+        self.entries.sort()
+        if any(a[1] > b[0] for a, b in zip(self.entries, self.entries[1:], strict=False)):
+            self.overlap, self.entries = True, []
+        self.begins = [entry[0] for entry in self.entries]
+
+    def holding(self, address: int) -> tuple[int, int, int, int] | None:
+        index = bisect.bisect_right(self.begins, address) - 1 if self.entries else -1
+        if index < 0 or not self.entries[index][0] <= address < self.entries[index][1]:
+            return None
+        return self.entries[index]
 
 
 def _load_config(layout: Layout) -> tuple[int, int] | None:

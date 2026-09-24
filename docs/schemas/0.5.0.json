@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.6.0",
-          "default": "0.6.0",
+          "const": "0.5.0",
+          "default": "0.5.0",
           "title": "Version",
           "type": "string"
         }
@@ -473,94 +473,6 @@
         "rules"
       ],
       "title": "CatalogInfo",
-      "type": "object"
-    },
-    "CodeFunctionData": {
-      "additionalProperties": false,
-      "description": "An x64 `.pdata` RUNTIME_FUNCTION entry: one contiguous range of one function,\nas the file declares it (Phase 5, design section 11).",
-      "properties": {
-        "begin": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Begin",
-          "type": "integer"
-        },
-        "end": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "End",
-          "type": "integer"
-        },
-        "raw_hex": {
-          "pattern": "^[a-f0-9]{24}$",
-          "title": "Raw Hex",
-          "type": "string"
-        },
-        "unwind": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Unwind",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "begin",
-        "end",
-        "unwind",
-        "raw_hex"
-      ],
-      "title": "CodeFunctionData",
-      "type": "object"
-    },
-    "CodeFunctionEvidence": {
-      "additionalProperties": false,
-      "properties": {
-        "component": {
-          "const": "api_calls",
-          "default": "api_calls",
-          "title": "Component",
-          "type": "string"
-        },
-        "confidence": {
-          "const": "observed",
-          "default": "observed",
-          "title": "Confidence",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/CodeFunctionData"
-        },
-        "id": {
-          "maxLength": 16,
-          "pattern": "^E[1-9][0-9]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "code_function",
-          "default": "code_function",
-          "title": "Kind",
-          "type": "string"
-        },
-        "location": {
-          "$ref": "#/$defs/Location"
-        },
-        "provenance": {
-          "$ref": "#/$defs/Provenance"
-        },
-        "source": {
-          "const": "code",
-          "default": "code",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "location",
-        "data"
-      ],
-      "title": "CodeFunctionEvidence",
       "type": "object"
     },
     "CodeLimits": {
@@ -2643,7 +2555,6 @@
           "mapping": {
             "api_call": "#/$defs/ApiCallEvidence",
             "call_argument": "#/$defs/CallArgumentEvidence",
-            "code_function": "#/$defs/CodeFunctionEvidence",
             "decoded_string": "#/$defs/DecodedStringEvidence",
             "entropy": "#/$defs/EntropyEvidence",
             "export": "#/$defs/ExportEvidence",
@@ -2689,9 +2600,6 @@
           },
           {
             "$ref": "#/$defs/CallArgumentEvidence"
-          },
-          {
-            "$ref": "#/$defs/CodeFunctionEvidence"
           }
         ]
       },
@@ -2730,8 +2638,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.6.0",
-      "default": "0.6.0",
+      "const": "0.5.0",
+      "default": "0.5.0",
       "title": "Schema Version",
       "type": "string"
     },
