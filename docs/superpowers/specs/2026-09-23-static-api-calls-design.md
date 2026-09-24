@@ -480,3 +480,25 @@ Mismo corpus que la sección 10.2 (System32, `--stride 3`; la pila solo afecta a
 - No se propagan valores entre registros (`mov rcx, r15`).
 - Una escritura mediante cualquier base que no sea `rsp` ni `rip` olvida todas las ranuras. Es conservador: se pierden argumentos, no se inventan.
 
+
+## 12. Nota de cobertura del recorrido (2026-09-24)
+
+La sección 6 preveía avisar "si el recorrido es muy corto frente al tamaño del código". No es un detector de empaquetado: es una cifra de contexto medida en binarios benignos, como la de entropía alta de la Fase 3 (`code.walk_density@1`).
+
+**Medida:** instrucciones que decodificó el recorrido, `disassembly.examined`, por KiB de secciones ejecutables con bytes en disco. Todo sale del propio informe, así que la regla se puede regenerar.
+
+**Medición** (System32 `--stride 3` y SysWOW64 `--stride 5`, 1.884 binarios; recorridos completos):
+- Con solo 4 KiB de código mínimo, el 6,7 % de los binarios nativos benignos queda por debajo de 5 instrucciones por KiB. Son distribuciones de teclado (`KBD*.DLL`: 2 instrucciones en una sección de 4 KiB), DLL de recursos y ensamblados gestionados. Un aviso así saltaría en uno de cada quince binarios benignos, y se descartó.
+- Los ensamblados .NET (`_CorDllMain`/`_CorExeMain`) tienen una densidad casi nula por diseño: su código nativo es un trampolín. En `Framework64`, la mediana es 0,006 por KiB. Se excluyen, lo que exige la tabla de imports completa.
+- **Con al menos 64 KiB de código nativo y un umbral de 20 instrucciones por KiB:** 3 de 1.053 binarios (0,28 %), que son ComposableShellProxyStub.dll, tdhres.dll y wmpps.dll: *proxy stubs* de COM y un DLL de recursos, cuyas secciones ejecutables guardan sobre todo datos. La mediana es de unas 228 instrucciones por KiB.
+
+**La regla solo se aplica si:**
+- el recorrido y las dos tablas de imports son completos (un recorrido parcial es corto por sus límites);
+- la muestra no es un ensamblado gestionado;
+- hay al menos 64 KiB de código.
+
+**Texto:** "El recorrido del código decodificó N instrucciones en K KiB de secciones ejecutables (D por KiB). En binarios benignos medidos con al menos 64 KiB de código nativo, solo el 0,28 % se queda por debajo de 20 por KiB."
+
+**Límite:** no demuestra empaquetado ni cifrado. También ocurre con secciones que guardan sobre todo datos o con código al que solo se llega por saltos indirectos. Pero un binario empaquetado muestra poco más que su desempaquetador hasta que se ejecuta, y el recorrido estático no puede ir más allá.
+
+Cambiar el umbral o el mínimo exige repetir esta medición.
