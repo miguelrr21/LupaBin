@@ -25,6 +25,7 @@ EXTRA = {
     "functions": "Funciones",
     "sites": "Desde (RVA)",
     "names": "Primeros nombres",
+    "unlisted": "Sin import con ese nombre",
     "description": "Qué significa, según el catálogo",
     "text": "Texto",
 }

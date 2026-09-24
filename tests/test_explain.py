@@ -14,11 +14,13 @@ from dissect.explain.text import MESSAGES
 from dissect.glossary.catalog import load_glossary
 from tests.fixtures.pe_builder import (
     ARGS_SUBKEY,
+    RESOLVE_NAME,
     build_args_demo,
     build_code_demo,
     build_decode_demo,
     build_demo,
     build_pe,
+    build_resolve_demo,
 )
 
 GLOSSARY = load_glossary()
@@ -60,6 +62,8 @@ SAMPLES = {
     "code-family": lambda: build_code_demo(function=b"GetProcAddress"),
     "arguments": build_args_demo,
     "arguments64": lambda: build_args_demo(bits=64),
+    "resolve": build_resolve_demo,
+    "resolve64": lambda: build_resolve_demo(bits=64),
     "delay": lambda: build_pe(delay=True),
     "ordinal": lambda: build_pe(ordinal=17),
     "runtime": lambda: build_pe(function=b"GetProcAddress"),
@@ -302,6 +306,39 @@ def test_each_call_with_arguments_says_which_constants_it_receives(reports, samp
     assert item.level == "inferred"
     assert "no demuestra que la llamada se ejecute" in item.not_proven
     assert item.glossary_ids == ("code.call_argument", "code.import_call", "evidence.confidence")
+
+
+@pytest.mark.parametrize("sample", ["resolve", "resolve64"])
+def test_names_passed_to_get_proc_address_are_summarised(reports, sample):
+    report = reports[sample]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.resolved_names@1")
+    assert item.statement == "El código pasa 1 nombre de función a GetProcAddress (1 distinto)."
+    assert item.slots["names"] == (RESOLVE_NAME,)
+    # the import table is complete and only declares GetProcAddress itself
+    assert item.slots["unlisted"] == (RESOLVE_NAME,)
+    assert item.level == "inferred" and "por ordinal" in item.not_proven
+    assert item.glossary_ids[0] == "pe.imports.runtime_linking"
+
+
+def test_absence_from_imports_is_only_claimed_with_a_complete_import_table(reports):
+    report = reports["resolve"]
+    item = next(i for i in explain(report, GLOSSARY).items if i.rule == "code.resolved_names@1")
+    cited = tuple(f for f in report.evidence if f.id in item.evidence_ids)
+    runs = tuple(
+        run.model_copy(
+            update={
+                "components": tuple(
+                    p.model_copy(update={"status": "partial"}) if p.name == "imports_normal" else p
+                    for p in run.components
+                )
+            }
+        )
+        for run in report.extractor_runs
+    )
+    partial = report.model_copy(update={"extractor_runs": runs})
+    derived = RULES["code.resolved_names@1"].derive(cited, partial)
+    assert derived is not None and "unlisted" not in derived[0]
 
 
 def test_an_argument_summary_must_cite_every_argument_of_its_call(reports):
