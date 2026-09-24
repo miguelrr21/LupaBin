@@ -352,6 +352,28 @@ Mismo corpus y método que la sección 10.2:
 
 Con la suma de las dos funciones, el corpus de System32 usó en total más instrucciones detalladas (79.147) que el presupuesto por archivo (65.536). Pero el presupuesto se aplica a cada archivo, y ninguno lo alcanzó.
 
+### 10.5 Catálogo v3: `GetProcAddress` y los nombres que resuelve (2026-09-24)
+
+Firma comprobada en Microsoft Learn el 2026-09-24: `GetProcAddress(HMODULE hModule, LPCSTR lpProcName)`. El nombre siempre es ANSI. Las once DLL exportadoras son las de su `api_location` (kernel32, kernelbase, los *api sets* de `libraryloader`, `vertdll`…). Learn advierte que `lpProcName` puede ser un **ordinal** ("it must be in the low-order word; the high-order word must be zero"). Un ordinal no es una dirección de la imagen, así que el tipo `string` se abstiene.
+
+Mismo corpus que la sección 10.2:
+
+| Conjunto | Recuperados / aceptados | Rechazados |
+| --- | --- | --- |
+| System32 (x64) | 10.794 / 10.612 | 165 ordinales y 17 en sección escribible |
+| SysWOW64 (x86) | 2.880 / 2.810 | 62 ordinales y 8 en sección escribible |
+
+- Los 227 rechazos por "no es una dirección" se revisaron uno a uno con `ordinals.py` en todo el corpus. **Todos son ordinales**: la palabra alta es cero, como exige Learn.
+- No hay ninguna cadena rechazada por no ser imprimible, ni ningún informe inválido o fallo de bytes.
+- **Revisión manual de 30 nombres** (15 x64, semilla 7; 15 x86, semilla 8): **30 correctos**. Todos son exportaciones reales (`NtQuerySystemInformation`, `DllGetClassObject`, `RaiseFailFastException`…). En x64 aparece un `lea rdx` sin escritura posterior de `rdx`, incluso cuando la llamada va por un thunk (tquery.dll). En x86 el nombre es el penúltimo `push`; en concrt140d, un `add esp, 4` previo vacía la lista y la cuenta empieza de nuevo.
+- Coste: 121.490 instrucciones detalladas en System32, sin que ningún archivo agote el presupuesto. En los DLL más grandes el paso de argumentos tarda como mucho 0,09 s.
+- Los `code_time_limit` de esta ejecución (3 archivos por conjunto) salen del recorrido, no de los argumentos: en Windows.UI.Xaml.dll el tiempo se agota en `disassembly`, con la máquina cargada.
+
+**Explicación `code.resolved_names@1`.** Una por informe, citando todos los nombres que el código pasa a `GetProcAddress`:
+- "El código pasa N nombres de función a GetProcAddress (M distintos)", con la lista de nombres.
+- Solo cuando la tabla de imports se leyó completa añade cuáles de esos nombres no tienen un import con el mismo nombre. La sección 6 decía que no aparecen nunca en la tabla, y eso no siempre es cierto: el cálculo se hace sobre el informe.
+- Límite: pasar un nombre no demuestra que la llamada se ejecute, que esa función exista ni que se use. Además, resolver por ordinal o con nombres construidos o descifrados al ejecutarse no se ve.
+
 ## 11. Argumentos de la pila en x64 (implementado y adoptado, 2026-09-24)
 
 En x64, del quinto argumento en adelante van en la pila. La sección 3.4 los dejaba fuera, y en el catálogo se pierden argumentos con peso: `dwOptions` y `samDesired` de `RegCreateKeyEx` (5.º y 6.º), la ruta del binario de `CreateService` (8.º) o las opciones de `CreateProcess` (6.º). Learn, en la convención x64: "Any parameters beyond the first four must be stored on the stack after the shadow store before the call". En el momento de la llamada, el argumento *i* (desde 0) está en `[rsp + 8·i]`, con *i* ≥ 4.
