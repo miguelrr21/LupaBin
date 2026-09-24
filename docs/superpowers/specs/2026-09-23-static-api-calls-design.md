@@ -321,7 +321,7 @@ El paso de argumentos no mueve el peor caso: el más lento sigue siendo el recor
 
 ### 10.4 Catálogo v2: `RegCreateKeyExA/W` (2026-09-24)
 
-Firma comprobada en Microsoft Learn el 2026-09-24: 9 parámetros (`hKey`, `lpSubKey`, `Reserved`, `lpClass`, `dwOptions`, `samDesired`, `lpSecurityAttributes`, `phkResult`, `lpdwDisposition`). Las mismas cinco claves para `hKey` y las mismas DLL exportadoras que `RegOpenKeyEx`, salvo que la página ANSI no lista `kernel32.dll`. Se interpretan `hKey`, `lpSubKey`, `dwOptions` y `samDesired`. En x64, `dwOptions` y `samDesired` son el 5.º y el 6.º argumento y van en la pila, que Dissect no lee: solo se recuperan en x86. El catálogo pasa a `dissect-api-semantics-v2`, con su digest fijado.
+Firma comprobada en Microsoft Learn el 2026-09-24: 9 parámetros (`hKey`, `lpSubKey`, `Reserved`, `lpClass`, `dwOptions`, `samDesired`, `lpSecurityAttributes`, `phkResult`, `lpdwDisposition`). Las mismas cinco claves para `hKey` y las mismas DLL exportadoras que `RegOpenKeyEx`, salvo que la página ANSI no lista `kernel32.dll`. Se interpretan `hKey`, `lpSubKey`, `dwOptions` y `samDesired`. En x64, `dwOptions` y `samDesired` son el 5.º y el 6.º argumento y van en la pila, que Dissect no lee: solo se recuperan en x86. (Desde la sección 11 también se leen en x64.) El catálogo pasa a `dissect-api-semantics-v2`, con su digest fijado.
 
 Mismo corpus y método que la sección 10.2:
 
@@ -351,3 +351,73 @@ Mismo corpus y método que la sección 10.2:
 - Abstenciones vistas en las muestras: hKey copiada entre registros (`mov rcx, r15` en rtutils.dll) y valores desde registros o memoria (`push edi`, `push [ebp+8]`).
 
 Con la suma de las dos funciones, el corpus de System32 usó en total más instrucciones detalladas (79.147) que el presupuesto por archivo (65.536). Pero el presupuesto se aplica a cada archivo, y ninguno lo alcanzó.
+
+## 11. Argumentos de la pila en x64 (implementado y adoptado, 2026-09-24)
+
+En x64, del quinto argumento en adelante van en la pila. La sección 3.4 los dejaba fuera, y en el catálogo se pierden argumentos con peso: `dwOptions` y `samDesired` de `RegCreateKeyEx` (5.º y 6.º), la ruta del binario de `CreateService` (8.º) o las opciones de `CreateProcess` (6.º). Learn, en la convención x64: "Any parameters beyond the first four must be stored on the stack after the shadow store before the call". En el momento de la llamada, el argumento *i* (desde 0) está en `[rsp + 8·i]`, con *i* ≥ 4.
+
+### 11.1 Formas canónicas (comprobables en el host)
+
+Solo con `rsp` como base, sin índice y con desplazamiento de 8 bits `d = 8·i`, 4 ≤ *i* ≤ 15:
+
+| Forma | Bytes | Escribe | Valor |
+| --- | --- | --- | --- |
+| `mov dword ptr [rsp+d], imm32` | `C7 44 24 d imm32` | 4 bytes | `imm32` |
+| `mov qword ptr [rsp+d], simm32` | `48 C7 44 24 d imm32` | 8 bytes | `imm32` con signo extendido |
+| `and dword/qword ptr [rsp+d], 0` | `83 64 24 d 00` / `48 83 64 24 d 00` | 4 / 8 bytes | 0 |
+| `mov [rsp+d], r32/r64` | `89` / `44 89` / `48 89` / `4C 89`, ModRM `01 reg 100`, SIB `24`, `d` | 4 / 8 bytes | el valor constante del registro |
+
+La última forma copia un registro. Su valor solo se conoce si una forma canónica de la sección 3.4, ahora aplicada a **cualquiera** de los 16 registros generales, lo fijó antes en el tramo, y nada lo escribió entre medias. Ejemplos vistos en System32: `mov esi, 0x20006; …; mov [rsp+0x28], esi` en AudioEng.dll y `lea rax, [rip+…]; mov [rsp+0x38], rax`. El hecho cita las dos instrucciones. Sigue sin haber propagación entre registros (`mov rcx, r15`): la única copia que se admite es la de un registro a su ranura de la pila.
+
+### 11.2 Qué olvida una ranura
+
+- Cualquier escritura de `rsp` (incluidos `push`, `pop` y `sub rsp`): olvida todas las ranuras, porque cambia su dirección.
+- Una escritura en memoria con base `rsp`: olvida las ranuras que solapa (según desplazamiento y tamaño). La escritura se decide por la semántica de x86 de la sección 10.1, no por capstone.
+- Una escritura en memoria con otra base o con índice: olvida **todas** las ranuras. Por ejemplo `mov [rbx], r14`, `mov [rbp-8], eax` o `mov [r11-0x18], rsi`. Motivo: `rbp` o cualquier otro registro pueden apuntar dentro del marco, y en x64 la zona de argumentos salientes está en el fondo del marco fijo. Las escrituras relativas a `rip` no tocan la pila y no olvidan nada.
+- Cualquier instrucción fuera de `_TRUSTED`: olvida todo. Las marcas de entrada del recorrido también reinician el seguimiento.
+
+### 11.3 Tipos
+
+- Un parámetro del tamaño de un puntero (`hkey`, `string`) exige una escritura de 8 bytes.
+- Un entero de 32 bits admite 4 u 8 bytes y se lee módulo 2³².
+- Una cadena solo puede llegar a su ranura a través de un registro fijado con `lea [rip+…]`: con un inmediato de 32 bits no se puede escribir una dirección de la imagen x64.
+
+### 11.4 Contrato
+
+- `call_argument` gana `data.source`: la instrucción que fijó el registro que se copia a la pila, con su desplazamiento, RVA y bytes. Es nulo si lo que se guarda es un inmediato.
+- `data.method` pasa a ser `block-constant-v1` (registros y `push`, sin cambios) o `stack-slot-v1` (ranura de la pila en x64).
+- El host vuelve a derivar la posición y el tamaño desde los bytes de la escritura, el valor desde el inmediato o desde `source` (mismo registro, anterior a la escritura, en la misma sección), y aplica los tipos de la sección 11.3.
+
+### 11.5 Criterio de adopción
+
+Se mide antes de adoptar, sobre el corpus de la sección 10.2:
+- `dwOptions` recuperado en x64 solo puede tomar los valores documentados (0, 1, 2 y 4); cualquier otro valor se examina como posible error.
+- La distribución de `samDesired` en x64 se compara con la de x86.
+- Revisión manual de 30 argumentos de la pila al azar.
+- 0 informes inválidos y 0 fallos de bytes.
+
+Si aparece un solo valor erróneo, no se adopta hasta entender y corregir la causa.
+
+### 11.6 Medición y adopción (2026-09-24)
+
+Mismo corpus que la sección 10.2 (System32, `--stride 3`; la pila solo afecta a x64):
+
+| Indicador | Resultado |
+| --- | --- |
+| Informes inválidos / fallos de bytes | 0 / 0 |
+| Argumentos nuevos leídos de la pila | `dwOptions` 665, `samDesired` 1.230 (`RegCreateKeyExA/W`) |
+| `dwOptions` fuera de los valores documentados | **0**: 569 × 0, 92 × 1, 1 × 2 y 3 × 4 |
+| `samDesired` | Solo combinaciones de derechos documentados: bits `KEY_*` (0x3f), WOW64 (0x300), derechos estándar (0xf0000) y `MAXIMUM_ALLOWED`. Hay dos casos de 0, examinados: en catsrv.dll y Windows.Internal.OpenWithHost.dll el código hace `and dword ptr [rsp+0x28], 0`, así que el valor es auténtico. |
+| Revisión manual de 30 argumentos de la pila al azar (semilla 11, `--review-match "[pila]"`) | **30 correctos**. Dos de ellos se leen a través de un registro (`xor esi, esi` … `mov [rsp+0x20], esi` en vsjitdebugger.exe y wlidsvc.dll). En los demás, las escrituras mediante `r11` o `rbp` son anteriores a la de la ranura. |
+
+**Coste.**
+- En 213 DLL x64 de System32 que importan `RegCreateKeyEx`, el paso de argumentos pasa de 1,74 s a 2,48–2,77 s en total. Son unos 4 ms más por archivo: ahora cada instrucción también se examina como escritura en memoria y como forma sobre 16 registros.
+- Peor caso nuevo, `argument-stack-x64` (15 escrituras en una ranura antes de cada llamada, que agota el presupuesto con las instrucciones más caras). En el contenedor, con la máquina cargada, tarda 21,8 s de 30; el caso `jz` de referencia tardó 20,6 s en las mismas condiciones.
+- El paso comparte la marca de tiempo del recorrido, así que no puede alargar el análisis más allá de ella: con la máquina cargada se detiene y lo declara con `code_time_limit`.
+
+**Adoptado.** Se cumplen todos los criterios de la sección 11.5.
+
+**Límites que siguen:**
+- No se propagan valores entre registros (`mov rcx, r15`).
+- Una escritura mediante cualquier base que no sea `rsp` ni `rip` olvida todas las ranuras. Es conservador: se pierden argumentos, no se inventan.
+
