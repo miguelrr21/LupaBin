@@ -17,6 +17,7 @@ from tests.fixtures.pe_builder import (
     RESOLVE_NAME,
     build_args_demo,
     build_code_demo,
+    build_code_pe,
     build_decode_demo,
     build_demo,
     build_pe,
@@ -48,6 +49,11 @@ def patched_demo(offset, value):
     return bytes(data)
 
 
+def sparse_code(size=0x10000, **imports):
+    """An executable section of `size` bytes whose code is a single ret."""
+    return build_code_pe(bytes.fromhex("c3") + bytes.fromhex("cc") * (size - 1), **imports)
+
+
 SAMPLES = {
     "raw-overlap": lambda: patched_demo(0x1A0 + 20, 0x200),
     "virtual-overlap": lambda: patched_demo(0x1A0 + 12, 0x1000),
@@ -63,6 +69,7 @@ SAMPLES = {
     "arguments": build_args_demo,
     "arguments64": lambda: build_args_demo(bits=64),
     "resolve": build_resolve_demo,
+    "sparse": lambda: sparse_code(),
     "resolve64": lambda: build_resolve_demo(bits=64),
     "delay": lambda: build_pe(delay=True),
     "ordinal": lambda: build_pe(ordinal=17),
@@ -339,6 +346,40 @@ def test_absence_from_imports_is_only_claimed_with_a_complete_import_table(repor
     partial = report.model_copy(update={"extractor_runs": runs})
     derived = RULES["code.resolved_names@1"].derive(cited, partial)
     assert derived is not None and "unlisted" not in derived[0]
+
+
+def test_a_sparse_walk_is_put_in_benign_context(reports):
+    explanation = explain(reports["sparse"], GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.walk_density@1")
+    assert item.statement.startswith(
+        "El recorrido del código decodificó 1 instrucciones en 64 KiB de secciones "
+        "ejecutables (0,0 por KiB)."
+    )
+    assert "0,28 %" in item.statement and "No demuestra empaquetado" in item.not_proven
+    assert item.level == "observed"
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: sparse_code(size=0x8000),  # below 64 KiB of code
+        lambda: sparse_code(dll=b"mscoree.dll", function=b"_CorDllMain"),  # managed
+    ],
+)
+def test_no_density_note_for_small_or_managed_code(build):
+    explanation = explain(analyze_bytes(build()), GLOSSARY)
+    assert "code.walk_density@1" not in rules_used(explanation)
+
+
+def test_no_density_note_when_the_walk_was_cut_short():
+    from dissect.evidence.models import Limits
+    from dissect.evidence.primitives import CodeLimits
+
+    code = bytes.fromhex("90c3") + bytes.fromhex("cc") * (0x10000 - 2)  # nop; ret
+    report = analyze_bytes(build_code_pe(code), Limits(code=CodeLimits(instructions=1)))
+    walk = next(r for r in report.extractor_runs if r.source == "code").components[0]
+    assert walk.status == "partial"
+    assert "code.walk_density@1" not in rules_used(explain(report, GLOSSARY))
 
 
 def test_an_argument_summary_must_cite_every_argument_of_its_call(reports):
