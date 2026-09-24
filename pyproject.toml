@@ -4,11 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dissect-tutor"
-version = "0.4.0"
+version = "0.5.0"
 description = "Evidence-first static analysis tutor; samples are never executed."
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
 dependencies = [
+    "capstone==5.0.9",
     "pefile==2024.8.26",
     "pydantic==2.11.7",
     "typer==0.16.1",
@@ -48,7 +49,7 @@ strict = true
 files = ["src"]
 
 [[tool.mypy.overrides]]
-module = "pefile"
+module = ["pefile", "capstone"]
 ignore_missing_imports = true
 
 [dependency-groups]

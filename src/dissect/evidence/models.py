@@ -3,6 +3,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, Field, model_validator
 
+from dissect.evidence.code import validate_argument, validate_call
 from dissect.evidence.facts import Evidence as Evidence
 from dissect.evidence.facts import ImportData as ImportData
 from dissect.evidence.primitives import (
@@ -47,13 +48,22 @@ ErrorCode = (
         "decode_xor_limit",
         "decode_xor_examined_limit",
         "decoded_length_limit",
+        "decode_time_limit",
+        "unsupported_architecture",
+        "code_instruction_limit",
+        "code_entry_limit",
+        "call_site_limit",
+        "code_time_limit",
+        "api_call_limit",
+        "call_argument_limit",
+        "argument_instruction_limit",
     ]
     | YaraReason
 )
 
 
 class Analysis(Model):
-    version: Literal["0.4.0"] = "0.4.0"
+    version: Literal["0.5.0"] = "0.5.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -118,11 +128,11 @@ class ExtractorError(Model):
 
 
 class Report(Model):
-    schema_version: Literal["0.4.0"] = "0.4.0"
+    schema_version: Literal["0.5.0"] = "0.5.0"
     analysis: Analysis
     sample: Sample
-    evidence: Annotated[tuple[Evidence, ...], Field(max_length=22609)] = ()
-    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=4)]
+    evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
+    extractor_runs: Annotated[tuple[Run, ...], Field(min_length=1, max_length=5)]
     yara_context: YaraContext | None = None
     extractor_errors: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
     limitations: Annotated[tuple[ExtractorError, ...], Field(max_length=128)] = ()
@@ -146,6 +156,8 @@ class Report(Model):
             "string": limits.strings,
             "header_anomaly": limits.anomalies,
             "yara_match": limits.yara.matches,
+            "api_call": limits.code.calls,
+            "call_argument": limits.code.arguments,
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
@@ -210,13 +222,73 @@ class Report(Model):
                     raise ValueError("limited YARA instances cannot claim complete coverage")
                 if parts["yara_evidence"].examined != len(yara_matches):
                     raise ValueError("complete YARA reporting disagrees with retained matches")
+        if "code" in runs:
+            code = {part.name: part.status for part in runs["code"].components}
+            imports = (
+                ()
+                if "pe" not in runs
+                else tuple(
+                    part.status
+                    for part in runs["pe"].components
+                    if part.name in ("imports_normal", "imports_delay")
+                )
+            )
+            if code["api_calls"] == "complete" and (
+                code["disassembly"] != "complete"
+                or not imports
+                or any(status != "complete" for status in imports)
+            ):
+                raise ValueError("complete call coverage needs a complete walk and import table")
+            if code["call_arguments"] == "complete" and code["api_calls"] != "complete":
+                raise ValueError("complete argument coverage needs complete call coverage")
+        sections = tuple(fact.data for fact in self.evidence if fact.kind == "section")
+        header = next((fact.data for fact in self.evidence if fact.kind == "pe_header"), None)
         degrees: dict[str, int] = {}
         children: dict[str, list[str]] = {key: [] for key in facts}
+        parameters: set[tuple[str, int]] = set()
         for fact in self.evidence:
             if fact.source not in runs or runs[fact.source].status == "failed":
                 raise ValueError("evidence has no successful or partial source")
             if fact.kind == "yara_match":
                 degrees[fact.id] = 0
+                continue
+            if fact.kind == "api_call":
+                span = fact.location
+                if span.offset is None or span.length is None:
+                    raise ValueError("a call must locate its instruction")
+                if span.offset + span.length > self.sample.size:
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have code evidence")
+                refs = fact.provenance.evidence_ids
+                validate_call(fact, facts.get(refs[0]), sections, header)
+                degrees[fact.id] = 1
+                children[refs[0]].append(fact.id)
+                continue
+            if fact.kind == "call_argument":
+                span = fact.location
+                if span.offset is None or span.length is None:
+                    raise ValueError("an argument must locate its instruction")
+                spans = [(span.offset, span.length)]
+                if fact.data.string is not None:
+                    spans.append((fact.data.string.offset, len(fact.data.string.raw_hex) // 2))
+                if any(offset + length > self.sample.size for offset, length in spans):
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have code evidence")
+                refs = fact.provenance.evidence_ids
+                call = facts.get(refs[0])
+                callee = (
+                    facts.get(call.provenance.evidence_ids[0])
+                    if call is not None and call.kind == "api_call"
+                    else None
+                )
+                validate_argument(fact, call, callee, sections, header, limits.string_characters)
+                if (refs[0], fact.data.position) in parameters:
+                    raise ValueError("a call has one value per argument")
+                parameters.add((refs[0], fact.data.position))
+                degrees[fact.id] = 1
+                children[refs[0]].append(fact.id)
                 continue
             if fact.kind == "decoded_string":
                 span = fact.location
