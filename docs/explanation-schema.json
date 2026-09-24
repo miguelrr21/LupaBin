@@ -154,7 +154,16 @@
                 "decode_strings_limit",
                 "decode_xor_limit",
                 "decode_xor_examined_limit",
-                "decoded_length_limit"
+                "decoded_length_limit",
+                "decode_time_limit",
+                "unsupported_architecture",
+                "code_instruction_limit",
+                "code_entry_limit",
+                "call_site_limit",
+                "code_time_limit",
+                "api_call_limit",
+                "call_argument_limit",
+                "argument_instruction_limit"
               ],
               "type": "string"
             },
@@ -201,7 +210,10 @@
                 "yara_scan",
                 "yara_evidence",
                 "decode_strings",
-                "decode_xor"
+                "decode_xor",
+                "disassembly",
+                "api_calls",
+                "call_arguments"
               ],
               "type": "string"
             },
@@ -234,7 +246,8 @@
             "pe",
             "strings",
             "yara",
-            "decode"
+            "decode",
+            "code"
           ],
           "title": "Source",
           "type": "string"
@@ -264,7 +277,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "0.4.0",
+          "const": "0.5.0",
           "title": "Schema Version",
           "type": "string"
         }

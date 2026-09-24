@@ -11,6 +11,8 @@ from dataclasses import dataclass
 
 from dissect.evidence.facts import (
     AnomalyEvidence,
+    ApiCallEvidence,
+    CallArgumentEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -352,6 +354,235 @@ def _xor(reused: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | Non
     return derive
 
 
+# --- code -------------------------------------------------------------------------
+
+CALL_SITES_SHOWN = 20
+VIA = {"direct": "directa", "thunk": "a través de un thunk", "register": "por registro"}
+NOT_EXECUTED = (
+    "Que el código contenga la llamada no demuestra que se ejecute: depende de condiciones "
+    "y entradas que el análisis estático no resuelve, y un binario empaquetado solo muestra "
+    "el código de su desempaquetador."
+)
+
+
+def _import_label(fact: ImportEvidence) -> str:
+    data = fact.data
+    return name(data.function) if data.function is not None else f"ordinal {data.ordinal}"
+
+
+def _calls(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """One import and every call the report publishes to it, in report order."""
+    if len(cited) < 2 or not isinstance(cited[0], ImportEvidence):
+        return None
+    target = cited[0]
+    calls = [fact for fact in cited[1:] if isinstance(fact, ApiCallEvidence)]
+    if len(calls) != len(cited) - 1:
+        return None
+    group = tuple(
+        fact.id
+        for fact in report.evidence
+        if isinstance(fact, ApiCallEvidence) and fact.provenance.evidence_ids == (target.id,)
+    )
+    if tuple(fact.id for fact in calls) != group:
+        return None  # a summary must cite every call to the import, in report order
+    sites = tuple(
+        f"{hexadecimal(fact.location.rva or 0)} ({VIA[fact.data.via]})"
+        for fact in calls[:CALL_SITES_SHOWN]
+    )
+    if len(calls) > CALL_SITES_SHOWN:
+        sites += (f"y {number(len(calls) - CALL_SITES_SHOWN)} más",)
+    slots: Slots = {
+        "function": _import_label(target),
+        "dll": name(target.data.dll),
+        "count": number(len(calls)),
+        "noun": "llamada" if len(calls) == 1 else "llamadas",
+        "sites": sites,
+    }
+    return slots, ("code.import_call", "pe.imports")
+
+
+ARGUMENT_TEXT_SHOWN = 200
+
+
+def _argument_value(fact: CallArgumentEvidence) -> str:
+    data = fact.data
+    if data.constant is not None:
+        return data.constant
+    if data.string is not None:
+        text = data.string.text
+        if len(text) > ARGUMENT_TEXT_SHOWN:
+            text = f"{text[:ARGUMENT_TEXT_SHOWN]}… ({number(len(data.string.text))} caracteres)"
+        return f"«{text}»"
+    return f"{data.value:#x}"
+
+
+RESOLVED_NAMES_SHOWN = 50
+
+
+def procedure_name(fact: Evidence, facts: dict[str, Evidence]) -> str | None:
+    """The name a published GetProcAddress argument passes, or None."""
+    if not isinstance(fact, CallArgumentEvidence) or fact.data.string is None:
+        return None
+    if fact.data.name != "lpProcName":
+        return None
+    call = facts.get(fact.provenance.evidence_ids[0])
+    callee = None if call is None else facts.get(call.provenance.evidence_ids[0])
+    if not isinstance(callee, ImportEvidence) or callee.data.function is None:
+        return None
+    return fact.data.string.text if name(callee.data.function) == "GetProcAddress" else None
+
+
+def _resolved_names(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """Every name the code passes to GetProcAddress, in report order."""
+    facts = {fact.id: fact for fact in report.evidence}
+    group = tuple(f.id for f in report.evidence if procedure_name(f, facts) is not None)
+    if not cited or tuple(fact.id for fact in cited) != group:
+        return None
+    names = tuple(dict.fromkeys(procedure_name(fact, facts) or "" for fact in cited))
+    slots: Slots = {
+        "count": number(len(cited)),
+        "noun": "nombre" if len(cited) == 1 else "nombres",
+        "distinct": number(len(names)),
+        "dnoun": "distinto" if len(names) == 1 else "distintos",
+        "names": names[:RESOLVED_NAMES_SHOWN],
+    }
+    pe = next((run for run in report.extractor_runs if run.source == "pe"), None)
+    tables = [p for p in (pe.components if pe else ()) if p.name.startswith("imports_")]
+    if tables and all(part.status == "complete" for part in tables):
+        # only a complete import table can show that a name is absent from it
+        imported = {
+            name(fact.data.function)
+            for fact in report.evidence
+            if isinstance(fact, ImportEvidence) and fact.data.function is not None
+        }
+        slots["unlisted"] = tuple(text for text in names if text not in imported)[
+            :RESOLVED_NAMES_SHOWN
+        ]
+    return slots, ("pe.imports.runtime_linking", "code.call_argument", "evidence.confidence")
+
+
+def _arguments(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """One call and every argument the report publishes for it, in report order."""
+    if len(cited) < 2 or not isinstance(cited[0], ApiCallEvidence):
+        return None
+    call = cited[0]
+    values = [fact for fact in cited[1:] if isinstance(fact, CallArgumentEvidence)]
+    if len(values) != len(cited) - 1:
+        return None
+    group = tuple(
+        fact.id
+        for fact in report.evidence
+        if isinstance(fact, CallArgumentEvidence) and fact.provenance.evidence_ids == (call.id,)
+    )
+    if tuple(fact.id for fact in values) != group:
+        return None  # every published argument of the call, in report order
+    target = next((f for f in report.evidence if f.id == call.provenance.evidence_ids[0]), None)
+    if not isinstance(target, ImportEvidence):
+        return None
+    shown = sorted(values, key=lambda fact: fact.data.position)
+    slots: Slots = {
+        "site": hexadecimal(call.location.rva or 0),
+        "function": _import_label(target),
+        "arguments": ", ".join(f"{f.data.name} = {_argument_value(f)}" for f in shown),
+    }
+    return slots, ("code.call_argument", "code.import_call", "evidence.confidence")
+
+
+# Didactic context, not a detector (design section 12): on 2026-09-24, among 1,053
+# native benign binaries (System32 --stride 3, SysWOW64 --stride 5) with a complete
+# walk and at least 64 KiB of executable sections, 3 (0.28 %) had fewer than 20 walked
+# instructions per KiB: a resource DLL and two COM proxy stubs. Managed assemblies,
+# whose native code is only a stub, are left out; so are smaller code sections, where
+# keyboard layouts and resource DLLs make low densities common (6.7 % below 5 per KiB
+# at 4 KiB).
+WALK_DENSITY = 20
+WALK_DENSITY_MIN_BYTES = 65536
+MANAGED_ENTRIES = frozenset({"_CorDllMain", "_CorExeMain"})
+
+
+def executable_sections(report: Report) -> tuple[SectionEvidence, ...]:
+    return tuple(
+        fact
+        for fact in report.evidence
+        if isinstance(fact, SectionEvidence)
+        and "execute" in fact.data.permissions
+        and fact.data.raw_status == "present"
+    )
+
+
+def _walk_density(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """A walk that decodes few instructions for the size of its executable sections."""
+    sections = executable_sections(report)
+    if not sections or tuple(fact.id for fact in cited) != tuple(fact.id for fact in sections):
+        return None
+    runs = {run.source: run for run in report.extractor_runs}
+    if "code" not in runs or "pe" not in runs:
+        return None
+    walk = next(p for p in runs["code"].components if p.name == "disassembly")
+    tables = [p for p in runs["pe"].components if p.name.startswith("imports_")]
+    if walk.status != "complete" or any(p.status != "complete" for p in tables):
+        return None  # a partial walk is short by its limits; managed code needs imports
+    if any(
+        isinstance(fact, ImportEvidence)
+        and fact.data.function is not None
+        and name(fact.data.function) in MANAGED_ENTRIES
+        for fact in report.evidence
+    ):
+        return None  # a managed assembly's native code is only a stub
+    size = sum(fact.data.raw_size for fact in sections)
+    instructions = walk.examined or 0
+    if size < WALK_DENSITY_MIN_BYTES or instructions * 1024 >= WALK_DENSITY * size:
+        return None
+    slots: Slots = {
+        "instructions": number(instructions),
+        "kib": number(size // 1024),
+        "density": f"{instructions * 1024 / size:.1f}".replace(".", ","),
+    }
+    return slots, ("code.import_call", "analysis.coverage")
+
+
+def _code_family(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """Every published call to an import on one curated family list."""
+    calls = [fact for fact in cited if isinstance(fact, ApiCallEvidence)]
+    if not calls or len(calls) != len(cited):
+        return None
+    facts = {fact.id: fact for fact in report.evidence}
+
+    def family(call: ApiCallEvidence) -> str | None:
+        target = facts.get(call.provenance.evidence_ids[0])
+        if not isinstance(target, ImportEvidence) or target.data.function is None:
+            return None
+        return family_of(name(target.data.function))
+
+    families = {family(call) for call in calls}
+    chosen = families.pop() if len(families) == 1 else None
+    if chosen is None:
+        return None
+    group = tuple(
+        fact.id
+        for fact in report.evidence
+        if isinstance(fact, ApiCallEvidence) and family(fact) == chosen
+    )
+    if tuple(fact.id for fact in calls) != group:
+        return None
+    functions = tuple(
+        dict.fromkeys(
+            _import_label(target)
+            for call in calls
+            if isinstance(target := facts[call.provenance.evidence_ids[0]], ImportEvidence)
+        )
+    )
+    slots: Slots = {
+        "count": number(len(calls)),
+        "noun": "llamada" if len(calls) == 1 else "llamadas",
+        "distinct": len(functions),
+        "fnoun": "función" if len(functions) == 1 else "funciones",
+        "family": FAMILIES[chosen][0],
+        "functions": functions,
+    }
+    return slots, (f"api.family.{chosen}", "code.import_call")
+
+
 RULES: dict[str, Rule] = {
     rule.id: rule
     for rule in (
@@ -408,6 +639,48 @@ RULES: dict[str, Rule] = {
             "Estar en la lista no demuestra que el programa haga eso: es una pista para "
             "estudiar, y muchos programas legítimos importan estas funciones.",
             _family,
+        ),
+        Rule(
+            "code.calls@1",
+            "El código contiene {count} {noun} a la función importada «{function}» de «{dll}».",
+            NOT_EXECUTED,
+            _calls,
+        ),
+        Rule(
+            "code.family@1",
+            "El código contiene {count} {noun} a {distinct} {fnoun} de la familia «{family}» "
+            "de la lista curada de Dissect.",
+            "Estar en la lista no demuestra que el programa haga eso: muchos programas "
+            "legítimos llaman a estas funciones. " + NOT_EXECUTED,
+            _code_family,
+        ),
+        Rule(
+            "code.walk_density@1",
+            "El recorrido del código decodificó {instructions} instrucciones en {kib} KiB de "
+            "secciones ejecutables ({density} por KiB). En binarios benignos medidos con al "
+            "menos 64 KiB de código nativo, solo el 0,28 % se queda por debajo de 20 por KiB.",
+            "No demuestra empaquetado ni cifrado: también ocurre con secciones que guardan "
+            "sobre todo datos o con código al que solo se llega por saltos indirectos. Pero "
+            "un binario empaquetado muestra poco más que su desempaquetador hasta que se "
+            "ejecuta, y el recorrido estático no puede ir más allá.",
+            _walk_density,
+        ),
+        Rule(
+            "code.resolved_names@1",
+            "El código pasa {count} {noun} de función a GetProcAddress ({distinct} {dnoun}).",
+            "Que el código pase un nombre a GetProcAddress no demuestra que la llamada se "
+            "ejecute, que esa función exista ni que se use; y un programa también puede "
+            "resolver funciones por ordinal o con nombres que construye o descifra al "
+            "ejecutarse, que Dissect no ve.",
+            _resolved_names,
+        ),
+        Rule(
+            "code.arguments@1",
+            "En {site} el código llama a «{function}» con {arguments}.",
+            "Es una inferencia a partir de las instrucciones que preceden a la llamada en el "
+            "mismo tramo: no demuestra que la llamada se ejecute, ni descarta que un camino "
+            "que el recorrido no ve llegue a ella con otros valores.",
+            _arguments,
         ),
         Rule(
             "exports.table@1",

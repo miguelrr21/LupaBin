@@ -38,8 +38,14 @@ def limitation_codes(report):
 
 def test_pipeline_publishes_each_planted_decoding():
     report = analyze_bytes(build_decode_demo())
-    assert report.schema_version == "0.4.0"
-    assert [run.source for run in report.extractor_runs] == ["pe", "strings", "yara", "decode"]
+    assert report.schema_version == "0.5.0"
+    assert [run.source for run in report.extractor_runs] == [
+        "pe",
+        "strings",
+        "yara",
+        "decode",
+        "code",
+    ]
     assert report.analysis.status == "completed"
     assert [
         (f.component, f.transform.name, f.transform.key_hex, f.data.text) for f in decoded(report)
@@ -250,3 +256,19 @@ def test_report_rejects_reused_keys_citing_the_wrong_decoding(tamper):
     tamper(data)
     with pytest.raises(ValueError, match="reused XOR key must cite the decoding that set it"):
         Report.model_validate_json(json.dumps(data))
+
+
+def test_xor_scan_stops_at_its_deadline_and_says_so():
+    from dissect.evidence.collector import Collector, Progress
+    from dissect.extractors.decode import DecodeExtractor
+    from dissect.extractors.strings import StringsExtractor
+
+    data = build_decode_demo()
+    collector = Collector(Limits())
+    StringsExtractor().extract(data, collector, Progress("strings", "test"))
+    collector.started -= 3600  # no time is left
+    progress = Progress("decode", "test")
+    DecodeExtractor().extract(data, collector, progress)
+    assert progress.states["decode_xor"] == "partial"
+    assert "decode_time_limit" in {reason.code for reason in progress.limitations}
+    assert not [f for f in collector.facts if f.component == "decode_xor"]

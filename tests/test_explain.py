@@ -12,7 +12,17 @@ from dissect.explain.models import Explanation
 from dissect.explain.rules import RULES
 from dissect.explain.text import MESSAGES
 from dissect.glossary.catalog import load_glossary
-from tests.fixtures.pe_builder import build_decode_demo, build_demo, build_pe
+from tests.fixtures.pe_builder import (
+    ARGS_SUBKEY,
+    RESOLVE_NAME,
+    build_args_demo,
+    build_code_demo,
+    build_code_pe,
+    build_decode_demo,
+    build_demo,
+    build_pe,
+    build_resolve_demo,
+)
 
 GLOSSARY = load_glossary()
 
@@ -39,6 +49,11 @@ def patched_demo(offset, value):
     return bytes(data)
 
 
+def sparse_code(size=0x10000, **imports):
+    """An executable section of `size` bytes whose code is a single ret."""
+    return build_code_pe(bytes.fromhex("c3") + bytes.fromhex("cc") * (size - 1), **imports)
+
+
 SAMPLES = {
     "raw-overlap": lambda: patched_demo(0x1A0 + 20, 0x200),
     "virtual-overlap": lambda: patched_demo(0x1A0 + 12, 0x1000),
@@ -48,6 +63,14 @@ SAMPLES = {
     "demo64": lambda: build_demo(bits=64),
     "corrupt": lambda: build_demo(corrupt=True),
     "decode": build_decode_demo,
+    "code": build_code_demo,
+    "code64": lambda: build_code_demo(bits=64),
+    "code-family": lambda: build_code_demo(function=b"GetProcAddress"),
+    "arguments": build_args_demo,
+    "arguments64": lambda: build_args_demo(bits=64),
+    "resolve": build_resolve_demo,
+    "sparse": lambda: sparse_code(),
+    "resolve64": lambda: build_resolve_demo(bits=64),
     "delay": lambda: build_pe(delay=True),
     "ordinal": lambda: build_pe(ordinal=17),
     "runtime": lambda: build_pe(function=b"GetProcAddress"),
@@ -260,3 +283,123 @@ def test_family_items_cite_the_whole_family_and_its_benign_prevalence(reports):
     assert "34,8 %" in item.statement
     assert item.glossary_ids == ("api.family.dynamic_loading", "pe.imports")
     assert "imports.family@1" not in rules_used(explain(reports["demo"], GLOSSARY))
+
+
+def test_each_called_import_says_where_it_is_called_from(reports):
+    explanation = explain(reports["code"], GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.calls@1")
+    assert item.statement == (
+        "El código contiene 3 llamadas a la función importada «ExitProcess» de «kernel32.dll»."
+    )
+    assert item.slots["sites"] == (
+        "0x00002000 (directa)",
+        "0x00002006 (a través de un thunk)",
+        "0x00002011 (por registro)",
+    )
+    assert item.level == "observed" and "no demuestra que se ejecute" in item.not_proven
+    assert item.glossary_ids == ("code.import_call", "pe.imports")
+
+
+@pytest.mark.parametrize("sample", ["arguments", "arguments64"])
+def test_each_call_with_arguments_says_which_constants_it_receives(reports, sample):
+    report = reports[sample]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.arguments@1")
+    site = next(f for f in report.evidence if f.kind == "api_call").location.rva
+    assert item.statement == (
+        f"En 0x{site:08x} el código llama a «RegOpenKeyExW» con hKey = HKEY_CURRENT_USER, "
+        f"lpSubKey = «{ARGS_SUBKEY}», samDesired = 0x20019."
+    )
+    assert item.level == "inferred"
+    assert "no demuestra que la llamada se ejecute" in item.not_proven
+    assert item.glossary_ids == ("code.call_argument", "code.import_call", "evidence.confidence")
+
+
+@pytest.mark.parametrize("sample", ["resolve", "resolve64"])
+def test_names_passed_to_get_proc_address_are_summarised(reports, sample):
+    report = reports[sample]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.resolved_names@1")
+    assert item.statement == "El código pasa 1 nombre de función a GetProcAddress (1 distinto)."
+    assert item.slots["names"] == (RESOLVE_NAME,)
+    # the import table is complete and only declares GetProcAddress itself
+    assert item.slots["unlisted"] == (RESOLVE_NAME,)
+    assert item.level == "inferred" and "por ordinal" in item.not_proven
+    assert item.glossary_ids[0] == "pe.imports.runtime_linking"
+
+
+def test_absence_from_imports_is_only_claimed_with_a_complete_import_table(reports):
+    report = reports["resolve"]
+    item = next(i for i in explain(report, GLOSSARY).items if i.rule == "code.resolved_names@1")
+    cited = tuple(f for f in report.evidence if f.id in item.evidence_ids)
+    runs = tuple(
+        run.model_copy(
+            update={
+                "components": tuple(
+                    p.model_copy(update={"status": "partial"}) if p.name == "imports_normal" else p
+                    for p in run.components
+                )
+            }
+        )
+        for run in report.extractor_runs
+    )
+    partial = report.model_copy(update={"extractor_runs": runs})
+    derived = RULES["code.resolved_names@1"].derive(cited, partial)
+    assert derived is not None and "unlisted" not in derived[0]
+
+
+def test_a_sparse_walk_is_put_in_benign_context(reports):
+    explanation = explain(reports["sparse"], GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.walk_density@1")
+    assert item.statement.startswith(
+        "El recorrido del código decodificó 1 instrucciones en 64 KiB de secciones "
+        "ejecutables (0,0 por KiB)."
+    )
+    assert "0,28 %" in item.statement and "No demuestra empaquetado" in item.not_proven
+    assert item.level == "observed"
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: sparse_code(size=0x8000),  # below 64 KiB of code
+        lambda: sparse_code(dll=b"mscoree.dll", function=b"_CorDllMain"),  # managed
+    ],
+)
+def test_no_density_note_for_small_or_managed_code(build):
+    explanation = explain(analyze_bytes(build()), GLOSSARY)
+    assert "code.walk_density@1" not in rules_used(explanation)
+
+
+def test_no_density_note_when_the_walk_was_cut_short():
+    from dissect.evidence.models import Limits
+    from dissect.evidence.primitives import CodeLimits
+
+    code = bytes.fromhex("90c3") + bytes.fromhex("cc") * (0x10000 - 2)  # nop; ret
+    report = analyze_bytes(build_code_pe(code), Limits(code=CodeLimits(instructions=1)))
+    walk = next(r for r in report.extractor_runs if r.source == "code").components[0]
+    assert walk.status == "partial"
+    assert "code.walk_density@1" not in rules_used(explain(report, GLOSSARY))
+
+
+def test_an_argument_summary_must_cite_every_argument_of_its_call(reports):
+    report = reports["arguments"]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.arguments@1")
+    partial = item.model_copy(update={"evidence_ids": item.evidence_ids[:-1]})
+    assert check_item(partial, report, GLOSSARY) is not None
+
+
+def test_called_families_are_summarised(reports):
+    explanation = explain(reports["code-family"], GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.family@1")
+    assert item.statement.startswith("El código contiene 3 llamadas a 1 función de la familia")
+    assert item.slots["functions"] == ("GetProcAddress",)
+
+
+def test_a_call_summary_must_cite_every_call_to_its_import(reports):
+    report = reports["code"]
+    explanation = explain(report, GLOSSARY)
+    item = next(item for item in explanation.items if item.rule == "code.calls@1")
+    partial = item.model_copy(update={"evidence_ids": item.evidence_ids[:-1]})
+    assert check_item(partial, report, GLOSSARY) is not None
