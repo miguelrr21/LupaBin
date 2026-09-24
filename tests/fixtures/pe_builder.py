@@ -9,7 +9,10 @@ def build_pe(
     ordinal=None,
     dll=b"kernel32.dll",
     function=b"ExitProcess",
+    more=(),
 ):
+    """`more` adds functions of the same DLL, imported by name: the i-th import's slot is
+    0x1140 + i * (4 or 8) and its hint/name entry follows the previous one."""
     data = bytearray(0x1200)
     data[:2] = b"MZ"
     struct.pack_into("<I", data, 0x3C, 0x80)
@@ -56,6 +59,14 @@ def build_pe(
         struct.pack_into(fmt, data, 0x320, value)
         struct.pack_into(fmt, data, 0x340, value)
         data[0x362 : 0x362 + len(function) + 1] = function + b"\0"
+        width, name_rva = bits // 8, 0x1162 + len(function) + 1
+        for index, extra in enumerate(more, 1):
+            name_rva += name_rva % 2
+            for table in (0x320, 0x340):
+                struct.pack_into(fmt, data, table + index * width, name_rva)
+            data[name_rva - 0xE00 + 2 : name_rva - 0xE00 + 2 + len(extra) + 1] = extra + b"\0"
+            name_rva += 2 + len(extra) + 1
+        assert name_rva <= 0x1200 and 0x340 + (len(more) + 1) * width <= 0x360
     return bytes(data)
 
 
@@ -337,6 +348,71 @@ CAPABILITY_VALUE = "DissectTraining"
 def build_capability_demo():
     run = r"Software\Microsoft\Windows\CurrentVersion\Run"
     return build_call_demo("RegSetKeyValueW", {0: 0x80000001, 1: run, 2: CAPABILITY_VALUE, 3: 1})
+
+
+# Inert training code for Phase 5.4: in one x64 function, RegOpenKeyExW(HKEY_CURRENT_USER,
+# the Run key, 0, KEY_WRITE, &key), then RegSetValueExW(key, a made-up value name, 0,
+# REG_SZ, ...). The .pdata entry that declares the function is at RVA 0x1800, in the
+# read-only .idata. Never executed.
+SAME_FUNCTION_VALUE = "DissectTraining"
+PDATA_RVA = 0x1800
+
+
+def same_function_code(subkey_rva=0x1A00, value_rva=0x1B00, set_key=None):
+    """Code at CODE_RVA; `set_key` replaces the instruction that sets RegSetValueExW's
+    hKey (by default a copy of the handle the first call stored at [rsp+0x30])."""
+
+    def rip(prefix, target, body):
+        return bytes.fromhex(prefix) + struct.pack("<i", target - (CODE_RVA + len(body) + 7))
+
+    body = b""
+    body += rip("488d15", subkey_rva, body)  # lea rdx, subkey
+    body += HKCU64  # mov rcx, HKEY_CURRENT_USER
+    body += bytes.fromhex("41b906000200")  # mov r9d, KEY_WRITE
+    body += bytes.fromhex("4533c0")  # xor r8d, r8d
+    body += bytes.fromhex("488d442430")  # lea rax, [rsp+0x30]: &key
+    body += bytes.fromhex("4889442420")  # mov [rsp+0x20], rax
+    body += bytes.fromhex("ff15") + struct.pack("<i", 0x1140 - (CODE_RVA + len(body) + 6))
+    body += set_key if set_key is not None else bytes.fromhex("488b4c2430")  # mov rcx, key
+    body += rip("488d15", value_rva, body)  # lea rdx, value name
+    body += bytes.fromhex("4533c0")  # xor r8d, r8d
+    body += bytes.fromhex("41b901000000")  # mov r9d, REG_SZ
+    body += bytes.fromhex("ff15") + struct.pack("<i", 0x1148 - (CODE_RVA + len(body) + 6))
+    return body + b"\xc3"
+
+
+def build_same_function_demo(
+    *,
+    subkey=r"Software\Microsoft\Windows\CurrentVersion\Run",
+    value=SAME_FUNCTION_VALUE,
+    pdata=((0, None),),
+    set_key=None,
+):
+    """x64 PE importing RegOpenKeyExW and RegSetValueExW from advapi32.dll.
+
+    `pdata` lists .pdata entries as (begin offset from CODE_RVA, end offset or None for
+    the end of the code); an empty tuple leaves the exception directory empty."""
+    code = same_function_code(set_key=set_key)
+    data = bytearray(
+        build_code_pe(
+            code,
+            bits=64,
+            dll=b"advapi32.dll",
+            function=b"RegOpenKeyExW",
+            more=(b"RegSetValueExW",),
+        )
+    )
+    for rva, text in ((0x1A00, subkey), (0x1B00, value)):
+        raw = text.encode("utf-16-le") + b"\0\0"
+        data[0x200 + rva - 0x1000 : 0x200 + rva - 0x1000 + len(raw)] = raw
+    if pdata:
+        directory = 0x98 + 108 + 4 + 8 * 3
+        struct.pack_into("<II", data, directory, PDATA_RVA, 12 * len(pdata))
+        for index, (begin, end) in enumerate(pdata):
+            entry = 0x200 + PDATA_RVA - 0x1000 + 12 * index
+            finish = CODE_RVA + (len(code) if end is None else end)
+            struct.pack_into("<III", data, entry, CODE_RVA + begin, finish, 0x1880)
+    return bytes(data)
 
 
 def build_code_demo(*, bits=32, **imports):

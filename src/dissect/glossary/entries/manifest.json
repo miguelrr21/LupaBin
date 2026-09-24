@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "dissect_glossary",
- "revision": "1.4.0",
+ "revision": "1.5.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -99,6 +99,11 @@
    "sha256": "0c33297eee5046a14fcb84752f27f255747f4dd93ce53957252c34f952f36910"
   },
   {
+   "id": "code.function_range",
+   "filename": "code.function_range.toml",
+   "sha256": "a3a729522d1494f4b74d8d69235af24dbd568a67a515211bd716b1c5f6c4af97"
+  },
+  {
    "id": "code.import_call",
    "filename": "code.import_call.toml",
    "sha256": "c4e923b27e79993d0bbde152802f82929f10a30540f5e7193c5f49270f2b440f"
@@ -136,7 +141,7 @@
   {
    "id": "evidence.confidence",
    "filename": "evidence.confidence.toml",
-   "sha256": "ff3e6c171fbe47947b58e612f33a81a3efabff6d5115163673354c211101c643"
+   "sha256": "49e5351c1c8577b700d51abf5ef88a25802884aa2b8ad0036d009f93d0aa53db"
   },
   {
    "id": "hash.md5",

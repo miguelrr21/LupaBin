@@ -22,6 +22,7 @@ from tests.fixtures.pe_builder import (
     build_demo,
     build_pe,
     build_resolve_demo,
+    build_same_function_demo,
 )
 
 GLOSSARY = load_glossary()
@@ -69,6 +70,7 @@ SAMPLES = {
     "arguments": build_args_demo,
     "arguments64": lambda: build_args_demo(bits=64),
     "resolve": build_resolve_demo,
+    "same-function": build_same_function_demo,
     "sparse": lambda: sparse_code(),
     "resolve64": lambda: build_resolve_demo(bits=64),
     "delay": lambda: build_pe(delay=True),
@@ -111,7 +113,8 @@ def test_explanations_are_deterministic_and_round_trip(reports, sample):
 def test_the_fixtures_exercise_every_rule(reports):
     """Capability rules have one fixture each in test_capabilities.py, which checks them."""
     used = set().union(*(rules_used(explain(r, GLOSSARY)) for r in reports.values()))
-    assert used == {rule for rule in RULES if not rule.startswith("capability.")}
+    general = {rule for rule in used if not rule.startswith("capability.")}
+    assert general == {rule for rule in RULES if not rule.startswith("capability.")}
 
 
 def test_every_report_code_has_reviewed_wording():

@@ -1,0 +1,12 @@
+id = "code.function_range"
+title = "Rango de función de la tabla .pdata"
+revision = "1.0.0"
+lang = "es"
+summary = "En x64, la tabla .pdata declara, para cada función que reserva pila o llama a otras, el inicio y el fin de su código y dónde está su información de desenrollado."
+body = "El compilador escribe estas entradas (RUNTIME_FUNCTION) ordenadas en la sección .pdata de un PE32+, para que Windows pueda deshacer la pila al tratar una excepción. Cada entrada es un tramo contiguo: una función partida en trozos no contiguos tiene varias entradas, enlazadas por su información de desenrollado.\n\nDissect publica la entrada que contiene cada llamada a una función de su catálogo de argumentos, y la usa para decir que dos llamadas están en el mismo rango de función. Si dos entradas de la tabla se solapan, la tabla está malformada y Dissect no publica ninguna. En x86 no hay .pdata, así que no hay rangos."
+not_proven = "Es lo que declara el archivo: un binario manipulado puede declarar rangos falsos. Que dos llamadas estén en el mismo rango no dice en qué orden se ejecutan, ni si una usa lo que devuelve la otra."
+related = ["code.import_call"]
+sources = [
+  { title = "x64 exception handling: struct RUNTIME_FUNCTION", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64#struct-runtime_function", verified_on = 2026-09-24 },
+  { title = "x64 exception handling: Chained unwind info structures", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64#chained-unwind-info-structures", verified_on = 2026-09-24 },
+]
