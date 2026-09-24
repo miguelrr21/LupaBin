@@ -36,9 +36,10 @@ from dissect.extractors import code_args, code_entries
 from dissect.extractors.code import CodeExtractor
 from dissect.extractors.pe import PEExtractor
 from dissect.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
-from tests.fixtures.pe_builder import build_code_pe
+from tests.fixtures.pe_builder import CODE_RVA, build_code_pe
 
 MAX_INPUT = 20 * 1024 * 1024
+STACK = " [pila]"  # marks an argument read from an x64 stack slot (design section 11)
 
 
 def files(roots: list[Path], recursive: bool, ext: tuple[str, ...], stride: int) -> Iterator[Path]:
@@ -191,7 +192,14 @@ class ArgumentProbe:
             rva = call.location.rva or 0
             self.starts[(str(path), rva)] = self.stretches.get(rva, rva - 64)
             self.published.append(
-                (str(path), bits, rva, fact.location.rva or 0, f"{function}.{data.name}", shown)
+                (
+                    str(path),
+                    bits,
+                    rva,
+                    fact.location.rva or 0,
+                    f"{function}.{data.name}{STACK if data.method == 'stack-slot-v1' else ''}",
+                    shown,
+                )
             )
         self.stretches.clear()
 
@@ -373,6 +381,16 @@ def worst_case(name: str) -> bytes:
             + absolute
         ),  # fmt: skip
     }
+    if name == "argument-stack-x64":
+        # x64 calls to RegCreateKeyExW, each after 15 stores to a stack slot: every
+        # instruction goes through the stack-slot rule (design section 11)
+        stores = bytes.fromhex("c744242806000200") * 15  # mov dword ptr [rsp+0x28], imm32
+        body = bytearray()
+        while len(body) + len(stores) + 6 <= size:
+            body += stores
+            call = CODE_RVA + len(body)
+            body += bytes.fromhex("ff15") + struct.pack("<i", 0x1140 - (call + 6))
+        return build_code_pe(bytes(body), bits=64, dll=b"advapi32.dll", function=b"RegCreateKeyExW")
     unit = units[name]
     code = unit * (size // len(unit))
     if name.startswith("argument"):
@@ -387,6 +405,7 @@ WORST = (
     "import-calls",
     "argument-stretches",
     "argument-values",
+    "argument-stack-x64",
 )
 
 
