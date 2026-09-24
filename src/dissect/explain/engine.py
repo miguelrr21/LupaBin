@@ -17,6 +17,7 @@ from dissect.evidence.facts import (
     YaraEvidence,
 )
 from dissect.evidence.models import Report
+from dissect.explain.capabilities import CAPABILITIES, cases
 from dissect.explain.families import FAMILIES, family_of
 from dissect.explain.models import Explanation, Item, Note, ReportRef
 from dissect.explain.rules import RULES, executable_sections, procedure_name
@@ -135,6 +136,10 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
     for group in called.values():
         if group:
             yield "code.family@1", tuple(group)
+    for capability in CAPABILITIES:
+        found = cases(capability, report)
+        if found:
+            yield capability.rule_id, tuple(fact for case in found for fact in case.cited)
     exports = tuple(fact for fact in evidence if isinstance(fact, ExportEvidence))
     if exports:
         yield "exports.table@1", exports
