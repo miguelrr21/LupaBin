@@ -321,6 +321,7 @@ def build_call_demo(function, *calls, dll=None):
                 value = 0x400000 + strings[value]
             body += b"\x50" if value is None else b"\x68" + struct.pack("<I", value)
         body += b"\xff\x15" + slot  # call [slot]
+    assert rva <= 0x2000, "the strings must fit in .idata"
     data = bytearray(build_code_pe(body + b"\xc3", dll=dll.encode(), function=function.encode()))
     for text, at in strings.items():
         raw = text.encode(entry.encoding) + b"\0\0"
