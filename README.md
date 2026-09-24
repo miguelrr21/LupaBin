@@ -75,7 +75,7 @@ uv run --frozen dissect virustotal --sha256 <sha256> --format json
 
 - `analyze` y `explain` consultan VirusTotal sin opciones (decisión del usuario del 2026-09-24). No lo hacen con `--no-virustotal`, con la variable `DISSECT_VIRUSTOTAL=off` ni con `--json`, que emite el informe de hechos; el documento de VirusTotal se obtiene con `dissect virustotal --format json`. Sin clave, la sección explica cómo configurarla y no se conecta a nada; sin red, dice por qué no hay datos. En los dos casos el análisis local no cambia.
 
-- Por defecto solo se envía el SHA-256, nunca el archivo. `--upload-to-virustotal` lo sube solo si VirusTotal no lo conoce, con el nombre genérico `sample`. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: no subas archivos internos o confidenciales.
+- Primero se consulta solo el SHA-256. Si VirusTotal no conoce el archivo, **Dissect lo sube automáticamente** (revisión 3 del diseño, a petición del usuario), con el nombre genérico `sample`, y espera su análisis hasta 3 minutos. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: para archivos internos o confidenciales usa `--no-upload-to-virustotal`, o `DISSECT_VIRUSTOTAL_UPLOAD=off` para no subir nunca.
 - Todo ocurre en el host: el worker sigue sin red. Una etiqueta es la opinión de un motor, y el comportamiento se observó en los sandboxes de VirusTotal, no en tu equipo. "VirusTotal no conoce este archivo" no dice nada sobre su peligrosidad.
 - La API pública admite 500 consultas al día y 4 por minuto, y no puede usarse en productos o servicios comerciales.
 
