@@ -35,13 +35,24 @@ def test_limit_is_inclusive(tmp_path):
 
 
 def test_directory_rejected(tmp_path):
-    with pytest.raises(DissectError):
+    with pytest.raises(DissectError) as caught:
         read_sample(tmp_path, Limits())
+    assert caught.value.code == "input_not_file"
 
 
 def test_missing_file_rejected(tmp_path):
-    with pytest.raises(DissectError):
-        read_sample(tmp_path / "missing", Limits())
+    with pytest.raises(DissectError) as caught:
+        read_sample(tmp_path / "missing-private-name", Limits())
+    assert caught.value.code == "input_not_found"
+    assert "missing-private-name" not in str(caught.value)
+
+
+def test_empty_file_has_its_own_reason(tmp_path):
+    path = tmp_path / "empty"
+    path.write_bytes(b"")
+    with pytest.raises(DissectError) as caught:
+        read_sample(path, Limits())
+    assert caught.value.code == "input_empty"
 
 
 def test_size_changed_after_open_is_not_trusted(tmp_path, monkeypatch):
