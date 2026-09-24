@@ -27,4 +27,11 @@ La Fase 2 incorpora `--scenario decode-demo`: el PE básico seguido de seis text
 uv run python -m tests.fixtures.pe_builder --scenario decode-demo --output samples/decode-demo.bin
 ```
 
+La Fase 5 incorpora `--scenario capability-demo` (solo x86): una única llamada a `RegSetKeyValueW` cuyos argumentos constantes son `HKEY_CURRENT_USER`, la subclave `Software\Microsoft\Windows\CurrentVersion\Run`, el nombre de valor inventado `DissectTraining` y `REG_SZ`. No hay datos del valor ni código que llegue a ejecutarse: sirve para ver cómo el informe reconoce la capacidad, le asocia T1547.001 y la sitúa en su contexto benigno.
+
+```text
+uv run python -m tests.fixtures.pe_builder --scenario capability-demo --output samples/capability-demo.bin
+uv run --frozen dissect analyze samples/capability-demo.bin --no-virustotal
+```
+
 El generador exige una ruta nueva y no sobrescribe archivos. Los archivos `.bin`, `.exe` y `.dll` están ignorados por Git. Para analizar el fixture, usa la CLI después de construir y verificar el worker Docker; no lo abras como programa.

@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
 ## Estado y alcance
 
-Contrato de hechos 0.5.0 (Fases 1A, 1B, 2 y 4): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Fase 3: un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. VirusTotal se consulta por defecto como fuente externa (ver más abajo). No ejecuta ni emula la muestra. No incluye todavía web, LLM, capa, FLOSS ni desempaquetado.
+Contrato de hechos 0.5.0 (Fases 1A, 1B, 2 y 4): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Fase 3: un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. Fase 5: un resumen de lo que contiene el código (capacidades como crear un servicio, escribir en una clave `Run` o pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos. VirusTotal se consulta por defecto como fuente externa (ver más abajo). No ejecuta ni emula la muestra. No incluye todavía web, LLM, capa, FLOSS ni desempaquetado.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -54,14 +54,16 @@ El generador no sobrescribe archivos existentes. Consulta [la procedencia de los
 
 ## Qué aporta el informe didáctico
 
-El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, tipo y si el informe se acaba de producir o se cargó de un archivo), **qué no se pudo analizar**, los hechos observados, las inferencias (resultados de aplicar una transformación) y el glosario de los términos usados, con sus fuentes.
+El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, tipo y si el informe se acaba de producir o se cargó de un archivo), un **resumen de lo que contiene el código** (capacidades agrupadas por táctica y los avisos que lo limitan), **qué no se pudo analizar**, los hechos observados, las inferencias (resultados de aplicar una transformación) y el glosario de los términos usados, con sus fuentes.
 
 - Cada frase la genera una regla determinista a partir de las evidencias que cita (`X1`, `X2`… citan `E1`, `E2`…). Antes de mostrarla, el validador la regenera desde esas citas y exige que coincida exactamente; una frase alterada no se muestra, y se dice cuántas se omitieron.
 - Cada frase lleva su **límite**: lo que ese hecho no demuestra. Por ejemplo, una sección con permisos de escritura y ejecución no demuestra que se ejecute código escrito en ella.
 - Las cifras de contexto están medidas. Una entropía de 7,2 o más solo la alcanza el 0,34 % de las secciones de 4 KiB o más en 55.313 binarios benignos. Los imports se agrupan en nueve familias curadas con su prevalencia benigna: por ejemplo, el 32,2 % de los binarios benignos importa alguna función de comprobación de depuradores.
 - Todo texto que procede de la muestra (nombres, cadenas, textos decodificados) se neutraliza antes de mostrarse: los caracteres de control, de escape de terminal y bidi se convierten en escapes visibles, y en Markdown van en bloques de código inertes.
 
-Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md).
+- Las capacidades (Fase 5) juntan una llamada y sus argumentos constantes en una frase como «el código contiene 1 llamada de este tipo: crear un servicio de Windows», con los casos (`servicio «X», binario «Y», inicio SERVICE_AUTO_START`). Dicen lo que el código contiene, no que el programa lo haga, y dan su frecuencia en 3.087 binarios benignos: por ejemplo, el 2,24 % contiene memoria ejecutable y escribible. Si no sabe algo (la raíz de una clave, el proceso de destino), lo dice.
+
+Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md) y [Fase 5](docs/superpowers/specs/2026-09-24-capabilities-design.md).
 
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
@@ -161,6 +163,7 @@ CLI -> lectura acotada + hashes -> Docker sin red
 - [Contrato y diseño](docs/evidence-schema.md).
 - [JSON Schema generado](docs/evidence-schema.json) y [el de las explicaciones](docs/explanation-schema.json).
 - [Diseño de la Fase 3: explicaciones y glosario](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md).
+- [Diseño de la Fase 5: capacidades](docs/superpowers/specs/2026-09-24-capabilities-design.md).
 - [Decisión sobre bytes originales](docs/decisions/001-original-import-bytes.md).
 - [Reglas de veracidad](AGENTS.md).
 

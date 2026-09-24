@@ -1,0 +1,96 @@
+"""Windows constants that the capability rules compare arguments against.
+
+Values copied from the Windows SDK 10.0.26100.0 headers (um/winnt.h, um/WinBase.h),
+checked on 2026-09-24. Composite masks are written out as the headers define them, and
+a test re-derives each one from its parts. Only what a capability condition or its
+wording needs is here; anything else is shown as a number, never guessed.
+"""
+
+# winnt.h: access rights shared by every object type
+READ_CONTROL = 0x00020000
+SYNCHRONIZE = 0x00100000
+STANDARD_RIGHTS_REQUIRED = 0x000F0000
+STANDARD_RIGHTS_ALL = 0x001F0000
+MAXIMUM_ALLOWED = 0x02000000
+GENERIC_ALL = 0x10000000
+GENERIC_EXECUTE = 0x20000000
+GENERIC_WRITE = 0x40000000
+GENERIC_READ = 0x80000000
+
+# winnt.h: registry key rights
+KEY_QUERY_VALUE = 0x0001
+KEY_SET_VALUE = 0x0002
+KEY_CREATE_SUB_KEY = 0x0004
+KEY_ENUMERATE_SUB_KEYS = 0x0008
+KEY_NOTIFY = 0x0010
+KEY_CREATE_LINK = 0x0020
+KEY_READ = (READ_CONTROL | KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS | KEY_NOTIFY) & ~SYNCHRONIZE
+KEY_WRITE = (READ_CONTROL | KEY_SET_VALUE | KEY_CREATE_SUB_KEY) & ~SYNCHRONIZE
+KEY_ALL_ACCESS = (
+    STANDARD_RIGHTS_ALL
+    | KEY_QUERY_VALUE
+    | KEY_SET_VALUE
+    | KEY_CREATE_SUB_KEY
+    | KEY_ENUMERATE_SUB_KEYS
+    | KEY_NOTIFY
+    | KEY_CREATE_LINK
+) & ~SYNCHRONIZE
+
+# winnt.h: memory protection; the low byte is the base protection, the rest modifiers
+PAGE_EXECUTE = 0x10
+PAGE_EXECUTE_READ = 0x20
+PAGE_EXECUTE_READWRITE = 0x40
+PAGE_EXECUTE_WRITECOPY = 0x80
+PAGE_GUARD = 0x100
+PAGE_NOCACHE = 0x200
+PAGE_WRITECOMBINE = 0x400
+PAGE_MODIFIERS = {
+    PAGE_GUARD: "PAGE_GUARD",
+    PAGE_NOCACHE: "PAGE_NOCACHE",
+    PAGE_WRITECOMBINE: "PAGE_WRITECOMBINE",
+}
+PAGE_MODIFIER_MASK = PAGE_GUARD | PAGE_NOCACHE | PAGE_WRITECOMBINE
+PAGE_NAMES = {
+    PAGE_EXECUTE_READWRITE: "PAGE_EXECUTE_READWRITE",
+    PAGE_EXECUTE_WRITECOPY: "PAGE_EXECUTE_WRITECOPY",
+}
+
+# winnt.h: process rights (PROCESS_ALL_ACCESS as defined for NTDDI_VERSION >= Vista)
+PROCESS_VM_OPERATION = 0x0008
+PROCESS_VM_WRITE = 0x0020
+PROCESS_ALL_ACCESS = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF
+
+# winnt.h: service types and start types
+SERVICE_TYPES = {
+    0x00000001: "SERVICE_KERNEL_DRIVER",
+    0x00000002: "SERVICE_FILE_SYSTEM_DRIVER",
+    0x00000010: "SERVICE_WIN32_OWN_PROCESS",
+    0x00000020: "SERVICE_WIN32_SHARE_PROCESS",
+    0x00000050: "SERVICE_USER_OWN_PROCESS",
+    0x00000060: "SERVICE_USER_SHARE_PROCESS",
+}
+SERVICE_INTERACTIVE_PROCESS = 0x00000100
+SERVICE_START_TYPES = {
+    0x00000000: "SERVICE_BOOT_START",
+    0x00000001: "SERVICE_SYSTEM_START",
+    0x00000002: "SERVICE_AUTO_START",
+    0x00000003: "SERVICE_DEMAND_START",
+    0x00000004: "SERVICE_DISABLED",
+}
+
+# WinBase.h
+MOVEFILE_DELAY_UNTIL_REBOOT = 0x00000004
+
+
+def service_type(value: int) -> str:
+    """The name of a documented service type, alone or with SERVICE_INTERACTIVE_PROCESS."""
+    base = value & ~SERVICE_INTERACTIVE_PROCESS
+    if base not in SERVICE_TYPES:
+        return f"{value:#x}"
+    if value & SERVICE_INTERACTIVE_PROCESS:
+        return f"{SERVICE_TYPES[base]} | SERVICE_INTERACTIVE_PROCESS"
+    return SERVICE_TYPES[base]
+
+
+def start_type(value: int) -> str:
+    return SERVICE_START_TYPES.get(value, f"{value:#x}")
