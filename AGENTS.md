@@ -18,7 +18,7 @@ Dissect es un tutor defensivo de análisis estático de malware. La veracidad pr
 - Solo fixtures sintéticos e inofensivos en el repositorio. No descargar ni redistribuir muestras maliciosas reales.
 - La decodificación estática futura solo transformará datos mediante algoritmos auditados y acotados. Un resultado plausible no es un hecho confirmado sobre el programa.
 - No implementar etapas posteriores sin acordar el alcance. La primera entrega es andamiaje, esquema de evidencias y CLI PE de hashes/imports.
-- El funcionamiento sin LLM y sin red es obligatorio. Las integraciones externas serán opcionales y separadas del worker.
+- El funcionamiento sin LLM y sin red es obligatorio. Las integraciones externas son opcionales (desactivables) y separadas del worker. VirusTotal se consulta por defecto desde el host, solo por SHA-256, por petición del usuario (2026-09-24): sin clave o sin red el análisis local no cambia, `--no-virustotal` o `DISSECT_VIRUSTOTAL=off` lo desactivan, y subir el archivo sigue exigiendo `--upload-to-virustotal`. Las pruebas nunca consultan la red (`tests/conftest.py`).
 
 ## Contrato y desarrollo
 
@@ -53,6 +53,7 @@ El repo ya está mapeado abajo. No listar recursivamente `src/` o `docs/` al emp
 - `src/dissect/extractors/decode.py` (extractor y `verify_decodings` usada por el host), `decode_strings.py` (Base64/hex), `decode_xor.py` (motor XOR, catálogo de cribs, `verify`). `tests/decode_eval.py` repite las mediciones de la sección 8 del diseño.
 - `src/dissect/rules/` — catálogo YARA propio: `catalog.py` (carga/valida), `process.py` (lanza el subproceso), `models.py`, `yara/*.yar` + `manifest.json`. `src/dissect/yara_worker.py` es el entrypoint aislado del hijo.
 - `src/dissect/explain/` — explicaciones de la Fase 3: `rules.py` (una regla pura por tipo de hecho, con plantilla y `not_proven`), `engine.py` (`explain` y `validate`, que regenera cada ítem desde sus citas), `text.py` (textos revisados de cada código), `models.py` (contrato `Explanation` 0.1.0; esquema en `docs/explanation-schema.json`).
+- `src/dissect/virustotal/` — integración opcional con VirusTotal, solo en el host: `client.py` (urllib acotado, sin redirecciones, clave en `VT_API_KEY`), `parse.py` (respuesta tratada como dato no fiable) y `models.py` (`VirusTotalReport` 0.1.0, separado del informe de hechos). `src/dissect/render/external.py` la muestra como fuente externa. Nunca subir archivos sin la opción explícita ni mezclar sus resultados con los hechos.
 - `src/dissect/glossary/` — glosario de la Fase 3: `entries/*.toml` (una entrada por archivo, con fuentes) y `entries/manifest.json` (digest de cada entrada). Tras revisar un cambio de contenido, se vuelve a fijar con `uv run python -m dissect.glossary.catalog --write <revisión>`. `uv run python -m tests.check_glossary_sources` comprueba con red que las URL y sus anclas existen; no forma parte de la CI.
 - `docs/roadmap.md` — **leer primero**: estado actual, pendientes, límites conocidos con cifras y el objetivo del usuario (máxima optimización y mínima tasa de error: ninguna mejora de cobertura se adopta si añade falsos positivos).
 - `docs/superpowers/specs/` — diseños aprobados por fase; leer solo el spec de la fase en la que se trabaja, no todas.

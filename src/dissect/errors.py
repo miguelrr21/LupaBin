@@ -2,6 +2,10 @@ from typing import Literal
 
 FailureCode = Literal[
     "invalid_input",
+    "input_not_found",
+    "input_not_file",
+    "input_permission",
+    "input_empty",
     "input_limit",
     "input_changed",
     "docker_unavailable",
@@ -18,6 +22,13 @@ FailureCode = Literal[
 ]
 MESSAGES: dict[FailureCode, str] = {
     "invalid_input": "No se pudo leer una entrada regular no vacía.",
+    "input_not_found": (
+        "No existe ningún archivo en esa ruta. Comprueba la ruta; si contiene espacios, "
+        "escríbela entre comillas."
+    ),
+    "input_not_file": "La ruta no es un archivo normal (por ejemplo, es una carpeta).",
+    "input_permission": "No hay permiso para leer ese archivo.",
+    "input_empty": "El archivo está vacío: no hay nada que analizar.",
     "input_limit": "La entrada supera el límite permitido.",
     "input_changed": "La entrada cambió durante la lectura; no se analizó.",
     "docker_unavailable": "El motor Docker Linux no está disponible; no se analizó en el host.",
