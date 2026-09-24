@@ -260,6 +260,22 @@ def test_service_creation_names_the_service_binary_and_start(bits):
     )
 
 
+def test_the_fixture_generator_writes_the_capability_demo(tmp_path, monkeypatch):
+    import sys
+
+    from tests.fixtures import pe_builder
+
+    path = tmp_path / "capability.bin"
+    argv = ["pe_builder", "--scenario", "capability-demo", "--output", str(path)]
+    monkeypatch.setattr(sys, "argv", argv)
+    pe_builder.main()
+    assert path.read_bytes() == pe_builder.build_capability_demo()
+    rule, cases = only_case(path.read_bytes())
+    assert rule == "capability.run_key_value@1" and cases[0].endswith(
+        "valor «DissectTraining» (T1547.001)"
+    )
+
+
 def test_a_run_key_under_an_unknown_root_says_so():
     _, cases = only_case(build_call_demo("RegSetKeyValueW", {1: RUN}))
     assert cases[0].endswith(
