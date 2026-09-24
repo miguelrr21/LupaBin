@@ -197,3 +197,23 @@ def test_x86_a_32_bit_decoder_is_used():
     # 48 is `dec eax` in 32-bit mode, not a REX prefix
     found, _ = find(b"\x48" + push32(0x80000001) + CALL32, 32)
     assert found == {0: (0x80000001, 0x1001)}
+
+
+@pytest.mark.parametrize(
+    "between",
+    [
+        b"\x0f\x11\x04\x24",  # movups [esp], xmm0: capstone calls the destination a read
+        b"\x66\x0f\xd6\x04\x24",  # movq [esp], xmm0: likewise
+        b"\x0f\x29\x04\x24",  # movaps [esp], xmm0
+        b"\x87\x04\x24",  # xchg [esp], eax
+    ],
+)
+def test_x86_sse_and_exchange_stores_to_the_stack_forget_every_push(between):
+    found, _ = find(REG_OPEN_X86 + between + CALL32, 32)
+    assert found == {}
+
+
+def test_x86_a_push_from_stack_memory_is_an_unknown_argument_not_a_reset():
+    # push dword ptr [esp+8] only reads the stack; it still takes its place
+    found, _ = find(push32(0x80000001) + b"\xff\x74\x24\x08" + CALL32, 32)
+    assert found == {1: (0x80000001, 0x1000)}
