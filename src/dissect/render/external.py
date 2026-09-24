@@ -37,8 +37,12 @@ NOT_FOUND = (
     "programas internos o confidenciales."
 )
 QUEUED = (
-    "El archivo se envió y el análisis sigue en cola. Vuelve a consultarlo más tarde con "
-    "--virustotal."
+    "Dissect subió el archivo a VirusTotal y el análisis sigue en cola. Vuelve a analizarlo "
+    "más tarde: ya solo se consultará por su SHA-256."
+)
+UPLOADED = (
+    "Dissect subió el archivo a VirusTotal porque no lo conocía; estos resultados son de ese "
+    "análisis. El contenido subido puede compartirse con los clientes de pago de VirusTotal."
 )
 BEHAVIOUR_LABELS = (
     ("processes_created", "Procesos creados"),
@@ -134,6 +138,12 @@ def _status_line(report: VirusTotalReport) -> str | None:
         return NOT_FOUND
     if report.status == "queued":
         return QUEUED
+    if report.uploaded:
+        return UPLOADED + (
+            " El comportamiento no está disponible: " + PROBLEMS[report.problem]
+            if report.problem
+            else ""
+        )
     if report.problem:
         return "El comportamiento no está disponible: " + PROBLEMS[report.problem]
     return None
