@@ -7,5 +7,5 @@ body = "Una crib corta no basta para verificar sola una clave larga. Pero si la 
 not_proven = "Compartir clave no demuestra que dos textos se usen juntos ni que el programa los descifre."
 related = ["decode.xor", "decode.crib"]
 sources = [
-  { title = "Contrato activo 0.4.0", publisher = "Proyecto Dissect", document = "docs/evidence-schema.md#contrato-activo-040", verified_on = 2026-09-23 },
+  { title = "Antecedente: contrato 0.4.0", publisher = "Proyecto Dissect", document = "docs/evidence-schema.md#antecedente-contrato-040", verified_on = 2026-09-23 },
 ]

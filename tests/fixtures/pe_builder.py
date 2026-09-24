@@ -123,6 +123,173 @@ def build_decode_demo(*, bits=32):
     return build_pe(bits=bits) + bytes(overlay) + b"\xcc" * 16
 
 
+# Inert training code: each of the three canonical forms calls the fixture's only
+# import (kernel32!ExitProcess, IAT slot 0x1140) once, then returns.
+CODE_RVA = 0x2000
+THUNK_RVA = 0x2020
+
+
+def code_demo_bytes(bits=32):
+    def rel(source, target, size):
+        return struct.pack("<i", target - (source + size))
+
+    slot = 0x1140
+    code = bytearray(b"\xcc" * 0x200)
+    if bits == 32:
+        absolute = struct.pack("<I", 0x400000 + slot)
+        body = b"\xff\x15" + absolute  # call [slot]
+        body += b"\xe8" + rel(CODE_RVA + len(body), THUNK_RVA, 5)  # call thunk
+        body += b"\x8b\x35" + absolute + b"\xff\xd6"  # mov esi, [slot]; call esi
+        thunk = b"\xff\x25" + absolute  # jmp [slot]
+    else:
+        body = b"\x48\xff\x15" + rel(CODE_RVA, slot, 7)  # call [rip+slot]
+        body += b"\xe8" + rel(CODE_RVA + len(body), THUNK_RVA, 5)
+        body += b"\x48\x8b\x35" + rel(CODE_RVA + len(body), slot, 7) + b"\xff\xd6"
+        thunk = b"\xff\x25" + rel(THUNK_RVA, slot, 6)
+    body += b"\xc3"
+    code[: len(body)] = body
+    code[THUNK_RVA - CODE_RVA : THUNK_RVA - CODE_RVA + len(thunk)] = thunk
+    return bytes(code)
+
+
+def build_code_pe(code, *, bits=32, **imports):
+    """build_pe plus an executable .text section at CODE_RVA, where the entry point is."""
+    size = -(-len(code) // 0x200) * 0x200
+    data = bytearray(build_pe(bits=bits, **imports)) + code + b"\xcc" * (size - len(code))
+    opt = 0x98
+    section = opt + (224 if bits == 32 else 240) + 40
+    struct.pack_into("<H", data, 0x86, 2)
+    struct.pack_into("<I", data, opt + 16, CODE_RVA)
+    struct.pack_into("<I", data, opt + 56, CODE_RVA + -(-size // 0x1000) * 0x1000)
+    data[section : section + 8] = b".text\0\0\0"
+    struct.pack_into("<IIII", data, section + 8, size, CODE_RVA, size, 0x1200)
+    struct.pack_into("<I", data, section + 36, 0x60000020)
+    return bytes(data)
+
+
+def with_load_config(data, *, bits=32, guard=(), seh=(), flags=0x400, size=None, count=None):
+    """Add a load configuration directory in .idata listing CFG targets and SafeSEH handlers.
+
+    The directory sits at RVA 0x1400 (file 0x600) and its tables at 0x1500 and 0x1580.
+    """
+    data = bytearray(data)
+    opt = 0x98
+    count_offset = 92 if bits == 32 else 108
+    base = 0x400000 if bits == 32 else 0x140000000
+    table_at, count_at, flags_at = (0x50, 0x54, 0x58) if bits == 32 else (0x80, 0x88, 0x90)
+    declared = size if size is not None else flags_at + 4
+    struct.pack_into("<II", data, opt + count_offset + 4 + 8 * 10, 0x1400, flags_at + 4)
+    struct.pack_into("<I", data, 0x600, declared)
+    fmt = "<I" if bits == 32 else "<Q"
+    struct.pack_into(fmt, data, 0x600 + table_at, base + 0x1500)
+    struct.pack_into(fmt, data, 0x600 + count_at, len(guard) if count is None else count)
+    struct.pack_into("<I", data, 0x600 + flags_at, flags)
+    stride = 4 + (flags >> 28)
+    for index, rva in enumerate(guard):
+        struct.pack_into("<I", data, 0x700 + index * stride, rva)
+    if bits == 32:
+        struct.pack_into("<II", data, 0x640, base + 0x1580, len(seh))
+        for index, rva in enumerate(seh):
+            struct.pack_into("<I", data, 0x780 + index * 4, rva)
+    return bytes(data)
+
+
+# Inert training call with constant arguments: RegOpenKeyExW(HKEY_CURRENT_USER,
+# L"Software\\Dissect\\Training", 0, KEY_READ, &key), set with the canonical forms of
+# argument_forms.py. The subkey is a made-up training name; the string lies in the
+# read-only .idata section at ARGS_STRING_RVA. Never executed.
+ARGS_STRING_RVA = 0x1A00
+ARGS_SUBKEY = "Software\\Dissect\\Training"
+KEY_READ = 0x20019
+HKCU32 = b"\x68\x01\x00\x00\x80"  # push 0x80000001
+HKCU64 = b"\x48\xc7\xc1\x01\x00\x00\x80"  # mov rcx, 0xffffffff80000001
+
+
+def args_demo_bytes(bits=32, hkey=None, before=b""):
+    """Code at CODE_RVA that calls the fixture's only import with constant arguments.
+
+    `hkey` replaces the instruction that sets hKey (x64: rcx; x86: the last push);
+    `before` goes right before the call."""
+    slot = 0x1140
+    if bits == 32:
+        body = b"\x50"  # push eax: &key, not a constant
+        body += b"\x68" + struct.pack("<I", KEY_READ)  # push samDesired
+        body += b"\x6a\x00"  # push ulOptions
+        body += b"\x68" + struct.pack("<I", 0x400000 + ARGS_STRING_RVA)  # push lpSubKey
+        body += (HKCU32 if hkey is None else hkey) + before
+        body += b"\xff\x15" + struct.pack("<I", 0x400000 + slot)  # call [slot]
+    else:
+        # lea rdx, [rip+string]
+        body = b"\x48\x8d\x15" + struct.pack("<i", ARGS_STRING_RVA - (CODE_RVA + 7))
+        body += HKCU64 if hkey is None else hkey
+        body += b"\x41\xb9" + struct.pack("<I", KEY_READ)  # mov r9d, KEY_READ
+        body += b"\x45\x33\xc0" + before  # xor r8d, r8d
+        body += b"\xff\x15" + struct.pack("<i", slot - (CODE_RVA + len(body) + 6))
+    return body + b"\xc3"
+
+
+def build_args_demo(
+    *, bits=32, code=None, writable=False, dll=b"advapi32.dll", function=b"RegOpenKeyExW"
+):
+    """RegOpenKeyExW with constant arguments; `writable` marks .idata as writable.
+
+    With `code` and `function`, the same layout for another imported function."""
+    data = bytearray(
+        build_code_pe(
+            args_demo_bytes(bits) if code is None else code,
+            bits=bits,
+            dll=dll,
+            function=function,
+        )
+    )
+    text = ARGS_SUBKEY.encode("utf-16-le") + b"\0\0"
+    offset = 0x200 + ARGS_STRING_RVA - 0x1000
+    data[offset : offset + len(text)] = text
+    if writable:
+        section = 0x98 + (224 if bits == 32 else 240)
+        struct.pack_into("<I", data, section + 36, 0xC0000040)
+    return bytes(data)
+
+
+# Inert training use of GetProcAddress: one call by name (a made-up training export,
+# in the read-only .idata) and one by ordinal 5, which is not a name. Never executed.
+RESOLVE_NAME = "DissectTrainingProc"
+
+
+def resolve_demo_bytes(bits=32):
+    slot = 0x1140
+    if bits == 32:
+        absolute = struct.pack("<I", 0x400000 + slot)
+        body = bytes.fromhex("68") + struct.pack("<I", 0x400000 + ARGS_STRING_RVA)
+        body += bytes.fromhex("56ff15") + absolute  # push esi (hModule); call
+        body += bytes.fromhex("6a0556ff15") + absolute  # by ordinal 5
+    else:
+        body = bytes.fromhex("488d15") + struct.pack("<i", ARGS_STRING_RVA - (CODE_RVA + 7))
+        body += bytes.fromhex("488bcbff15")  # mov rcx, rbx (hModule); call
+        body += struct.pack("<i", slot - (CODE_RVA + len(body) + 4))
+        body += bytes.fromhex("ba05000000488bcbff15")  # mov edx, 5: by ordinal
+        body += struct.pack("<i", slot - (CODE_RVA + len(body) + 4))
+    return body + bytes.fromhex("c3")
+
+
+def build_resolve_demo(*, bits=32):
+    """GetProcAddress by name and by ordinal, imported from kernel32.dll."""
+    data = bytearray(
+        build_code_pe(
+            resolve_demo_bytes(bits), bits=bits, dll=b"kernel32.dll", function=b"GetProcAddress"
+        )
+    )
+    text = RESOLVE_NAME.encode("ascii") + bytes(1)
+    offset = 0x200 + ARGS_STRING_RVA - 0x1000
+    data[offset : offset + len(text)] = text
+    return bytes(data)
+
+
+def build_code_demo(*, bits=32, **imports):
+    """An entry point that calls the import once through each canonical form."""
+    return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)
+
+
 def main():
     import argparse
     from pathlib import Path
@@ -132,11 +299,23 @@ def main():
     parser.add_argument("--bits", type=int, choices=(32, 64), default=32)
     parser.add_argument(
         "--scenario",
-        choices=("basic", "demo", "corrupt", "yara-limited", "decode-demo"),
+        choices=(
+            "basic",
+            "demo",
+            "corrupt",
+            "yara-limited",
+            "decode-demo",
+            "code-demo",
+            "args-demo",
+        ),
         default="basic",
     )
     args = parser.parse_args()
-    if args.scenario == "decode-demo":
+    if args.scenario == "code-demo":
+        data = build_code_demo(bits=args.bits)
+    elif args.scenario == "args-demo":
+        data = build_args_demo(bits=args.bits)
+    elif args.scenario == "decode-demo":
         data = build_decode_demo(bits=args.bits)
     elif args.scenario in ("basic", "yara-limited"):
         data = build_pe(bits=args.bits)
