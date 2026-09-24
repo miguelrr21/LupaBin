@@ -12,6 +12,8 @@ PINNED = {
     "dissect-api-semantics-v2": "238568b92b75a849ffe0d8fdf75ac5877fe4b86d8d1ba9b75022cc4006579420",
     # v3: + GetProcAddress, checked on Microsoft Learn on 2026-09-24
     "dissect-api-semantics-v3": "7648350dc53ec4234e65902b06bdbde64827df0a0554792f5aa5046d33f82c56",
+    # v4: the rest of design section 4 (67 entries), checked on 2026-09-24
+    "dissect-api-semantics-v4": "3ab14b23f9fe91b334a4f4bdea927bf70c86b638b921c76337f6d6a98ffc2b75",
 }
 
 
@@ -52,6 +54,30 @@ def test_get_proc_address_signature_as_published():
     assert lookup(b"KERNEL32.dll", b"GetProcAddress") is not None
     assert lookup(b"api-ms-win-core-libraryloader-l1-2-0.dll", b"GetProcAddress") is not None
     assert lookup(b"advapi32.dll", b"GetProcAddress") is None
+
+
+def test_every_entry_is_well_formed():
+    for name, entry in api_catalog.FUNCTIONS.items():
+        positions = [p.position for p in entry.parameters]
+        assert positions == sorted(set(positions)) and positions[-1] < entry.arity, name
+        assert len({p.name for p in entry.parameters}) == len(entry.parameters), name
+        assert entry.dlls and all(dll == dll.lower() for dll in entry.dlls), name
+        for parameter in entry.parameters:
+            # integers carry their width; keys and strings are pointer-sized
+            assert (parameter.type == "integer") == (parameter.bits is not None), name
+        if name.endswith("A") and name[:-1] + "W" in api_catalog.FUNCTIONS:
+            assert entry.encoding == "ascii", name
+        if name.endswith("W") and name[:-1] + "A" in api_catalog.FUNCTIONS:
+            assert entry.encoding == "utf-16-le", name
+
+
+def test_functions_documented_only_in_unicode_read_wide_strings():
+    for name in ("WinHttpOpen", "WinHttpConnect", "WinHttpOpenRequest", "OpenMutexW"):
+        assert api_catalog.FUNCTIONS[name].encoding == "utf-16-le"
+    assert "OpenMutexA" not in api_catalog.FUNCTIONS  # Learn has no page for it
+    assert api_catalog.FUNCTIONS["WinExec"].encoding == "ascii"  # LPCSTR only
+    port = next(p for p in api_catalog.FUNCTIONS["InternetConnectW"].parameters if p.position == 2)
+    assert (port.name, port.bits) == ("nServerPort", 16)  # INTERNET_PORT, a WORD
 
 
 def test_x64_keys_are_the_sign_extended_constants_only():
