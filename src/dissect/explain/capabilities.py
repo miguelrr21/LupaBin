@@ -24,12 +24,45 @@ from dissect.explain.models import SlotValue
 from dissect.explain.text import hexadecimal, name, number
 
 CATALOG_ID = "dissect-capabilities-v1"
-CATALOG_SHA256 = "9602d80804321785b27f494618ab784f07c13dd6549e2c911a98651f4fa67f62"
+CATALOG_SHA256 = "854b665c9b48ddbf8567cf7944749c96d82524f1d77d15b7fee9aa006931b478"
 API_CATALOG = "dissect-api-semantics-v4"
 
 Arguments = dict[str, CallArgumentEvidence]
 Slots = dict[str, SlotValue]
 Derived = tuple[Slots, tuple[str, ...]]  # slots and glossary entry ids
+
+# Benign context (design section 5): on 2026-09-24, binaries with at least one case among
+# 3,087 benign PE files (System32 --stride 3: 1,363; SysWOW64 --stride 5: 521; Program
+# Files and Program Files (x86) --recursive --stride 40: 1,203), measured with
+# `uv run python -m tests.capability_eval`. Each of the 803 cases was reviewed by hand.
+BENIGN_FILES = 3087
+BENIGN = {
+    "run_key_value": 0,
+    "run_key_open_write": 9,
+    "winlogon_open_write": 1,
+    "service_create": 2,
+    "command_execution": 26,
+    "download_to_file": 0,
+    "network_destination": 3,
+    "user_agent": 39,
+    "executable_writable_memory": 69,
+    "process_memory_access": 22,
+    "move_on_reboot": 9,
+    "named_mutex": 105,
+    "crypto_algorithm": 152,
+}
+
+
+def benign_context(capability_id: str) -> str:
+    count, total = BENIGN[capability_id], number(BENIGN_FILES)
+    if count == 0:
+        return f"Ninguno de los {total} binarios benignos medidos contiene un caso."
+    share = f"{100 * count / BENIGN_FILES:.2f}".replace(".", ",")
+    return (
+        f"En binarios benignos medidos, {number(count)} de {total} ({share} %) contienen "
+        "algún caso."
+    )
+
 
 TACTICS = {
     "persistence": "persistencia",
@@ -83,7 +116,10 @@ class Capability:
 
     @property
     def template(self) -> str:
-        return f"El código contiene {{count}} {{noun}} de este tipo: {self.label}."
+        return (
+            f"El código contiene {{count}} {{noun}} de este tipo: {self.label}. "
+            + benign_context(self.id)
+        )
 
     @property
     def not_proven(self) -> str:
@@ -229,7 +265,7 @@ def _execution(function: str, args: Arguments) -> str | None:
     if target is None:
         return None
     return _parts(
-        _labelled("archivo, programa o URL", target),
+        _labelled("destino", target),
         _labelled("parámetros", _text(args, "lpParameters")),
         _labelled("operación", _text(args, "lpOperation")),
     )
@@ -430,8 +466,8 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         "command_execution",
         "execution",
-        "ejecutar un programa o una orden, o abrir un archivo o una URL, cuyo nombre está "
-        "en el código",
+        "ejecutar un programa o una orden, o pedir al shell de Windows que abra algo (un "
+        "archivo, una URL o un elemento del sistema), cuyo nombre está en el código",
         {
             "WinExec": ("lpCmdLine",),
             **_aw(("CreateProcess",), ("lpApplicationName", "lpCommandLine")),
@@ -547,6 +583,7 @@ def catalog_digest() -> str:
         "id": CATALOG_ID,
         "api_catalog": API_CATALOG,
         "run_keys": RUN_KEYS,
+        "benign": [BENIGN_FILES, BENIGN],
         "winlogon_keys": WINLOGON_KEYS,
         "key_write_rights": KEY_WRITE_RIGHTS,
         "techniques": TECHNIQUES,

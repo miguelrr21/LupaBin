@@ -145,8 +145,7 @@ POSITIVE = [
         "ShellExecuteW",
         {1: "open", 2: "notepad.exe", 3: "training.txt"},
         "command_execution",
-        "ShellExecuteW: archivo, programa o URL «notepad.exe», parámetros «training.txt», "
-        "operación «open»",
+        "ShellExecuteW: destino «notepad.exe», parámetros «training.txt», operación «open»",
     ),
     (
         "URLDownloadToFileW",
@@ -504,3 +503,22 @@ def test_the_summary_repeats_the_low_walk_density_note():
     data = build_code_pe(bytes.fromhex("c3") + bytes.fromhex("cc") * 0xFFFF)
     part = " ".join(summary_of(rendered(data)).split())
     assert "se queda por debajo de 20 por KiB" in part
+
+
+# --- benign context (design section 5) ------------------------------------------------------
+
+
+def test_every_capability_states_its_measured_benign_prevalence():
+    assert set(capabilities.BENIGN) == {c.id for c in capabilities.CAPABILITIES}
+    assert all(0 <= n <= capabilities.BENIGN_FILES for n in capabilities.BENIGN.values())
+    _, _, items = found(build_call_demo("CreateMutexW", {2: "Dissect"}))
+    statement = items["capability.named_mutex@1"].statement
+    assert statement.endswith(
+        "En binarios benignos medidos, 105 de 3.087 (3,40 %) contienen algún caso."
+    )
+
+
+def test_a_capability_never_seen_in_benign_binaries_says_so():
+    _, _, items = found(build_call_demo("URLDownloadToFileW", {1: "http://training.invalid/"}))
+    statement = items["capability.download_to_file@1"].statement
+    assert statement.endswith("Ninguno de los 3.087 binarios benignos medidos contiene un caso.")
