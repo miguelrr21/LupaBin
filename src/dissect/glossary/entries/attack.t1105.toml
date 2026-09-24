@@ -1,0 +1,12 @@
+id = "attack.t1105"
+title = "T1105: transferencia de herramientas"
+revision = "1.0.0"
+lang = "es"
+summary = "Técnica de mando y control de ATT&CK: traer herramientas u otros archivos desde un sistema externo al equipo."
+body = "URLDownloadToFile descarga el recurso de una URL y lo guarda en un archivo local.\n\nDissect asocia esta técnica a una llamada a URLDownloadToFile cuya URL o archivo de destino conoce."
+not_proven = "Actualizadores e instaladores legítimos descargan archivos; la llamada no dice qué contendría la descarga."
+related = ["attack.technique", "api.family.http"]
+sources = [
+  { title = "Ingress Tool Transfer", publisher = "MITRE ATT&CK", url = "https://attack.mitre.org/techniques/T1105/", verified_on = 2026-09-24 },
+  { title = "URLDownloadToFile function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/platform-apis/ms775123(v=vs.85)", verified_on = 2026-09-24 },
+]

@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "dissect_glossary",
- "revision": "1.2.1",
+ "revision": "1.3.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -52,6 +52,41 @@
    "id": "api.family.sockets",
    "filename": "api.family.sockets.toml",
    "sha256": "533db7f59630ceb2aeef7c4c0d20583decb632af227a74b01110f48663795009"
+  },
+  {
+   "id": "attack.t1059_001",
+   "filename": "attack.t1059_001.toml",
+   "sha256": "6b5d9b5cdcdcd5d0389f53e9bead6289f2c2b4dc8b363944fbde04c9ab071897"
+  },
+  {
+   "id": "attack.t1059_003",
+   "filename": "attack.t1059_003.toml",
+   "sha256": "f0f704c6c2e70deab23b6868010aa78282b666173063373afa92026e3df498e6"
+  },
+  {
+   "id": "attack.t1105",
+   "filename": "attack.t1105.toml",
+   "sha256": "a1966bcf79817aa4bb73dcab31abe112b3f047f4a67c8d7e9ac903931afeabf6"
+  },
+  {
+   "id": "attack.t1543_003",
+   "filename": "attack.t1543_003.toml",
+   "sha256": "364c8b1eecbe808854dc7809fb5897e0bc5304bfb00ac42568f6afb5aee0995d"
+  },
+  {
+   "id": "attack.t1547_001",
+   "filename": "attack.t1547_001.toml",
+   "sha256": "a845cf57421d21cca273e9b826e2ec75701ddafe349d0386fe82e30df06ba84f"
+  },
+  {
+   "id": "attack.technique",
+   "filename": "attack.technique.toml",
+   "sha256": "64fe59a434b12dff5c8f63317ac3f3eb598d1a5b53cfe0e19447a2edf46ca7da"
+  },
+  {
+   "id": "capability.static",
+   "filename": "capability.static.toml",
+   "sha256": "461f4643bdf220f67f0660bb5871a6c1548d592826c0c4f8cadedad7e66aa08b"
   },
   {
    "id": "code.call_argument",
