@@ -54,9 +54,17 @@ Nada de eso es un hecho verificado por Dissect. Una etiqueta es la opinión de u
 - `--no-virustotal` lo desactiva para un análisis, y `DISSECT_VIRUSTOTAL=off` (también `0`, `no` o `false`) lo desactiva siempre.
 - Con `--json` no se consulta: ese JSON es el informe de hechos.
 - Sin clave no hay ninguna conexión: la sección explica cómo definirla o desactivar la consulta.
-- La subida sigue exigiendo `--upload-to-virustotal`.
+- La subida sigue exigiendo `--upload-to-virustotal` (cambiado en la revisión 3).
 - Consecuencia para la privacidad: con una clave configurada, el SHA-256 de cada archivo analizado se envía a VirusTotal (el archivo no).
 - Las pruebas fijan `DISSECT_VIRUSTOTAL=off` en `tests/conftest.py`, así que nunca llegan a la red aunque haya una clave en el equipo.
+
+**Revisión 3 (2026-09-24), a petición del usuario: la subida también es automática.**
+- Si VirusTotal no conoce el archivo, `analyze` y `dissect virustotal ARCHIVO` lo suben y esperan su análisis hasta 3 minutos.
+- Antes se muestra un aviso en la salida de errores: lo subido puede compartirse con los clientes de pago de VirusTotal, y la subida se evita con `--no-upload-to-virustotal`.
+- `DISSECT_VIRUSTOTAL_UPLOAD=off` la desactiva siempre, y `--no-virustotal` no consulta ni sube nada.
+- La sección externa dice que Dissect subió el archivo y por qué.
+- La subida sigue enviando el archivo con el nombre genérico `sample`, sin la ruta ni el nombre local.
+- `tests/conftest.py` desactiva también la subida.
 
 - `dissect analyze ARCHIVO`: el informe didáctico con una sección 5 de fuente externa (con `--virustotal` explícito si el valor por defecto está desactivado).
 - `dissect analyze ARCHIVO --virustotal --upload-to-virustotal`: lo mismo, subiendo el archivo si VirusTotal no lo conoce.
