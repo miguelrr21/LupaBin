@@ -24,7 +24,7 @@ from dissect.explain.models import SlotValue
 from dissect.explain.text import hexadecimal, name, number
 
 CATALOG_ID = "dissect-capabilities-v1"
-CATALOG_SHA256 = "656f8e5dd5cb8ca1a5262c9d21c979f842d20304ecd267bb11dd331ea3297c3f"
+CATALOG_SHA256 = "9602d80804321785b27f494618ab784f07c13dd6549e2c911a98651f4fa67f62"
 API_CATALOG = "dissect-api-semantics-v4"
 
 Arguments = dict[str, CallArgumentEvidence]
@@ -229,7 +229,7 @@ def _execution(function: str, args: Arguments) -> str | None:
     if target is None:
         return None
     return _parts(
-        _labelled("archivo o programa", target),
+        _labelled("archivo, programa o URL", target),
         _labelled("parámetros", _text(args, "lpParameters")),
         _labelled("operación", _text(args, "lpOperation")),
     )
@@ -430,7 +430,8 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         "command_execution",
         "execution",
-        "ejecutar un programa o una orden, o abrir un archivo, cuyo nombre está en el código",
+        "ejecutar un programa o una orden, o abrir un archivo o una URL, cuyo nombre está "
+        "en el código",
         {
             "WinExec": ("lpCmdLine",),
             **_aw(("CreateProcess",), ("lpApplicationName", "lpCommandLine")),
