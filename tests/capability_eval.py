@@ -65,12 +65,12 @@ def _abstentions(report: Any) -> Counter[str]:
         protection = args.get("flProtect") or args.get("flNewProtect")
         if protection is not None and function.startswith("Virtual"):
             value = protection.data.value
-            if value & 0xFF in (0x40, 0x80) and value & ~0x7FF:
+            if value & 0xFF in (0x40, 0x80) and value & ~0x400007FF:
                 found["executable_writable_with_unnamed_bits"] += 1
         subkey = args.get("lpSubKey")
         if subkey is not None and subkey.data.string is not None:
             path = subkey.data.string.text.lower().rstrip("\\")
-            if any(path.endswith(key) for key in RUN_KEYS):
+            if any(path.endswith(key.path) for key in RUN_KEYS):
                 access = args.get("samDesired")
                 if function.startswith(("RegOpenKey", "RegCreateKey")) and "Ex" not in function:
                     found["run_key_without_rights"] += 1
