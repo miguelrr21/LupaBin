@@ -280,11 +280,41 @@ def test_analyze_adds_an_attributed_external_section(tmp_path, monkeypatch):
     assert all(upload is False for _, upload in calls)
 
 
-def test_analyze_without_the_option_never_consults(tmp_path, monkeypatch):
+def test_analyze_consults_virustotal_by_default(tmp_path, monkeypatch):
+    monkeypatch.delenv("DISSECT_VIRUSTOTAL")  # the user's default, not the tests' one
     calls = patch(monkeypatch)
     result = runner.invoke(app, ["analyze", str(sample(tmp_path))])
+    assert result.exit_code == 0 and len(calls) == 1
+    assert "Fuente externa: VirusTotal (no verificada por Dissect)" in result.stdout
+    assert calls[0][1] is False  # by hash: the file is never uploaded by default
+
+
+@pytest.mark.parametrize(
+    ("arguments", "environ"),
+    [
+        (["--no-virustotal"], None),  # turned off for one analysis
+        ([], "off"),  # turned off by DISSECT_VIRUSTOTAL
+        (["--json"], None),  # the fact report is not mixed with an external source
+    ],
+)
+def test_the_default_consultation_can_be_turned_off(tmp_path, monkeypatch, arguments, environ):
+    if environ is None:
+        monkeypatch.delenv("DISSECT_VIRUSTOTAL")
+    else:
+        monkeypatch.setenv("DISSECT_VIRUSTOTAL", environ)
+    calls = patch(monkeypatch)
+    result = runner.invoke(app, ["analyze", str(sample(tmp_path)), *arguments])
     assert result.exit_code == 0 and calls == []
-    assert "VirusTotal" not in result.stdout
+
+
+def test_without_a_key_the_default_consultation_explains_and_the_analysis_stands(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("DISSECT_VIRUSTOTAL")
+    calls = patch(monkeypatch, environ={})  # no VT_API_KEY and no .env
+    result = runner.invoke(app, ["analyze", str(sample(tmp_path))])
+    assert result.exit_code == 0 and len(calls) == 1
+    assert "Fuente externa: VirusTotal" in result.stdout
 
 
 def test_json_report_and_virustotal_are_not_mixed(tmp_path, monkeypatch):
