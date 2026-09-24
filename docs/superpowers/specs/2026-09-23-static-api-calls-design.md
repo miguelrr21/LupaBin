@@ -301,7 +301,16 @@ Mismas muestras que la sección 9.4. Todo lo publicado es coherente con su tipo 
 | `argument-values` (cuatro `push` constantes por llamada) | 7,38 s (paso: 0,44 s) | 135 MiB | 4.096 argumentos publicados, `call_argument_limit` |
 | `nop`, `jz`, `call rel32`, `call [casilla]` | 4,3 / 10,1 / 3,4 / 4,2 s | 124–125 MiB | Sin cambio respecto a la sección 9.5 en lo que declaran |
 
-Pendiente: repetir los peores casos en el contenedor con la imagen reconstruida.
+**En el contenedor** (`dissect-worker:0.5.0` reconstruida con esta entrega, 1 CPU y 512 MiB, con las cinco fuentes y el arranque; portátil conectado a la corriente; valores por defecto, incluido el presupuesto de 65.536):
+
+| Entrada | Total | Código |
+| --- | --- | --- |
+| `argument-stretches` | 17,4 s de 30 | `call_arguments` parcial en 1.040 llamadas: `argument_instruction_limit` |
+| `argument-values` | 16,4 s | 4.096 argumentos publicados, `call_argument_limit` |
+| `jz` continuo | 17,5 s (17,7 s en la sección 9.5) | `code_time_limit` |
+| `nop` continuo | 16,1 s | `code_instruction_limit` |
+
+El paso de argumentos no mueve el peor caso: el más lento sigue siendo el recorrido del caso `jz`.
 
 ### 10.3 Explicación y glosario
 
