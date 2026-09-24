@@ -85,10 +85,32 @@ def main() -> None:
 # from the host; without a key it answers "key_missing" without touching the network.
 # DISSECT_VIRUSTOTAL=off turns the default off, and --no-virustotal one analysis.
 DEFAULT_SWITCH = "DISSECT_VIRUSTOTAL"
+# Uploading a file VirusTotal does not know is also the default (user request,
+# 2026-09-24); DISSECT_VIRUSTOTAL_UPLOAD=off or --no-upload-to-virustotal turn it off.
+UPLOAD_SWITCH = "DISSECT_VIRUSTOTAL_UPLOAD"
+UPLOAD_NOTICE = (
+    "VirusTotal: si no conoce el archivo, se sube y se espera su análisis (hasta 3 minutos)."
+    " Lo que se sube puede compartirse con sus clientes de pago; para no subirlo usa"
+    " --no-upload-to-virustotal.\n"
+)
+
+
+def _switched_on(variable: str) -> bool:
+    return os.environ.get(variable, "").strip().lower() not in ("0", "off", "no", "false")
 
 
 def virustotal_default() -> bool:
-    return os.environ.get(DEFAULT_SWITCH, "").strip().lower() not in ("0", "off", "no", "false")
+    return _switched_on(DEFAULT_SWITCH)
+
+
+def upload_default() -> bool:
+    return _switched_on(UPLOAD_SWITCH)
+
+
+def consult_virustotal(sha256: str, data: bytes | None, upload: bool) -> VirusTotalReport:
+    if upload and data is not None and virustotal_client.api_key():
+        write_utf8(UPLOAD_NOTICE, buffer=sys.stderr.buffer)
+    return virustotal_client.consult(sha256, data, upload=upload)
 
 
 @app.command()
@@ -109,12 +131,13 @@ def analyze(
         ),
     ] = None,
     upload: Annotated[
-        bool,
+        bool | None,
         typer.Option(
-            "--upload-to-virustotal",
-            help="Si VirusTotal no conoce el archivo, subirlo. Lo compartirá con sus clientes.",
+            "--upload-to-virustotal/--no-upload-to-virustotal",
+            help="Si VirusTotal no conoce el archivo, subirlo (activo por defecto salvo con"
+            " DISSECT_VIRUSTOTAL_UPLOAD=off). Lo compartirá con sus clientes de pago.",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Analiza un archivo en el worker aislado y lo explica paso a paso."""
     if json_output and markdown:
@@ -124,6 +147,10 @@ def analyze(
     if virustotal is None:
         # the JSON output is the fact report; VirusTotal has its own document
         virustotal = not json_output and virustotal_default()
+    if upload is None:
+        upload = virustotal and upload_default()
+    if upload and not virustotal:
+        raise typer.BadParameter("subir a VirusTotal exige consultarlo: quita --no-virustotal")
     try:
         limits = Limits()
         blob = read_sample(file, limits)
@@ -132,8 +159,8 @@ def analyze(
         raise fail(error) from None
     output = Output.json if json_output else Output.markdown if markdown else Output.text
     external = None
-    if virustotal or upload:
-        external = virustotal_client.consult(report.sample.sha256, blob.data, upload=upload)
+    if virustotal:
+        external = consult_virustotal(report.sample.sha256, blob.data, upload)
     emit(report, output, FRESH, report_json=True, external=external)
     raise typer.Exit(EXIT[report.analysis.status])
 
@@ -186,12 +213,13 @@ def virustotal_only(
         str | None, typer.Option("--sha256", help="Consultar este SHA-256 sin leer ningún archivo.")
     ] = None,
     upload: Annotated[
-        bool,
+        bool | None,
         typer.Option(
-            "--upload-to-virustotal",
-            help="Si VirusTotal no conoce el archivo, subirlo. Lo compartirá con sus clientes.",
+            "--upload-to-virustotal/--no-upload-to-virustotal",
+            help="Si VirusTotal no conoce el archivo, subirlo (activo por defecto salvo con"
+            " DISSECT_VIRUSTOTAL_UPLOAD=off). Lo compartirá con sus clientes de pago.",
         ),
-    ] = False,
+    ] = None,
     output: Annotated[Output, typer.Option("--format", help="text o json.")] = Output.text,
 ) -> None:
     """Consulta VirusTotal (fuente externa, no verificada por Dissect) sin analizar el archivo."""
@@ -212,7 +240,9 @@ def virustotal_only(
             raise typer.BadParameter("--sha256 debe tener 64 caracteres hexadecimales")
         if upload:
             raise typer.BadParameter("para subir hace falta el archivo, no solo su hash")
-    result = virustotal_client.consult(digest, data, upload=upload)
+    if upload is None:
+        upload = data is not None and upload_default()
+    result = consult_virustotal(digest, data, upload)
     if output is Output.json:
         write_utf8(result.model_dump_json(indent=2), buffer=sys.stdout.buffer)
     else:
