@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
 ## Estado y alcance
 
-Contrato de hechos 0.5.0 (Fases 1A, 1B, 2 y primera entrega de la 4): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y, en la rama `feat/static-api-calls`, qué funciones importadas llama el código x86/x64 y desde qué instrucción, producidos en un worker Docker aislado. Fase 3 (en la rama `feat/didactic-glossary`): un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario de 39 entradas con fuentes verificadas. No ejecuta ni emula la muestra. No incluye todavía web, LLM, VirusTotal, capa, FLOSS ni desempaquetado.
+Contrato de hechos 0.5.0 (Fases 1A, 1B, 2 y 4): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Fase 3: un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. VirusTotal se consulta por defecto como fuente externa (ver más abajo). No ejecuta ni emula la muestra. No incluye todavía web, LLM, capa, FLOSS ni desempaquetado.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -63,14 +63,17 @@ El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, ti
 
 Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md).
 
-## Qué aporta VirusTotal (opcional)
+## Qué aporta VirusTotal (activo por defecto, desactivable)
 
-Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), Dissect puede añadir los resultados de VirusTotal como **fuente externa, no verificada por Dissect**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
+Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), Dissect añade por defecto los resultados de VirusTotal como **fuente externa, no verificada por Dissect**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
 
 ```text
-uv run --frozen dissect analyze "ruta/al/archivo.exe" --virustotal
+uv run --frozen dissect analyze "ruta/al/archivo.exe"
+uv run --frozen dissect analyze "ruta/al/archivo.exe" --no-virustotal
 uv run --frozen dissect virustotal --sha256 <sha256> --format json
 ```
+
+- `analyze` y `explain` consultan VirusTotal sin opciones (decisión del usuario del 2026-09-24). No lo hacen con `--no-virustotal`, con la variable `DISSECT_VIRUSTOTAL=off` ni con `--json`, que emite el informe de hechos; el documento de VirusTotal se obtiene con `dissect virustotal --format json`. Sin clave, la sección explica cómo configurarla y no se conecta a nada; sin red, dice por qué no hay datos. En los dos casos el análisis local no cambia.
 
 - Por defecto solo se envía el SHA-256, nunca el archivo. `--upload-to-virustotal` lo sube solo si VirusTotal no lo conoce, con el nombre genérico `sample`. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: no subas archivos internos o confidenciales.
 - Todo ocurre en el host: el worker sigue sin red. Una etiqueta es la opinión de un motor, y el comportamiento se observó en los sandboxes de VirusTotal, no en tu equipo. "VirusTotal no conoce este archivo" no dice nada sobre su peligrosidad.
