@@ -6,6 +6,7 @@ re-runs the rule on the cited evidence and requires the exact same item, so a
 statement can never say more than its citations support.
 """
 
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -57,6 +58,55 @@ EXPORT_NAMES_SHOWN = 50
 # bytes the estimate approaches 8 merely because few values repeat.
 HIGH_ENTROPY = 7.2
 HIGH_ENTROPY_MIN_BYTES = 4096
+
+
+@dataclass(frozen=True)
+class Groups:
+    """The report's groups that summaries must cite whole, built once per report.
+
+    A rule re-derives its item from its citations and the report; without this index
+    each summary scanned the whole report, which made explaining a large binary
+    quadratic (shell32.dll: about 14 s). The groups are the same, in report order."""
+
+    imports: dict[tuple[str, str], tuple[str, ...]]  # (DLL raw hex, table) -> imports
+    calls: dict[str, tuple[str, ...]]  # import ID -> its calls
+    arguments: dict[str, tuple[str, ...]]  # call ID -> its arguments
+    facts: dict[str, Evidence]
+
+
+# By object identity: hashing a frozen report would walk all of it on every lookup. The
+# weak reference drops the entry when the report goes away, so an ID reused by another
+# object never returns stale groups.
+_GROUPS: dict[int, tuple[weakref.ref[Report], Groups]] = {}
+
+
+def groups(report: Report) -> Groups:
+    key = id(report)
+    entry = _GROUPS.get(key)
+    if entry is not None and entry[0]() is report:
+        return entry[1]
+    imports: dict[tuple[str, str], list[str]] = {}
+    calls: dict[str, list[str]] = {}
+    arguments: dict[str, list[str]] = {}
+    for fact in report.evidence:
+        if isinstance(fact, ImportEvidence):
+            imports.setdefault((fact.data.dll.raw_hex, fact.data.table), []).append(fact.id)
+        elif isinstance(fact, ApiCallEvidence):
+            calls.setdefault(fact.provenance.evidence_ids[0], []).append(fact.id)
+        elif isinstance(fact, CallArgumentEvidence):
+            arguments.setdefault(fact.provenance.evidence_ids[0], []).append(fact.id)
+    found = Groups(
+        {group: tuple(ids) for group, ids in imports.items()},
+        {parent: tuple(ids) for parent, ids in calls.items()},
+        {parent: tuple(ids) for parent, ids in arguments.items()},
+        {fact.id: fact for fact in report.evidence},
+    )
+
+    def forget(_: weakref.ref[Report]) -> None:
+        _GROUPS.pop(key, None)
+
+    _GROUPS[key] = (weakref.ref(report, forget), found)
+    return found
 
 
 def _section_label(section: SectionEvidence) -> str:
@@ -143,12 +193,7 @@ def _imports(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     key = (imports[0].data.dll.raw_hex, imports[0].data.table)
     if any((fact.data.dll.raw_hex, fact.data.table) != key for fact in imports):
         return None
-    group = tuple(
-        fact.id
-        for fact in report.evidence
-        if isinstance(fact, ImportEvidence) and (fact.data.dll.raw_hex, fact.data.table) == key
-    )
-    if tuple(fact.id for fact in imports) != group:
+    if tuple(fact.id for fact in imports) != groups(report).imports.get(key):
         return None  # a summary must cite the whole group, in report order
     functions = tuple(
         name(fact.data.function) if fact.data.function else f"ordinal {fact.data.ordinal}"
@@ -380,12 +425,7 @@ def _calls(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     calls = [fact for fact in cited[1:] if isinstance(fact, ApiCallEvidence)]
     if len(calls) != len(cited) - 1:
         return None
-    group = tuple(
-        fact.id
-        for fact in report.evidence
-        if isinstance(fact, ApiCallEvidence) and fact.provenance.evidence_ids == (target.id,)
-    )
-    if tuple(fact.id for fact in calls) != group:
+    if tuple(fact.id for fact in calls) != groups(report).calls.get(target.id):
         return None  # a summary must cite every call to the import, in report order
     sites = tuple(
         f"{hexadecimal(fact.location.rva or 0)} ({VIA[fact.data.via]})"
@@ -471,14 +511,9 @@ def _arguments(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     values = [fact for fact in cited[1:] if isinstance(fact, CallArgumentEvidence)]
     if len(values) != len(cited) - 1:
         return None
-    group = tuple(
-        fact.id
-        for fact in report.evidence
-        if isinstance(fact, CallArgumentEvidence) and fact.provenance.evidence_ids == (call.id,)
-    )
-    if tuple(fact.id for fact in values) != group:
+    if tuple(fact.id for fact in values) != groups(report).arguments.get(call.id):
         return None  # every published argument of the call, in report order
-    target = next((f for f in report.evidence if f.id == call.provenance.evidence_ids[0]), None)
+    target = groups(report).facts.get(call.provenance.evidence_ids[0])
     if not isinstance(target, ImportEvidence):
         return None
     shown = sorted(values, key=lambda fact: fact.data.position)

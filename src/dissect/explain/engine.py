@@ -21,7 +21,7 @@ from dissect.evidence.models import Report
 from dissect.explain.capabilities import CAPABILITIES, cases
 from dissect.explain.families import FAMILIES, family_of
 from dissect.explain.models import Explanation, Item, Note, ReportRef
-from dissect.explain.rules import RULES, executable_sections, procedure_name
+from dissect.explain.rules import RULES, executable_sections, groups, procedure_name
 from dissect.explain.text import COMPONENTS, MESSAGES, SOURCES, STATUSES, name
 from dissect.glossary.catalog import Glossary
 
@@ -207,7 +207,7 @@ def explain(report: Report, glossary: Glossary) -> Explanation:
 
 def check_item(item: Item, report: Report, glossary: Glossary) -> str | None:
     """None if the item is exactly what its rule derives from its citations."""
-    facts = {fact.id: fact for fact in report.evidence}
+    facts = groups(report).facts
     if any(ref not in facts for ref in item.evidence_ids):
         return f"{item.id} cites evidence that is not in the report"
     number = int(item.id[1:])

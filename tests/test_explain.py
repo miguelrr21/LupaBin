@@ -407,3 +407,21 @@ def test_a_call_summary_must_cite_every_call_to_its_import(reports):
     item = next(item for item in explanation.items if item.rule == "code.calls@1")
     partial = item.model_copy(update={"evidence_ids": item.evidence_ids[:-1]})
     assert check_item(partial, report, GLOSSARY) is not None
+
+
+def test_the_report_index_is_built_per_report_and_released_with_it(reports):
+    """Summaries use an index of the report's groups (performance, not meaning): it must
+    never outlive its report nor be shared between two reports."""
+    import gc
+
+    from dissect.explain import rules
+
+    one = analyze_bytes(build_code_demo())
+    two = one.model_copy()
+    assert rules.groups(one) is rules.groups(one)
+    assert rules.groups(two) is not rules.groups(one)
+    assert explain(one, GLOSSARY) == explain(two, GLOSSARY)
+    before = len(rules._GROUPS)
+    del one, two
+    gc.collect()
+    assert len(rules._GROUPS) <= before - 2
