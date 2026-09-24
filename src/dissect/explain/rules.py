@@ -488,6 +488,59 @@ def _arguments(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("code.call_argument", "code.import_call", "evidence.confidence")
 
 
+# Didactic context, not a detector (design section 12): on 2026-09-24, among 1,053
+# native benign binaries (System32 --stride 3, SysWOW64 --stride 5) with a complete
+# walk and at least 64 KiB of executable sections, 3 (0.28 %) had fewer than 20 walked
+# instructions per KiB: a resource DLL and two COM proxy stubs. Managed assemblies,
+# whose native code is only a stub, are left out; so are smaller code sections, where
+# keyboard layouts and resource DLLs make low densities common (6.7 % below 5 per KiB
+# at 4 KiB).
+WALK_DENSITY = 20
+WALK_DENSITY_MIN_BYTES = 65536
+MANAGED_ENTRIES = frozenset({"_CorDllMain", "_CorExeMain"})
+
+
+def executable_sections(report: Report) -> tuple[SectionEvidence, ...]:
+    return tuple(
+        fact
+        for fact in report.evidence
+        if isinstance(fact, SectionEvidence)
+        and "execute" in fact.data.permissions
+        and fact.data.raw_status == "present"
+    )
+
+
+def _walk_density(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """A walk that decodes few instructions for the size of its executable sections."""
+    sections = executable_sections(report)
+    if not sections or tuple(fact.id for fact in cited) != tuple(fact.id for fact in sections):
+        return None
+    runs = {run.source: run for run in report.extractor_runs}
+    if "code" not in runs or "pe" not in runs:
+        return None
+    walk = next(p for p in runs["code"].components if p.name == "disassembly")
+    tables = [p for p in runs["pe"].components if p.name.startswith("imports_")]
+    if walk.status != "complete" or any(p.status != "complete" for p in tables):
+        return None  # a partial walk is short by its limits; managed code needs imports
+    if any(
+        isinstance(fact, ImportEvidence)
+        and fact.data.function is not None
+        and name(fact.data.function) in MANAGED_ENTRIES
+        for fact in report.evidence
+    ):
+        return None  # a managed assembly's native code is only a stub
+    size = sum(fact.data.raw_size for fact in sections)
+    instructions = walk.examined or 0
+    if size < WALK_DENSITY_MIN_BYTES or instructions * 1024 >= WALK_DENSITY * size:
+        return None
+    slots: Slots = {
+        "instructions": number(instructions),
+        "kib": number(size // 1024),
+        "density": f"{instructions * 1024 / size:.1f}".replace(".", ","),
+    }
+    return slots, ("code.import_call", "analysis.coverage")
+
+
 def _code_family(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     """Every published call to an import on one curated family list."""
     calls = [fact for fact in cited if isinstance(fact, ApiCallEvidence)]
@@ -600,6 +653,17 @@ RULES: dict[str, Rule] = {
             "Estar en la lista no demuestra que el programa haga eso: muchos programas "
             "legítimos llaman a estas funciones. " + NOT_EXECUTED,
             _code_family,
+        ),
+        Rule(
+            "code.walk_density@1",
+            "El recorrido del código decodificó {instructions} instrucciones en {kib} KiB de "
+            "secciones ejecutables ({density} por KiB). En binarios benignos medidos con al "
+            "menos 64 KiB de código nativo, solo el 0,28 % se queda por debajo de 20 por KiB.",
+            "No demuestra empaquetado ni cifrado: también ocurre con secciones que guardan "
+            "sobre todo datos o con código al que solo se llega por saltos indirectos. Pero "
+            "un binario empaquetado muestra poco más que su desempaquetador hasta que se "
+            "ejecuta, y el recorrido estático no puede ir más allá.",
+            _walk_density,
         ),
         Rule(
             "code.resolved_names@1",

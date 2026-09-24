@@ -19,7 +19,7 @@ from dissect.evidence.facts import (
 from dissect.evidence.models import Report
 from dissect.explain.families import FAMILIES, family_of
 from dissect.explain.models import Explanation, Item, Note, ReportRef
-from dissect.explain.rules import RULES, procedure_name
+from dissect.explain.rules import RULES, executable_sections, procedure_name
 from dissect.explain.text import COMPONENTS, MESSAGES, SOURCES, STATUSES, name
 from dissect.glossary.catalog import Glossary
 
@@ -118,6 +118,9 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
             values.setdefault(fact.provenance.evidence_ids[0], []).append(fact)
     for call_id, group in values.items():
         yield "code.arguments@1", (facts[call_id], *group)
+    sections = executable_sections(report)
+    if sections and RULES["code.walk_density@1"].derive(sections, report) is not None:
+        yield "code.walk_density@1", sections
     resolved = tuple(fact for fact in evidence if procedure_name(fact, facts) is not None)
     if resolved:
         yield "code.resolved_names@1", resolved
