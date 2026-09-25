@@ -64,7 +64,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.6.0"] = "0.6.0"
+    version: Literal["0.7.0"] = "0.7.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -129,7 +129,7 @@ class ExtractorError(Model):
 
 
 class Report(Model):
-    schema_version: Literal["0.6.0"] = "0.6.0"
+    schema_version: Literal["0.7.0"] = "0.7.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
