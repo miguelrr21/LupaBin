@@ -2,6 +2,7 @@
 !pyproject.toml
 !uv.lock
 !LICENSE
+!NOTICE
 !README.md
 !src/
 !src/**

@@ -238,6 +238,7 @@ button.chip:hover { text-decoration: underline; }
 .absence { color: var(--muted); font-size: .9rem; margin: 1rem 0; }
 .footer { border-top: 1px solid var(--border); padding: 18px 0 28px; color: var(--muted); font-size: .85rem; }
 .footer p { margin: 0; max-width: 820px; }
+.footer .credit { margin-top: .5rem; }
 
 @media (max-width: 640px) {
   .topbar-note { display: none; }
