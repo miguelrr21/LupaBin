@@ -1,75 +1,99 @@
-# Desplegar la web de Dissect en una Raspberry Pi
+# Desplegar la web de Dissect en un servidor
 
-Esta guía es para quien no ha desplegado nunca un servicio. Al terminar tendrás la web funcionando en tu red de casa, en `http://dissect.local`. El último apartado explica cómo publicarla en Internet cuando compres un dominio.
+Esta guía es para quien no ha desplegado nunca un servicio. Al terminar tendrás la web pública en la IP de tu servidor y, si quieres, en un dominio con HTTPS.
 
-Qué se instala y por qué está en `docs/superpowers/specs/2026-09-25-web-design.md`. En resumen: una aplicación web (`dissect-web`) que escucha solo dentro de la Raspberry Pi, Caddy delante para recibir las visitas y Docker para abrir cada archivo en un contenedor nuevo, sin red y sin privilegios. La muestra nunca se ejecuta y no se guarda nada.
+Qué se instala y por qué está en `docs/superpowers/specs/2026-09-25-web-design.md`. En resumen:
+- una aplicación web (`dissect-web`) que solo escucha dentro del servidor;
+- Caddy delante, que recibe las visitas y gestiona el HTTPS;
+- Docker, que abre cada archivo en un contenedor nuevo, sin red y sin privilegios.
 
-## 1. Qué necesitas
+La muestra nunca se ejecuta y no se guarda nada.
 
-- Una Raspberry Pi 4 o 5 con **4 GB** de memoria como mínimo (8 GB mejor). Cada análisis puede usar hasta 512 MiB.
-- Una tarjeta microSD de 32 GB o más (mejor aún un SSD por USB).
-- **Raspberry Pi OS Lite de 64 bits** (Bookworm). Tiene que ser de 64 bits: la imagen del análisis se construye para `aarch64`.
-- Cable de red, o wifi configurado.
+**Usa un servidor dedicado, no una máquina de tu casa.** La web recibe archivos de desconocidos. Aunque cada análisis está aislado, el servicio controla Docker, y eso equivale a administrador en esa máquina. Si algo fallara, el daño debe quedarse en un servidor que no guarda nada más y que no está en tu red.
 
-## 2. Preparar el sistema
+## 1. Elegir servidor
 
-1. En tu PC, instala **Raspberry Pi Imager** (raspberrypi.com/software) y elige: tu modelo, *Raspberry Pi OS Lite (64-bit)* y tu tarjeta.
-2. En "Editar ajustes" (el engranaje):
-   - nombre del equipo: `dissect`;
-   - crea tu usuario y contraseña;
-   - en *Servicios*, **activa SSH**.
-3. Graba la tarjeta, ponla en la Pi y enciéndela. Espera un par de minutos.
-4. Desde tu PC (PowerShell o Terminal), conéctate:
-   ```text
-   ssh tu_usuario@dissect.local
-   ```
-   Si no encuentra `dissect.local`, busca la IP de la Pi en la página de tu router y usa `ssh tu_usuario@192.168.x.y`.
-5. Actualiza el sistema:
-   ```text
-   sudo apt update && sudo apt full-upgrade -y && sudo reboot
-   ```
+Hace falta una **máquina virtual (VPS) con Linux**. Servicios como Render, Railway, Fly o Vercel no valen, porque no permiten lanzar contenedores Docker desde la aplicación.
 
-## 3. Llevar el código a la Pi
+| Opción | Coste | Máquina | Comentario |
+| --- | --- | --- | --- |
+| **Oracle Cloud Free Tier** | Gratis, sin fecha de fin | ARM (Ampere A1), hasta 4 núcleos y 24 GB en total | Recomendada si quieres gasto cero. El alta pide tarjeta para verificar, pero no cobra. A veces no hay capacidad ARM libre en la región (ver 2.1). |
+| **Hetzner Cloud CAX11** | Unos 4 €/mes | ARM, 2 núcleos y 4 GB | La más sencilla, en la UE. Hay equivalentes x86 (CX22) por un precio parecido. |
+| Cualquier otro VPS | Varía | x86_64 o ARM64, 2 GB como mínimo | DigitalOcean, OVH, Contabo… El instalador funciona igual. |
 
-El repositorio es privado. Elige una opción.
+Sistemas soportados: **Ubuntu 24.04 o 22.04, o Debian 12**, en x86_64 o ARM64.
 
-**A. Con git y un token de GitHub** (más cómodo para actualizar después):
-1. En GitHub: *Settings → Developer settings → Personal access tokens → Fine-grained tokens*. Crea un token con acceso de **solo lectura** (*Contents: Read-only*) al repositorio `Dissect`.
-2. En la Pi:
-   ```text
-   sudo apt install -y git
-   git clone https://github.com/miguelrr21/Dissect.git
-   ```
-   Como usuario pon el tuyo de GitHub y, como contraseña, el token.
+## 2. Crear el servidor
 
-**B. Copiándolo desde tu PC**, en PowerShell, desde la carpeta del proyecto:
+### 2.1 Oracle Cloud Free Tier
+
+1. Date de alta en cloud.oracle.com ("Start for free"). Elige una región cercana; en la cuenta gratuita no se puede cambiar después.
+2. En la consola: *Compute → Instances → Create instance*.
+   - **Image:** Canonical Ubuntu 24.04.
+   - **Shape:** *Ampere*, `VM.Standard.A1.Flex`, con 2 OCPU y 12 GB. Entra en lo gratuito, y aún te sobra para otra máquina.
+   - **SSH keys:** "Generate a key pair" y **descarga la clave privada**. Sin ella no podrás entrar.
+   - Si sale *Out of capacity*, prueba otro *Availability domain* o inténtalo más tarde. Es habitual con las máquinas ARM gratuitas.
+3. Abre los puertos web en la red de Oracle: en la instancia, entra en la *Subnet* y luego en su *Security List*, y pulsa *Add Ingress Rules*:
+   - Source CIDR `0.0.0.0/0`, protocolo TCP, puerto de destino `80`;
+   - otra regla igual con el puerto `443`.
+4. Apunta la **Public IP address** de la instancia.
+5. Oracle puede recuperar las instancias gratuitas que pasen mucho tiempo casi sin uso. Si te pasa, convertir la cuenta a *Pay As You Go* lo evita y sigue sin cobrar lo que esté dentro de lo gratuito. Pon una alerta de presupuesto por si acaso.
+
+Las imágenes de Ubuntu de Oracle bloquean con iptables todo salvo SSH, aunque abras los puertos en la consola. El instalador lo detecta y abre el 80 y el 443.
+
+### 2.2 Hetzner Cloud
+
+1. Date de alta en hetzner.com/cloud y crea un proyecto.
+2. *Add Server*: una ubicación en la UE, **Ubuntu 24.04** y el tipo **CAX11**. En *SSH keys*, añade tu clave pública (si no tienes, créala con `ssh-keygen -t ed25519`).
+3. En *Firewalls*, crea uno con reglas de entrada para TCP 22, 80 y 443, y aplícalo al servidor.
+4. Apunta la IPv4 pública.
+
+## 3. Entrar al servidor
+
+Desde tu PC (PowerShell o Terminal):
+```text
+ssh -i ruta/a/tu_clave ubuntu@IP_DEL_SERVIDOR      # Oracle (usuario ubuntu)
+ssh root@IP_DEL_SERVIDOR                            # Hetzner (usuario root)
+```
+
+Actualiza el sistema y reinicia:
+```text
+sudo apt update && sudo apt full-upgrade -y && sudo reboot
+```
+
+## 4. Llevar el código
+
+Si el repositorio ya es público:
+```text
+sudo apt install -y git
+git clone https://github.com/miguelrr21/Dissect.git
+```
+
+Si todavía es privado, usa como contraseña un token de GitHub de **solo lectura** (*Settings → Developer settings → Fine-grained tokens*, *Contents: Read-only*). También puedes copiarlo desde tu PC:
 ```text
 git archive --format=tar.gz -o dissect.tar.gz HEAD
-scp dissect.tar.gz tu_usuario@dissect.local:~
-ssh tu_usuario@dissect.local "mkdir -p Dissect && tar -xzf dissect.tar.gz -C Dissect"
+scp dissect.tar.gz ubuntu@IP_DEL_SERVIDOR:~
+ssh ubuntu@IP_DEL_SERVIDOR "mkdir -p Dissect && tar -xzf dissect.tar.gz -C Dissect"
 ```
 
-## 4. Instalar
+## 5. Instalar
 
-En la Pi:
 ```text
 cd ~/Dissect
-sudo bash deploy/raspberry-pi/install.sh
+sudo bash deploy/server/install.sh
 ```
 
-La primera vez tarda entre 10 y 20 minutos: descarga Python 3.12 y construye la imagen del análisis. El script:
-- instala Docker y Caddy;
-- instala uv (el gestor de Python del proyecto), comprobando su firma SHA-256;
-- copia el código a `/opt/dissect`;
-- crea el usuario de servicio `dissect`;
-- construye la imagen `dissect-worker:0.6.0`;
-- arranca el servicio `dissect-web` y configura Caddy en el puerto 80.
+La primera vez tarda entre 10 y 20 minutos. El script:
+- instala Docker, Caddy y las actualizaciones automáticas de seguridad;
+- instala uv (el gestor de Python del proyecto), comprobando su SHA-256;
+- copia el código a `/opt/dissect` y construye la imagen del análisis;
+- crea el usuario de servicio `dissect` y ajusta cuántos análisis a la vez caben en la máquina;
+- arranca el servicio y Caddy, y abre los puertos si el sistema los bloquea.
 
-Al final escribe la dirección de la web. Ábrela desde cualquier equipo de tu red: `http://dissect.local`.
+Al final escribe la dirección: abre `http://IP_DEL_SERVIDOR`.
 
-## 5. VirusTotal (opcional)
+## 6. VirusTotal (opcional)
 
-Sin clave, la web analiza igual y no contacta con VirusTotal. Para activarlo:
 ```text
 sudo nano /etc/dissect/web.env
 ```
@@ -78,66 +102,66 @@ Escribe tu clave en `VT_API_KEY=...`, guarda (Ctrl+O, Enter, Ctrl+X) y reinicia:
 sudo systemctl restart dissect-web
 ```
 
-Por defecto funciona como la CLI: consulta el SHA-256 y, si VirusTotal no conoce el archivo, **lo sube**. La web lo avisa y deja desmarcar la subida. Ten en cuenta dos cosas:
-- **La cuota es la de tu clave.** La pública permite 4 consultas por minuto y 500 al día, y la gastarán tus visitantes.
-- **Los archivos serían de tus visitantes.** Lo que se sube puede compartirse con los clientes de pago de VirusTotal. Si prefieres no subir nunca nada, pon `DISSECT_VIRUSTOTAL_UPLOAD=off`.
+La web funciona como la CLI: consulta el SHA-256 y, si VirusTotal no conoce el archivo, lo sube y sigue su análisis. Antes de activarlo:
+- **La cuota se comparte entre todos los visitantes.** El servidor reparte la de tu clave: con la API pública, 4 peticiones por minuto y 500 al día (`DISSECT_VT_PER_MINUTE` y `DISSECT_VT_PER_DAY`). Si se agota, la web lo dice y el análisis de Dissect sigue igual. Si consigues una clave con más cuota, sube esos valores.
+- **Los archivos subidos son de tus visitantes**, y VirusTotal puede compartirlos con sus clientes de pago. La web lo avisa junto a la casilla. Para no subir nunca nada: `DISSECT_VIRUSTOTAL_UPLOAD=off`.
 
-## 6. Límites de la web pública
+## 7. Dominio y HTTPS (gratis con DuckDNS)
 
-En el mismo `/etc/dissect/web.env`:
+Sin dominio, la web funciona por HTTP en la IP. Para tener HTTPS:
+1. **Dominio gratuito:** entra en duckdns.org con tu cuenta de GitHub o Google, crea un subdominio (por ejemplo `dissect-tutor`) y pon la IP de tu servidor. También vale un dominio comprado, con un registro **A** hacia esa IP.
+2. **Edita Caddy:**
+   ```text
+   sudo nano /etc/caddy/Caddyfile
+   ```
+   Cambia `:80 {` por `dissect-tutor.duckdns.org {` (o tu dominio) y recarga:
+   ```text
+   sudo systemctl reload caddy
+   ```
+   Caddy pedirá y renovará solo el certificado, y redirigirá HTTP a HTTPS.
+
+## 8. Límites de uso
+
+En `/etc/dissect/web.env`:
 
 | Variable | Por defecto | Qué hace |
 | --- | --- | --- |
 | `DISSECT_WEB_RATE` | `6/600` | Análisis por IP: 6 cada 600 segundos. |
-| `DISSECT_WEB_CONCURRENCY` | `1` | Análisis a la vez: 1 con 4 GB, 2 con 8 GB. |
+| `DISSECT_WEB_CONCURRENCY` | según la máquina (1 a 3) | Análisis a la vez; cada uno usa hasta 512 MiB y 1 CPU. |
 | `DISSECT_WEB_QUEUE_SECONDS` | `60` | Cuánto espera una petición antes de responder "ocupado". |
+| `DISSECT_VT_PER_MINUTE`, `DISSECT_VT_PER_DAY` | `4`, `500` | Peticiones a VirusTotal para todo el servidor. |
 
 El tamaño máximo de archivo es 20 MiB.
 
-## 7. Comprobar que todo va bien
+## 9. Comprobar que todo va bien
 
 ```text
 systemctl status dissect-web caddy docker
 curl http://127.0.0.1:8080/api/health
 sudo journalctl -u dissect-web -n 50
 ```
-
 `/api/health` responde `{"status":"ok",...}` si Docker y la imagen están disponibles. Los registros no guardan las IP de los visitantes ni los archivos.
 
-## 8. Actualizar
+## 10. Actualizar
 
-Con la opción A:
 ```text
-cd ~/Dissect && git pull && sudo bash deploy/raspberry-pi/update.sh
+cd ~/Dissect && git pull && sudo bash deploy/server/update.sh
 ```
-Con la opción B, repite la copia y ejecuta `update.sh`. La actualización conserva tu `web.env` y tu `Caddyfile`.
+La actualización conserva tu `web.env` y un `Caddyfile` con tu dominio.
 
-## 9. Publicarla en Internet con un dominio (más adelante)
+## 11. Seguridad del servidor
 
-1. **Compra un dominio** (por ejemplo, en Cloudflare, Namecheap o un registrador español) y crea un registro **A** con la IP pública de tu casa. Puedes verla en ifconfig.me. Si tu IP cambia a menudo, usa un servicio de DNS dinámico o la API de tu registrador.
-2. **Reserva en el router una IP fija para la Pi**, en el apartado DHCP.
-3. **Redirige en el router los puertos 80 y 443** (TCP) hacia la IP de la Pi.
-4. **Edita Caddy**:
-   ```text
-   sudo nano /etc/caddy/Caddyfile
-   ```
-   Cambia `:80 {` por `dissect.tudominio.es {` y recarga:
-   ```text
-   sudo systemctl reload caddy
-   ```
-   Caddy pedirá y renovará solo el certificado HTTPS.
-5. Si tu operador usa **CG-NAT** (la IP del router no coincide con ifconfig.me), no podrás abrir puertos. En ese caso, una alternativa es un túnel como Cloudflare Tunnel: requiere configurarlo aparte y no lo instala este script.
+- **Entra solo con clave SSH.** Oracle y Hetzner lo configuran así por defecto; no actives contraseñas.
+- **No guardes nada más en ese servidor** y no lo conectes a otras redes tuyas.
+- **Las actualizaciones de seguridad están activadas** (`unattended-upgrades`). Reinicia de vez en cuando para aplicar las del kernel: `sudo reboot`.
+- **El servicio está aislado.** Escucha solo en `127.0.0.1`, systemd lo encierra, y cada análisis corre en un contenedor sin red, de solo lectura y con límites.
+- **Si te molestan los intentos de acceso por SSH**, `sudo apt install fail2ban` los frena.
 
-**Antes de abrirla a Internet:**
-- Activa las actualizaciones automáticas de seguridad: `sudo apt install unattended-upgrades`.
-- Revisa los límites del apartado 6.
-- Recuerda que el usuario `dissect` pertenece al grupo `docker`, que en esa máquina equivale a root. El servicio solo escucha en `127.0.0.1` y systemd lo aísla, pero conviene que la Pi no guarde nada más importante.
-
-## 10. Desinstalar
+## 12. Desinstalar
 
 ```text
 sudo systemctl disable --now dissect-web
 sudo rm -rf /opt/dissect /etc/dissect /var/lib/dissect /etc/systemd/system/dissect-web.service
 sudo cp /etc/caddy/Caddyfile.antes-de-dissect /etc/caddy/Caddyfile 2>/dev/null; sudo systemctl reload caddy
-docker rmi dissect-worker:0.6.0
+sudo docker rmi dissect-worker:0.6.0
 ```

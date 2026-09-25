@@ -1,6 +1,6 @@
 [Unit]
 Description=Dissect web: static analysis of Windows executables (the sample is never run)
-Documentation=file:///opt/dissect/docs/deploy-raspberry-pi.md
+Documentation=file:///opt/dissect/docs/deploy.md
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
