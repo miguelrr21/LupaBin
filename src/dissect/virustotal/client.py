@@ -143,9 +143,8 @@ class Client:
             problem = "invalid_response"
         return self._report(sha256, status="found", uploaded=uploaded, problem=problem, **fields)
 
-    def upload(
-        self, data: bytes, sha256: str, *, wait_seconds: float = 180, interval: float = 20
-    ) -> VirusTotalReport:
+    def send(self, data: bytes) -> str:
+        """Upload a file; returns the ID of the analysis VirusTotal queues for it."""
         if len(data) > MAX_UPLOAD:
             raise VirusTotalError("too_large")
         boundary = secrets.token_hex(16)
@@ -163,14 +162,70 @@ class Client:
         ident = analysis_id(payload) if status == 200 else None
         if ident is None:
             raise VirusTotalError("invalid_response")
+        return ident
+
+    def follow(self, sha256: str, ident: str) -> VirusTotalReport:
+        """ "queued" while the uploaded file's analysis runs; its results once completed."""
+        status, payload = self._call("GET", f"/analyses/{ident}")
+        if status == 200 and analysis_status(payload) == "completed":
+            return self.lookup(sha256, uploaded=True)
+        return self._report(sha256, status="queued", uploaded=True)
+
+    def upload(
+        self, data: bytes, sha256: str, *, wait_seconds: float = 180, interval: float = 20
+    ) -> VirusTotalReport:
+        ident = self.send(data)
         waited = 0.0
         while waited < wait_seconds:
             self._sleep(interval)  # public API: 4 requests per minute
             waited += interval
-            status, payload = self._call("GET", f"/analyses/{ident}")
-            if status == 200 and analysis_status(payload) == "completed":
-                return self.lookup(sha256, uploaded=True)
+            report = self.follow(sha256, ident)
+            if report.status != "queued":
+                return report
         return self._report(sha256, status="queued", uploaded=True)
+
+
+def submit(
+    sha256: str,
+    data: bytes,
+    *,
+    upload: bool = True,
+    transport: Transport = urllib_transport,
+    environ: dict[str, str] | None = None,
+) -> tuple[VirusTotalReport, str | None]:
+    """Look the file up and, if VirusTotal does not know it and `upload`, send it without
+    waiting. Returns the report and, after an upload, the analysis ID to follow (the web
+    shows the report at once and follows VirusTotal's analysis apart). Never raises."""
+    key = api_key(environ)
+    client = Client(key, transport)
+    if not key:
+        return client._report(sha256, status="unavailable", problem="key_missing"), None
+    try:
+        report = client.lookup(sha256)
+        if report.status != "not_found" or not upload:
+            return report, None
+        ident = client.send(data)
+        return client._report(sha256, status="queued", uploaded=True), ident
+    except VirusTotalError as error:
+        return client._report(sha256, status="unavailable", problem=error.problem), None
+
+
+def follow(
+    sha256: str,
+    ident: str,
+    *,
+    transport: Transport = urllib_transport,
+    environ: dict[str, str] | None = None,
+) -> VirusTotalReport:
+    """One check of an uploaded file's analysis: "queued", or its results. Never raises."""
+    key = api_key(environ)
+    client = Client(key, transport)
+    if not key:
+        return client._report(sha256, status="unavailable", problem="key_missing")
+    try:
+        return client.follow(sha256, ident)
+    except VirusTotalError as error:
+        return client._report(sha256, status="unavailable", problem=error.problem)
 
 
 MAX_ENV_FILE = 64 * 1024

@@ -47,14 +47,22 @@ La IP es la de la conexión, salvo con `DISSECT_WEB_TRUST_PROXY=1`: entonces se 
 
 Como en la CLI (decisión del usuario): si hay clave (`VT_API_KEY`), se consulta por SHA-256 y, si VirusTotal no conoce el archivo, se sube. La página lo dice antes de enviar, junto al botón: el contenido subido puede compartirse con los clientes de pago de VirusTotal. Dos casillas, marcadas por defecto, permiten no consultar o no subir para ese análisis. `DISSECT_VIRUSTOTAL=off` y `DISSECT_VIRUSTOTAL_UPLOAD=off` lo desactivan para todo el servidor, y entonces las casillas no aparecen. La cuota de la clave es del dueño del servidor (la pública: 4 por minuto y 500 al día); agotarla se comunica como tal.
 
-**Revisión 2 (2026-09-25), tras probarla el usuario:** con la subida marcada, la web esperaba hasta 3 minutos el análisis de VirusTotal antes de mostrar nada, y parecía colgada. Cambios:
-- `POST /api/analyze` ya no consulta VirusTotal: el informe sale en cuanto termina el worker.
-- La página consulta aparte, con `POST /api/virustotal?upload=0|1` (el mismo archivo, que el navegador aún tiene). Si hay que subirlo, se sube **sin esperar** (`wait_seconds=0`) y la respuesta es "en cola".
-- `GET /api/virustotal/{sha256}` vuelve a consultar solo por hash. La pestaña lo hace sola cada 30 s, hasta 20 veces, y tiene un botón para consultar a mano.
-- Estas consultas tienen su propio límite por IP (5 veces el de los análisis), porque gastan la cuota del dueño del servidor.
-- Medido en local: análisis de la muestra de demostración en 5,9 s (en frío); VirusTotal, 0,4 s si no conoce el archivo y 1,4 s con `notepad.exe`.
+**Revisión 2 (2026-09-25), tras probarla el usuario:** con la subida marcada, la web esperaba hasta 3 minutos el análisis de VirusTotal antes de mostrar nada, y parecía colgada.
 
-## 6. Seguridad de la página
+**Revisión 3 (2026-09-25), petición del usuario: "que muestre el informe, que se vea en otro lado que se está analizando en VirusTotal, y que se analice si se marca; menos fricción".**
+- **Una sola casilla**, "Analizar también en VirusTotal": consulta por SHA-256 y, si VirusTotal no conoce el archivo, lo sube (con el aviso al lado). Si el servidor prohíbe subir, la casilla dice "Consultar VirusTotal por el SHA-256".
+- **El informe sale en cuanto termina el worker.** `POST /api/analyze` ya no consulta VirusTotal.
+- **La página consulta aparte:** `POST /api/virustotal?upload=1` (`client.submit`) busca el archivo y, si no lo conoce, lo sube sin esperar. La respuesta lleva el identificador del análisis de VirusTotal.
+- **Se sigue ese análisis, no el hash:** la página llama cada 20 s (el límite de la API pública son 4 por minuto) a `GET /api/virustotal/{sha256}?analysis=<id>` (`client.follow`). Mientras VirusTotal no dé el análisis por completado responde "en cola"; al completarse, trae el resultado. Consultar solo por hash podía dar el archivo por encontrado antes de que terminara su análisis.
+- **Estado visible en la cabecera del resultado**, fuera de las pestañas:
+  - "consultando";
+  - "archivo subido, lo está analizando (m:ss)";
+  - al terminar, "N de M motores lo marcan como malicioso", en rojo o verde y con enlace al detalle;
+  - pasados 15 minutos, "sigue analizándolo".
+- **Límites por IP propios:** consultas, 5 veces el de los análisis; seguimiento, suficiente para 15 minutos cada 20 s.
+- La CLI no cambia: sigue esperando hasta 3 minutos tras subir.
+
+## 6. Seguridad de la página## 6. Seguridad de la página
 
 - Todo texto que procede de la muestra o de VirusTotal pasa por `render.safe.visible` en el servidor (controles, bidi e invisibles como escapes visibles) y el navegador lo inserta **solo con `textContent`**: el JavaScript no usa `innerHTML` (un test lo comprueba).
 - Cabeceras: CSP sin nada en línea (`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin` y `Permissions-Policy` restrictiva; la API responde con `Cache-Control: no-store`.
