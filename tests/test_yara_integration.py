@@ -17,7 +17,7 @@ def yara_payload(payload):
 
 def test_default_pipeline_has_five_sources_and_yara_evidence():
     report = analyze_bytes(build_demo())
-    assert report.schema_version == "0.6.0"
+    assert report.schema_version == "0.7.0"
     assert [run.source for run in report.extractor_runs] == [
         "pe",
         "strings",

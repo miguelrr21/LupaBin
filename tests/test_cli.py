@@ -120,7 +120,7 @@ def test_explain_rejects_a_report_that_the_sample_contradicts(tmp_path, monkeypa
 
 
 def test_explain_rejects_what_is_not_a_valid_report(tmp_path):
-    for content in ("not json", '{"schema_version": "0.6.0"}', ""):
+    for content in ("not json", '{"schema_version": "0.7.0"}', ""):
         path = tmp_path / "bad.json"
         path.write_text(content, encoding="utf-8")
         result = runner.invoke(app, ["explain", str(path)])
