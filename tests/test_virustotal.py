@@ -153,6 +153,22 @@ def test_upload_that_does_not_finish_in_time_is_reported_as_queued():
     assert report.status == "queued" and report.uploaded
 
 
+def test_submit_uploads_an_unknown_file_and_returns_the_analysis_to_follow():
+    from dissect.virustotal.client import follow, submit
+
+    routes = lookup_routes(file=(404, {}))
+    routes[("POST", "/files")] = [(200, {"data": {"id": "abc=="}})]
+    routes[("GET", "/analyses/abc==")] = [(200, {"data": {"attributes": {"status": "queued"}}})]
+    report, analysis = submit(SHA, b"x", transport=Fake(routes), environ=KEY)
+    assert report.status == "queued" and report.uploaded and analysis == "abc=="
+    queued = follow(SHA, "abc==", transport=Fake(routes), environ=KEY)
+    assert queued.status == "queued"
+    known, analysis = submit(SHA, b"x", upload=False, transport=Fake(routes), environ=KEY)
+    assert known.status == "not_found" and analysis is None
+    missing, analysis = submit(SHA, b"x", transport=Fake(routes), environ={})
+    assert missing.problem == "key_missing" and analysis is None
+
+
 def test_an_upload_that_must_not_wait_returns_queued_at_once():
     """The web uploads without waiting and looks the hash up again later."""
     routes = lookup_routes(file=(404, {}))

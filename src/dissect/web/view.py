@@ -23,9 +23,10 @@ NOT_FOUND = (
 )
 KEY_MISSING = "Este servidor no tiene configurada una clave de API de VirusTotal."
 QUEUED = (
-    "Dissect acaba de subir el archivo a VirusTotal porque no lo conocía, y su análisis está "
-    "en cola: suele tardar unos minutos. Esta pestaña vuelve a consultar sola cada 30 "
-    "segundos. Lo subido puede compartirse con los clientes de pago de VirusTotal."
+    "Dissect ha subido el archivo a VirusTotal porque no lo conocía, y VirusTotal lo está "
+    "analizando; suele tardar unos minutos. La página sigue su análisis y muestra el "
+    "resultado en cuanto termine. Lo subido puede compartirse con los clientes de pago de "
+    "VirusTotal."
 )
 
 
