@@ -1,0 +1,1 @@
+rule lupabin_training_marker { strings: $marker = "LUPABIN PRACTICE" ascii wide condition: $marker }

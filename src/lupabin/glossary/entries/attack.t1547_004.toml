@@ -1,0 +1,11 @@
+id = "attack.t1547_004"
+title = "T1547.004: Winlogon Helper DLL"
+revision = "1.0.0"
+lang = "es"
+summary = "Técnica de persistencia de ATT&CK: cambiar valores de la clave Winlogon del registro para que se ejecuten programas o se carguen DLL al iniciar sesión."
+body = "Winlogon lee de HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon (también a través de Wow6432Node) y de la clave equivalente de HKCU los valores Userinit (el programa de inicialización del usuario) y Shell (el shell del sistema, normalmente explorer.exe), y la subclave Notify con paquetes de notificación.\n\nLupaBin asocia esta técnica solo a una llamada que escribe el valor Shell o Userinit, o en la subclave Notify o una suya (RegSetKeyValue). Otros valores de Winlogon, o abrir la clave para escribir, se describen sin técnica."
+not_proven = "Componentes de Windows y programas de administración legítimos escriben en la clave Winlogon."
+related = ["attack.technique", "api.family.registry"]
+sources = [
+  { title = "Boot or Logon Autostart Execution: Winlogon Helper DLL", publisher = "MITRE ATT&CK", url = "https://attack.mitre.org/techniques/T1547/004/", verified_on = 2026-09-24 },
+]

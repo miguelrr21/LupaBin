@@ -2,11 +2,11 @@ import re
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.explain.engine import explain, validate
-from dissect.glossary.catalog import load_glossary
-from dissect.render.document import to_markdown, to_text
-from dissect.render.safe import code_span, markdown_text, visible
+from lupabin.analysis import analyze_bytes
+from lupabin.explain.engine import explain, validate
+from lupabin.glossary.catalog import load_glossary
+from lupabin.render.document import to_markdown, to_text
+from lupabin.render.safe import code_span, markdown_text, visible
 from tests.fixtures.pe_builder import build_decode_demo, build_demo, build_pe
 
 GLOSSARY = load_glossary()

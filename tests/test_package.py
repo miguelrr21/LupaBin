@@ -1,4 +1,4 @@
 def test_package_version():
-    import dissect
+    import lupabin
 
-    assert dissect.__version__ == "0.6.0"
+    assert lupabin.__version__ == "0.6.0"

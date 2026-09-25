@@ -1,4 +1,4 @@
-# Dissect: contrato de evidencias
+# LupaBin: contrato de evidencias
 
 ## Contrato activo 0.6.0
 
@@ -33,20 +33,20 @@ Cambio en un tipo existente: `import` gana `iat_rva`, la dirección de su casill
 | `data.helper` | Solo `thunk` y `register`: el `jmp` del thunk o la carga del registro, con `offset`, `rva` y `raw_hex`. |
 | `provenance.evidence_ids` | Exactamente el `import` al que llama. |
 
-**Verificación en el propio informe.** Sin la muestra, el modelo ya vuelve a derivar la casilla desde los bytes citados con las formas canónicas de `src/dissect/evidence/call_forms.py` y exige que sea el `iat_rva` del import citado. En x86 la dirección es absoluta (menos la base de imagen de la cabecera); en x64, relativa a la instrucción siguiente. En un thunk, el destino del `call` debe ser el `jmp` citado; en la vía por registro, la carga debe terminar justo donde empieza la llamada y usar el mismo registro. También comprueba que cada `offset` corresponde a su `rva` según la tabla de secciones.
+**Verificación en el propio informe.** Sin la muestra, el modelo ya vuelve a derivar la casilla desde los bytes citados con las formas canónicas de `src/lupabin/evidence/call_forms.py` y exige que sea el `iat_rva` del import citado. En x86 la dirección es absoluta (menos la base de imagen de la cabecera); en x64, relativa a la instrucción siguiente. En un thunk, el destino del `call` debe ser el `jmp` citado; en la vía por registro, la carga debe terminar justo donde empieza la llamada y usar el mismo registro. También comprueba que cada `offset` corresponde a su `rva` según la tabla de secciones.
 
-**Verificación en el host.** El launcher y `dissect explain --sample` comparan los bytes de cada instrucción citada con los de la muestra. El host no lleva desensamblador: una prueba comprueba que ni la CLI ni el runner cargan capstone. Lo que ninguna comprobación puede demostrar es que el recorrido llegó a esa instrucción (y no a unos bytes que solo lo parecen). Eso es una regla del worker, probada con casos negativos y medida en binarios benignos.
+**Verificación en el host.** El launcher y `lupabin explain --sample` comparan los bytes de cada instrucción citada con los de la muestra. El host no lleva desensamblador: una prueba comprueba que ni la CLI ni el runner cargan capstone. Lo que ninguna comprobación puede demostrar es que el recorrido llegó a esa instrucción (y no a unos bytes que solo lo parecen). Eso es una regla del worker, probada con casos negativos y medida en binarios benignos.
 
-`call_argument` (entrega 2) es `inferred`: afirma que una instrucción del mismo tramo lineal que la llamada, anterior a ella, fija ese argumento a una constante, y que el recorrido no vio nada que lo cambie antes de la llamada. Solo se publica para las funciones del catálogo `dissect-api-semantics-v3` (`src/dissect/evidence/api_catalog.py`: las 72 funciones de la sección 4 del diseño, de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía, importadas de una DLL que su página de Microsoft Learn declara como exportadora) y solo si el valor es del tipo del parámetro. Campos:
+`call_argument` (entrega 2) es `inferred`: afirma que una instrucción del mismo tramo lineal que la llamada, anterior a ella, fija ese argumento a una constante, y que el recorrido no vio nada que lo cambie antes de la llamada. Solo se publica para las funciones del catálogo `lupabin-api-semantics-v3` (`src/lupabin/evidence/api_catalog.py`: las 72 funciones de la sección 4 del diseño, de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía, importadas de una DLL que su página de Microsoft Learn declara como exportadora) y solo si el valor es del tipo del parámetro. Campos:
 
 | Campo | Contenido |
 | --- | --- |
 | `component` | `call_arguments`. |
 | `location` | La instrucción que fija el argumento, en la misma sección ejecutable que la llamada y antes de ella. |
-| `data.catalog`, `data.method` | `dissect-api-semantics-v4` (v1: `RegOpenKeyExA/W`; v2: más `RegCreateKeyExA/W`; v3: más `GetProcAddress`; v4: el resto de la sección 4. Ninguna versión anterior llegó a publicarse). Método `block-constant-v1` (registro o `push`) o `stack-slot-v1` (ranura de la pila en x64, del quinto argumento en adelante). |
+| `data.catalog`, `data.method` | `lupabin-api-semantics-v4` (v1: `RegOpenKeyExA/W`; v2: más `RegCreateKeyExA/W`; v3: más `GetProcAddress`; v4: el resto de la sección 4. Ninguna versión anterior llegó a publicarse). Método `block-constant-v1` (registro o `push`) o `stack-slot-v1` (ranura de la pila en x64, del quinto argumento en adelante). |
 | `data.position`, `data.name`, `data.type` | Posición (desde 0), nombre y tipo del parámetro según el catálogo: `hkey`, `string` o `integer`. |
 | `data.value` | `hkey`: el valor tal como se fija (en x64, extendido con signo: `0xffffffff80000001`). `integer`: módulo el ancho del parámetro (32 bits para `REGSAM`). `string`: el puntero tal como se fija (dirección absoluta en x86, RVA de un `lea` relativo a rip en x64). |
-| `data.raw_hex` | Los bytes de la instrucción que lo fija: `lea r64, [rip+disp32]`, `mov r32, imm32`, `mov r64, simm32` o `xor r32, r32` en x64; `push imm32` o `push imm8` en x86 (`src/dissect/evidence/argument_forms.py`). Con `stack-slot-v1`, la escritura en la ranura `[rsp+8·i]`: `mov dword/qword ptr [rsp+d], imm32`, `and dword/qword ptr [rsp+d], 0` o `mov [rsp+d], r32/r64`. |
+| `data.raw_hex` | Los bytes de la instrucción que lo fija: `lea r64, [rip+disp32]`, `mov r32, imm32`, `mov r64, simm32` o `xor r32, r32` en x64; `push imm32` o `push imm8` en x86 (`src/lupabin/evidence/argument_forms.py`). Con `stack-slot-v1`, la escritura en la ranura `[rsp+8·i]`: `mov dword/qword ptr [rsp+d], imm32`, `and dword/qword ptr [rsp+d], 0` o `mov [rsp+d], r32/r64`. |
 | `data.constant` | Solo `hkey`: el nombre de la clave predefinida. Se aceptan las cinco que Learn lista para `hKey` (`HKEY_CLASSES_ROOT`, `HKEY_CURRENT_USER`, `HKEY_LOCAL_MACHINE`, `HKEY_USERS`, `HKEY_CURRENT_CONFIG`). |
 | `data.source` | Solo con `stack-slot-v1` y cuando se copia un registro: la instrucción (forma canónica, ahora sobre cualquiera de los 16 registros) que fijó ese registro antes de la escritura, con `offset`, `rva` y `raw_hex`. Un puntero exige escribir los 8 bytes de la ranura; un entero de 32 bits admite 4 u 8. |
 | `data.string` | Solo `string`: `offset`, `rva`, `raw_hex` (texto más su terminador NUL) y `text` imprimible ASCII, en una sección que no se puede escribir: el programa podría cambiar una cadena escribible antes de la llamada. |
@@ -79,7 +79,7 @@ La Fase 2 añadió al contrato 0.3.0 una cuarta fuente, `decode`, y el tipo `dec
 | `component` | `decode_strings` (Base64/hex) o `decode_xor`. |
 | `location` | Dónde están los bytes codificados. Para Base64/hex coincide con la cadena fuente; para XOR es la región cifrada, de la misma longitud que el texto resultante. |
 | `transform` | `base64-strict-v1`, `hex-strict-v1` o `xor-repeating-v1`; solo XOR lleva `key_hex` (1–8 bytes, en su periodo mínimo, no nula, alineada con el inicio de `location`). |
-| `anchor` | Solo XOR: catálogo `dissect-xor-cribs-v3`, cadena de referencia y su desplazamiento en caracteres dentro del texto. |
+| `anchor` | Solo XOR: catálogo `lupabin-xor-cribs-v3`, cadena de referencia y su desplazamiento en caracteres dentro del texto. |
 | `provenance.evidence_ids` | Base64/hex: exactamente la cadena fuente. XOR: vacío si la propia ancla verificó la clave; o la única decodificación XOR, verificada por sí misma, que estableció esa misma clave en otro punto de la muestra (reutilización de clave: permite descifrar anclas demasiado cortas para verificar una clave larga por sí solas). |
 | `data` | Mismas reglas de fidelidad que `string`: `text`, `raw_hex` del texto resultante, `characters`, `complete`. |
 
@@ -140,9 +140,9 @@ Estado histórico: diseño y plan aprobados por el usuario el 20 de septiembre d
 
 ## Objetivo y alcance
 
-Dissect es un tutor defensivo de análisis estático de binarios. Su prioridad es enseñar con información verificable, no producir el mayor número de hallazgos. Está dirigido a estudiantes, docentes y analistas junior. El proyecto usará licencia Apache-2.0.
+LupaBin es un tutor defensivo de análisis estático de binarios. Su prioridad es enseñar con información verificable, no producir el mayor número de hallazgos. Está dirigido a estudiantes, docentes y analistas junior. El proyecto usará licencia Apache-2.0.
 
-La primera entrega comprende el andamiaje, el esquema de evidencias y `dissect analyze <archivo> --json`: hashes SHA-256/MD5, tamaño, clasificación PE validada y evidencias de imports. Incluye documentación inicial, pruebas sintéticas, configuración de calidad, Docker endurecido y workflow de CI.
+La primera entrega comprende el andamiaje, el esquema de evidencias y `lupabin analyze <archivo> --json`: hashes SHA-256/MD5, tamaño, clasificación PE validada y evidencias de imports. Incluye documentación inicial, pruebas sintéticas, configuración de calidad, Docker endurecido y workflow de CI.
 
 No incluye todavía web, LLM, VirusTotal, capa, YARA, FLOSS, decodificadores, desempaquetado ni informes didácticos completos. Preparar interfaces para estas funciones no significa implementarlas en esta entrega.
 
@@ -199,7 +199,7 @@ El esquema se generará desde los modelos, no se mantendrá una segunda definici
 | Campo | Contenido |
 | --- | --- |
 | `schema_version` | Versión explícita del contrato, inicialmente `0.1.0`. |
-| `analysis` | Versión de Dissect, inicio/fin UTC, estado global y límites efectivos. |
+| `analysis` | Versión de LupaBin, inicio/fin UTC, estado global y límites efectivos. |
 | `sample` | SHA-256, MD5, tamaño y tipo validado o `unknown`; nunca ruta local. |
 | `evidence` | Evidencias tipadas con IDs únicos dentro del informe. |
 | `extractor_runs` | Extractor, versión, configuración relevante, estado y cobertura. |
@@ -288,7 +288,7 @@ La documentación inicial incluirá README, CONTRIBUTING, SECURITY, licencia y p
 
 El informe de entrega distinguirá comprobaciones locales, comprobaciones en contenedor y resultados remotos de GitHub Actions. Tener un workflow escrito no significa tener CI en verde. No se declarará un test o build exitoso si no se ha ejecutado y observado su resultado.
 
-El repositorio local existe en `C:\Users\migue\orca\projects\Dissect`. Crear un remoto o publicar requiere confirmar propietario y visibilidad. No se hará push sin autorización explícita.
+El repositorio local existe en `C:\Users\migue\orca\projects\LupaBin`. Crear un remoto o publicar requiere confirmar propietario y visibilidad. No se hará push sin autorización explícita.
 
 ## Plan de implementación de la primera entrega
 
@@ -298,10 +298,10 @@ Los archivos y comandos siguientes son objetivos del plan, no archivos existente
 
 ### 1. Entorno y andamiaje
 
-Archivos: `pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, `.pre-commit-config.yaml`, `src/dissect/__init__.py`, `src/dissect/py.typed` y configuración inicial de pytest.
+Archivos: `pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, `.pre-commit-config.yaml`, `src/lupabin/__init__.py`, `src/lupabin/py.typed` y configuración inicial de pytest.
 
 - Provisionar uv y Python 3.12 sin cambiar el Python por defecto ni la configuración Git del usuario. Crear un entorno virtual local aislado.
-- Usar un nombre de distribución diferenciado, `dissect-tutor`, conservando el paquete y el comando `dissect`; no publicar en un índice de paquetes.
+- Usar un nombre de distribución diferenciado, `lupabin`, conservando el paquete y el comando `lupabin`; no publicar en un índice de paquetes.
 - Añadir dependencias mediante uv con versiones verificadas y publicadas al menos siete días antes: Pydantic v2, Typer y pefile. Incorporar pytest, Ruff, mypy y las herramientas de build/pre-commit necesarias como dependencias de desarrollo.
 - Configurar layout `src`, build de wheel/sdist, mypy estricto y detección de tests. No desactivar validaciones globales para acomodar una dependencia sin tipos: limitar esa frontera a un adaptador del parser.
 - Prueba inicial: importación del paquete y versión; confirmar que wheel/sdist se construyen y contienen el código y el marcador de tipos.
@@ -310,20 +310,20 @@ Comandos previstos: `uv sync --frozen`, `uv run pytest tests/test_package.py`, `
 
 ### 2. Modelos y JSON Schema
 
-Archivos: `src/dissect/evidence/models.py`, `src/dissect/evidence/schema.py`, `tests/test_evidence.py`, `tests/test_schema.py` y `docs/evidence-schema.json`.
+Archivos: `src/lupabin/evidence/models.py`, `src/lupabin/evidence/schema.py`, `tests/test_evidence.py`, `tests/test_schema.py` y `docs/evidence-schema.json`.
 
 - Escribir primero pruebas de round-trip JSON, versión no soportada, campos extra, hashes/tamaños inválidos, timestamps sin zona horaria o desordenados, IDs repetidos y referencias inválidas.
 - Implementar los modelos tipados del contrato, coherencia de estados y relación entre evidencias, ejecuciones y errores.
 - Representar los nombres importados mediante bytes originales en hexadecimal y texto ASCII estricto opcional. La exclusión nombre/ordinal se valida sobre la representación original, no sobre el texto decodificado opcional.
 - Mantener la procedencia directa de imports. No habilitar transformaciones aún no implementadas. Validar referencias de origen existentes y acíclicas en los campos admitidos.
-- Exportar el esquema de manera determinista con `python -m dissect.evidence.schema`. Proporcionar `--check` para comparar el esquema versionado sin sobrescribirlo; una diferencia debe hacer fallar la verificación.
+- Exportar el esquema de manera determinista con `python -m lupabin.evidence.schema`. Proporcionar `--check` para comparar el esquema versionado sin sobrescribirlo; una diferencia debe hacer fallar la verificación.
 - Aclarar que algunas invariantes entre campos requieren validación Pydantic y no son expresables únicamente mediante JSON Schema.
 
-Comandos previstos: `uv run pytest tests/test_evidence.py tests/test_schema.py`, `uv run python -m dissect.evidence.schema --check`.
+Comandos previstos: `uv run pytest tests/test_evidence.py tests/test_schema.py`, `uv run python -m lupabin.evidence.schema --check`.
 
 ### 3. Ingesta y fixtures inofensivos
 
-Archivos: `src/dissect/ingest/reader.py`, `tests/fixtures/pe_builder.py`, `tests/test_ingest.py` y `samples/README.md`.
+Archivos: `src/lupabin/ingest/reader.py`, `tests/fixtures/pe_builder.py`, `tests/test_ingest.py` y `samples/README.md`.
 
 - Construir fixtures mínimos en bytes con la biblioteca estándar, sin compilar ni ejecutar código de muestra. Cubrir PE32 y PE32+, imports por nombre/ordinal y tablas normales/retardadas. No versionar ejecutables.
 - Probar primero lectura acotada, entrada vacía, directorios/dispositivos, tamaño justo en el límite y un byte por encima, y modificación del tamaño durante la lectura.
@@ -335,7 +335,7 @@ Comando previsto: `uv run pytest tests/test_ingest.py`.
 
 ### 4. Extractor PE y ensamblado del informe
 
-Archivos: `src/dissect/extractors/base.py`, `src/dissect/extractors/pe.py`, `src/dissect/analysis.py`, `tests/test_pe.py` y `tests/test_analysis.py`.
+Archivos: `src/lupabin/extractors/base.py`, `src/lupabin/extractors/pe.py`, `src/lupabin/analysis.py`, `tests/test_pe.py` y `tests/test_analysis.py`.
 
 - Escribir primero tests que fallen para clasificación real de cabeceras, imports normales/retardados, ordinales, nombres no ASCII, ausencia de tabla, tabla corrupta, offsets inválidos y truncamientos.
 - Usar pefile con parsing selectivo y límites explícitos. No desensamblar ni emular código, ni cargar DLLs de la muestra.
@@ -349,17 +349,17 @@ Comandos previstos: `uv run pytest tests/test_pe.py tests/test_analysis.py`, `uv
 
 ### 5. Worker aislado y CLI
 
-Archivos: `src/dissect/worker.py`, `src/dissect/runner.py`, `src/dissect/cli.py`, `docker/Dockerfile`, `compose.yaml`, `.dockerignore`, `tests/test_worker.py`, `tests/test_runner.py` y `tests/test_cli.py`.
+Archivos: `src/lupabin/worker.py`, `src/lupabin/runner.py`, `src/lupabin/cli.py`, `docker/Dockerfile`, `compose.yaml`, `.dockerignore`, `tests/test_worker.py`, `tests/test_runner.py` y `tests/test_cli.py`.
 
 - Probar primero, con un cliente Docker simulado, falta de motor/imagen, timeout, respuesta excesiva, JSON corrupto, informe inconsistente y limpieza tras fallo/interrupción.
 - Construir un launcher que solo use una imagen local conocida y nunca descargue durante el análisis. Pasar argumentos sin shell y no permitir que nombres de archivo se conviertan en argumentos del worker.
 - Crear un contenedor identificado de forma inequívoca antes de arrancarlo; transmitir bytes por stdin con stdout/stderr acotados. Terminar y retirar exclusivamente ese contenedor al acabar o fallar, sin operaciones globales de limpieza Docker.
 - Aplicar usuario no root, `network=none`, raíz de solo lectura, eliminación de capacidades, `no-new-privileges` y los límites del contrato. No montar directorios del host ni el socket Docker.
 - Verificar el resultado del worker en el host, incluyendo hashes/tamaño respecto al buffer original. Rechazar respuestas inválidas en vez de repararlas con conjeturas.
-- Exponer `dissect analyze <archivo> --json`. Códigos de salida: 0 para análisis solicitado completo, 3 para parcial, 1 para fallo y 2 para uso incorrecto de la CLI. Los códigos no representan un veredicto de seguridad.
+- Exponer `lupabin analyze <archivo> --json`. Códigos de salida: 0 para análisis solicitado completo, 3 para parcial, 1 para fallo y 2 para uso incorrecto de la CLI. Los códigos no representan un veredicto de seguridad.
 - Construir la imagen con las dependencias runtime fijadas; mantener herramientas de desarrollo fuera de la imagen final. Evitar incluir el repositorio completo en el contexto efectivo de la imagen.
 
-Comandos previstos: `uv run pytest tests/test_worker.py tests/test_runner.py tests/test_cli.py`, `docker compose config --quiet`, `docker build -f docker/Dockerfile -t dissect-worker:0.1.0 .`.
+Comandos previstos: `uv run pytest tests/test_worker.py tests/test_runner.py tests/test_cli.py`, `docker compose config --quiet`, `docker build -f docker/Dockerfile -t lupabin-worker:0.1.0 .`.
 
 ### 6. Pruebas reales de aislamiento y CI
 
@@ -372,7 +372,7 @@ Archivos: `tests/integration/test_docker.py` y `.github/workflows/ci.yml`.
 - Fijar versiones de dependencias y revisar procedencia de acciones; usar permisos mínimos y no incluir secretos ni muestras reales.
 - Si el motor Linux local sigue sin estar disponible, reportar el bloqueo exacto. No declarar aislamiento probado ni CI remota en verde hasta observar las ejecuciones correspondientes.
 
-Comandos previstos: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src`, `uv run pytest -m "not docker"`, `uv run pytest -m docker`, `uv run python -m dissect.evidence.schema --check`, `uv build`.
+Comandos previstos: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src`, `uv run pytest -m "not docker"`, `uv run pytest -m docker`, `uv run python -m lupabin.evidence.schema --check`, `uv build`.
 
 ### 7. Documentación, revisión y entrega
 
@@ -385,4 +385,4 @@ Archivos: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECU
 - Revisar diffs, secretos accidentales y coherencia del contrato; ejecutar la batería final y comunicar resultados y bloqueos sin generalizaciones.
 - Mantener commits convencionales pequeños. No publicar paquetes ni crear releases. Cualquier push requiere autorización explícita; la concedida para esta entrega consta a continuación.
 
-El usuario ha autorizado crear `miguelrr21/Dissect` como repositorio privado, subir el código y ejecutar GitHub Actions. La publicación y sus verificaciones se realizan por separado de las comprobaciones locales; no se confundirá tener repositorio remoto con tener CI ejecutada.
+El usuario ha autorizado crear `miguelrr21/LupaBin` como repositorio privado, subir el código y ejecutar GitHub Actions. La publicación y sus verificaciones se realizan por separado de las comprobaciones locales; no se confundirá tener repositorio remoto con tener CI ejecutada.

@@ -4,13 +4,13 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from dissect.evidence.facts import (
+from lupabin.evidence.facts import (
     DecodedStringData,
     DecodedStringEvidence,
     ImportEvidence,
     XorAnchor,
 )
-from dissect.evidence.models import (
+from lupabin.evidence.models import (
     Analysis,
     ComponentRun,
     ImportData,
@@ -20,7 +20,7 @@ from dissect.evidence.models import (
     Run,
     Sample,
 )
-from dissect.evidence.primitives import COMPONENTS, Provenance, Transform, minimal_period
+from lupabin.evidence.primitives import COMPONENTS, Provenance, Transform, minimal_period
 
 
 def report_dict():
@@ -290,7 +290,7 @@ def xor_evidence(**overrides):
         component="decode_xor",
         location=Location(offset=100, length=8),
         transform=Transform(name="xor-repeating-v1", key_hex="a5"),
-        anchor=XorAnchor(catalog="dissect-xor-cribs-v3", crib="http://", crib_offset=0),
+        anchor=XorAnchor(catalog="lupabin-xor-cribs-v3", crib="http://", crib_offset=0),
         data=decoded_string_data(),
     )
     return DecodedStringEvidence(**{**defaults, **overrides})
@@ -330,7 +330,7 @@ def test_decoded_string_evidence_confidence_cannot_be_observed(factory):
     "overrides",
     [
         dict(component="decode_xor"),
-        dict(anchor=XorAnchor(catalog="dissect-xor-cribs-v3", crib="http://", crib_offset=0)),
+        dict(anchor=XorAnchor(catalog="lupabin-xor-cribs-v3", crib="http://", crib_offset=0)),
         dict(location=Location()),
     ],
 )
@@ -347,8 +347,8 @@ def test_text_decoding_rejects_xor_only_fields(overrides):
         dict(provenance=Provenance(evidence_ids=("E1", "E2"))),  # at most the key-setter
         dict(location=Location(offset=100, length=9)),
         dict(location=Location(offset=100)),
-        dict(anchor=XorAnchor(catalog="dissect-xor-cribs-v3", crib="http://", crib_offset=1)),
-        dict(anchor=XorAnchor(catalog="dissect-xor-cribs-v3", crib="https://", crib_offset=0)),
+        dict(anchor=XorAnchor(catalog="lupabin-xor-cribs-v3", crib="http://", crib_offset=1)),
+        dict(anchor=XorAnchor(catalog="lupabin-xor-cribs-v3", crib="https://", crib_offset=0)),
     ],
 )
 def test_xor_decoding_rejects_incoherent_fields(overrides):
@@ -360,4 +360,4 @@ def test_xor_anchor_rejects_unknown_catalog_and_unprintable_crib():
     with pytest.raises(ValidationError):
         XorAnchor(catalog="other", crib="http://", crib_offset=0)
     with pytest.raises(ValidationError):
-        XorAnchor(catalog="dissect-xor-cribs-v3", crib="http\x00//", crib_offset=0)
+        XorAnchor(catalog="lupabin-xor-cribs-v3", crib="http\x00//", crib_offset=0)

@@ -27,16 +27,16 @@ from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence import argument_forms
-from dissect.evidence.code import verify_calls
-from dissect.evidence.facts import ApiCallEvidence, ImportEvidence
-from dissect.evidence.models import Limits, Report
-from dissect.extractors import code as code_extractor
-from dissect.extractors import code_args, code_entries
-from dissect.extractors.code import CodeExtractor
-from dissect.extractors.pe import PEExtractor
-from dissect.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence import argument_forms
+from lupabin.evidence.code import verify_calls
+from lupabin.evidence.facts import ApiCallEvidence, ImportEvidence
+from lupabin.evidence.models import Limits, Report
+from lupabin.extractors import code as code_extractor
+from lupabin.extractors import code_args, code_entries
+from lupabin.extractors.code import CodeExtractor
+from lupabin.extractors.pe import PEExtractor
+from lupabin.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
 from tests.fixtures.pe_builder import CODE_RVA, build_code_pe
 
 MAX_INPUT = 20 * 1024 * 1024

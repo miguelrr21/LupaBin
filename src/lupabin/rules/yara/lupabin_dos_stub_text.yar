@@ -1,0 +1,1 @@
+rule lupabin_dos_stub_text { strings: $stub = "This program cannot be run in DOS mode" ascii condition: $stub }

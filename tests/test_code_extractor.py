@@ -6,17 +6,17 @@ import sys
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.errors import DissectError
-from dissect.evidence.code import verify_calls
-from dissect.evidence.collector import Collector, Progress
-from dissect.evidence.models import Limits, Report
-from dissect.evidence.primitives import CodeLimits
-from dissect.extractors.code import CodeExtractor
-from dissect.extractors.pe import PEExtractor
-from dissect.ingest.reader import from_bytes
-from dissect.runner import run_isolated
-from dissect.saved_report import check_against_sample
+from lupabin.analysis import analyze_bytes
+from lupabin.errors import LupaBinError
+from lupabin.evidence.code import verify_calls
+from lupabin.evidence.collector import Collector, Progress
+from lupabin.evidence.models import Limits, Report
+from lupabin.evidence.primitives import CodeLimits
+from lupabin.extractors.code import CodeExtractor
+from lupabin.extractors.pe import PEExtractor
+from lupabin.ingest.reader import from_bytes
+from lupabin.runner import run_isolated
+from lupabin.saved_report import check_against_sample
 from tests.fixtures.pe_builder import build_code_demo, build_code_pe, build_pe, with_load_config
 from tests.test_runner import FakeDocker
 
@@ -220,11 +220,11 @@ def test_host_rejects_calls_whose_bytes_are_not_in_the_sample():
     report = forged_thunk(payload())
     with pytest.raises(ValueError, match="code evidence bytes differ from the sample"):
         verify_calls(report.evidence, sample)
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         check_against_sample(report, from_bytes(sample, Limits()))
     assert caught.value.code == "report_mismatch"
     docker = FakeDocker(output=report.model_dump_json().encode())
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(run_isolated(sample, Limits(), docker))
     assert caught.value.code == "invalid_worker_output"
 
@@ -236,7 +236,7 @@ def test_runner_accepts_genuine_calls():
 
 def test_the_host_process_never_loads_the_disassembler():
     probe = (
-        "import sys, dissect.cli, dissect.runner, dissect.saved_report;"
+        "import sys, lupabin.cli, lupabin.runner, lupabin.saved_report;"
         "print('capstone' in sys.modules)"
     )
     result = subprocess.run(  # noqa: S603 - fixed argv: this interpreter and a constant probe

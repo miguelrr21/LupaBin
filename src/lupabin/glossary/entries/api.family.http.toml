@@ -1,0 +1,17 @@
+id = "api.family.http"
+title = "Funciones de HTTP y descarga"
+revision = "1.0.0"
+lang = "es"
+summary = "Funciones de WinINet, WinHTTP y URLMon para hacer peticiones HTTP y descargar datos."
+body = "Las usan actualizadores, clientes de servicios web y telemetría. También sirven para comunicarse con un servidor remoto o descargar otros archivos.\n\nMedición del 2026-09-23 sobre 55.035 binarios PE benignos (System32, Program Files y Program Files (x86)): el 1,0 % importa por nombre al menos una función de esta familia.\n\nLa familia es una lista curada y versionada de nombres exactos (lupabin-api-families-v1). LupaBin solo dice que un nombre importado está en la lista; no interpreta el uso."
+not_proven = "Importar funciones de esta familia no demuestra ningún comportamiento: el 1,0 % de los binarios benignos medidos lo hace."
+related = ["pe.imports"]
+sources = [
+  { title = "InternetOpenA function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/wininet/nf-wininet-internetopena", verified_on = 2026-09-23 },
+  { title = "InternetOpenUrlA function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/wininet/nf-wininet-internetopenurla", verified_on = 2026-09-23 },
+  { title = "InternetReadFile function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/wininet/nf-wininet-internetreadfile", verified_on = 2026-09-23 },
+  { title = "HttpSendRequestA function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/wininet/nf-wininet-httpsendrequesta", verified_on = 2026-09-23 },
+  { title = "WinHttpOpen function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpopen", verified_on = 2026-09-23 },
+  { title = "WinHttpSendRequest function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpsendrequest", verified_on = 2026-09-23 },
+  { title = "URLDownloadToFile function", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/platform-apis/ms775123(v=vs.85)", verified_on = 2026-09-23 },
+]

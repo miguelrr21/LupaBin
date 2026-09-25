@@ -3,10 +3,10 @@ import json
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.errors import DissectError
-from dissect.evidence.models import Limits
-from dissect.runner import Completed, run_isolated
+from lupabin.analysis import analyze_bytes
+from lupabin.errors import LupaBinError
+from lupabin.evidence.models import Limits
+from lupabin.runner import Completed, run_isolated
 from tests.fixtures.pe_builder import build_pe
 
 
@@ -30,9 +30,9 @@ class FakeDocker:
             return Completed(0, b"c" * 64, b"")
         if args[0] == "start":
             if self.failure == "timeout":
-                raise DissectError("timeout")
+                raise LupaBinError("timeout")
             if self.failure == "large":
-                raise DissectError("output_limit")
+                raise LupaBinError("output_limit")
             if self.failure == "worker":
                 return Completed(1, b"", b"untrusted private message")
             payload = (
@@ -85,7 +85,7 @@ def test_isolation_arguments_and_raw_stdin():
 )
 def test_failures_are_explicit_and_cleanup_is_attempted(failure, code):
     docker = FakeDocker(failure=failure)
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(run_isolated(build_pe(), Limits(), docker))
     assert caught.value.code == code
     if failure not in ("docker", "image"):
@@ -108,7 +108,7 @@ def test_worker_response_must_match_original_input(change):
     report = json.loads(analyze_bytes(build_pe()).model_dump_json())
     change(report)
     docker = FakeDocker(output=json.dumps(report).encode())
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(run_isolated(build_pe(), Limits(), docker))
     expected = (
         "incompatible_worker" if report["schema_version"] != "0.6.0" else "invalid_worker_output"
@@ -117,6 +117,6 @@ def test_worker_response_must_match_original_input(change):
 
 
 def test_invalid_json_is_not_repaired():
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(run_isolated(build_pe(), Limits(), FakeDocker(output=b"not JSON")))
     assert caught.value.code == "invalid_worker_output"

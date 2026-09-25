@@ -1,0 +1,11 @@
+id = "pe.exports.forwarder"
+title = "Export reenviado (forwarder)"
+revision = "1.0.0"
+lang = "es"
+summary = "Un export reenviado no apunta a código de la propia DLL, sino a una cadena como «OTRA.Función», que indica al cargador que use la función de otra DLL."
+body = "Si la dirección de un export cae dentro de la propia sección de exports, no es código: es el nombre de un símbolo de otra DLL. El cargador sigue ese reenvío al resolver el import.\n\nWindows usa reenvíos para mantener compatibilidad cuando una función cambia de DLL. LupaBin publica el destino tal como está escrito, sin comprobar que exista."
+not_proven = "Un reenvío no demuestra que la DLL de destino exista ni que la función se use."
+related = ["pe.exports"]
+sources = [
+  { title = "PE Format: Export Address Table", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#export-address-table", verified_on = 2026-09-23 },
+]

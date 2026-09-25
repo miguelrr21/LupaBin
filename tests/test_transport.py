@@ -3,8 +3,8 @@ import sys
 
 import pytest
 
-from dissect.errors import DissectError
-from dissect.transport import DockerCLI, read_bounded
+from lupabin.errors import LupaBinError
+from lupabin.transport import DockerCLI, read_bounded
 
 
 def test_reader_rejects_output_over_limit():
@@ -14,7 +14,7 @@ def test_reader_rejects_output_over_limit():
         stream.feed_eof()
         return await read_bounded(stream, 4)
 
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(run())
     assert caught.value.code == "output_limit"
 
@@ -30,7 +30,7 @@ def test_reader_accepts_exact_limit():
 
 
 def transport_for_python(monkeypatch):
-    monkeypatch.setattr("dissect.transport.shutil.which", lambda _: sys.executable)
+    monkeypatch.setattr("lupabin.transport.shutil.which", lambda _: sys.executable)
     return DockerCLI()
 
 
@@ -55,7 +55,7 @@ def test_real_transport_timeout_terminates_child(monkeypatch):
         return process
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", remember)
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(transport.run(("-c", "import time; time.sleep(60)"), timeout=0.1))
     assert caught.value.code == "timeout"
     assert created[0].returncode is not None
@@ -63,6 +63,6 @@ def test_real_transport_timeout_terminates_child(monkeypatch):
 
 def test_real_transport_output_limit(monkeypatch):
     transport = transport_for_python(monkeypatch)
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(transport.run(("-c", "print('x' * 10000)"), limit=100))
     assert caught.value.code == "output_limit"

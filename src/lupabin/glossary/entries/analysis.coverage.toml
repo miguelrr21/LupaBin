@@ -1,0 +1,12 @@
+id = "analysis.coverage"
+title = "Cobertura, análisis parcial y limitaciones"
+revision = "1.0.0"
+lang = "es"
+summary = "Cada extractor declara qué pudo revisar: completo, parcial o bloqueado. Un análisis parcial significa que una parte no se revisó, por un límite, un error o un formato no soportado."
+body = "Un resultado vacío con cobertura completa significa que se buscó y no se encontró nada con ese método. Un resultado vacío con cobertura parcial o bloqueada no significa nada: esa parte no se revisó.\n\nLas limitaciones (por ejemplo, alcanzar el máximo de cadenas o que el archivo no sea PE) se muestran siempre antes que los hallazgos, porque cambian lo que se puede concluir."
+not_proven = "No encontrar algo no demuestra que no esté, ni que la muestra sea segura."
+related = ["evidence.confidence"]
+sources = [
+  { title = "Fase 1A, 6. Cobertura, estados y abstención", publisher = "Proyecto LupaBin", document = "docs/superpowers/specs/2026-09-20-static-evidence-design.md#6-cobertura-estados-y-abstención", verified_on = 2026-09-23 },
+  { title = "Contrato de evidencias: regla principal", publisher = "Proyecto LupaBin", document = "docs/evidence-schema.md#regla-principal-no-inventar-datos", verified_on = 2026-09-23 },
+]

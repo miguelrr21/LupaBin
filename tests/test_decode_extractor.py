@@ -4,22 +4,22 @@ import json
 import pytest
 from jsonschema import Draft202012Validator
 
-from dissect.analysis import analyze_bytes
-from dissect.errors import DissectError
-from dissect.evidence.models import Limits, Report
-from dissect.evidence.schema import schema_text
-from dissect.extractors.decode import verify_decodings
-from dissect.runner import run_isolated
+from lupabin.analysis import analyze_bytes
+from lupabin.errors import LupaBinError
+from lupabin.evidence.models import Limits, Report
+from lupabin.evidence.schema import schema_text
+from lupabin.extractors.decode import verify_decodings
+from lupabin.runner import run_isolated
 from tests.fixtures.pe_builder import DECODE_DEMO, build_decode_demo, build_pe, xor_stream
 from tests.test_runner import FakeDocker
 
 EXPECTED = [
     ("decode_strings", "base64-strict-v1", None, "https://training.invalid/decode/base64"),
-    ("decode_strings", "hex-strict-v1", None, "cmd.exe /c echo dissect-hex"),
+    ("decode_strings", "hex-strict-v1", None, "cmd.exe /c echo lupabin-hex"),
     ("decode_xor", "xor-repeating-v1", "a5", "https://training.invalid/decode/xor-1"),
     # the 4-byte key is published rotated to the region start (after the NUL pad)
-    ("decode_xor", "xor-repeating-v1", "c381f79e", "User-Agent: DissectTraining/1.0"),
-    ("decode_xor", "xor-repeating-v1", "b7d2", "kernel32.dll!DissectTraining"),
+    ("decode_xor", "xor-repeating-v1", "c381f79e", "User-Agent: LupaBinTraining/1.0"),
+    ("decode_xor", "xor-repeating-v1", "b7d2", "kernel32.dll!LupaBinTraining"),
     ("decode_xor", "xor-repeating-v1", "c381f79e", "http://training.invalid/decode/reuse"),
 ]
 
@@ -63,7 +63,7 @@ def test_text_decodings_cite_the_string_holding_their_bytes():
             assert facts[ref].kind == "string"
             assert facts[ref].location == fact.location
         else:
-            assert fact.anchor.catalog == "dissect-xor-cribs-v3"
+            assert fact.anchor.catalog == "lupabin-xor-cribs-v3"
             if fact.anchor.crib == "http://":  # reused key: cites the decoding that set it
                 [ref] = fact.provenance.evidence_ids
                 assert facts[ref].transform.key_hex == fact.transform.key_hex
@@ -148,7 +148,7 @@ def test_engine_failure_keeps_other_sources(monkeypatch):
     def broken(*args, **kwargs):
         raise RuntimeError("simulated")
 
-    monkeypatch.setattr("dissect.extractors.decode_xor.scan", broken)
+    monkeypatch.setattr("lupabin.extractors.decode_xor.scan", broken)
     report = analyze_bytes(build_decode_demo())
     assert report.analysis.status == "partial"
     assert {"pe_header", "string", "import"} <= {f.kind for f in report.evidence}
@@ -218,7 +218,7 @@ def forged_output(tamper):
 )
 def test_runner_rejects_decodings_that_do_not_reproduce(tamper):
     docker = FakeDocker(output=forged_output(tamper))
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(run_isolated(build_decode_demo(), Limits(), docker))
     assert caught.value.code == "invalid_worker_output"
 
@@ -259,9 +259,9 @@ def test_report_rejects_reused_keys_citing_the_wrong_decoding(tamper):
 
 
 def test_xor_scan_stops_at_its_deadline_and_says_so():
-    from dissect.evidence.collector import Collector, Progress
-    from dissect.extractors.decode import DecodeExtractor
-    from dissect.extractors.strings import StringsExtractor
+    from lupabin.evidence.collector import Collector, Progress
+    from lupabin.extractors.decode import DecodeExtractor
+    from lupabin.extractors.strings import StringsExtractor
 
     data = build_decode_demo()
     collector = Collector(Limits())

@@ -4,7 +4,7 @@ Estado: revisión 2 (2026-09-22), implementada; segunda ronda de optimización m
 
 ## 1. Propósito y límites del producto
 
-Dissect ya conserva cadenas literales (`string`, Fase 1A) y coincidencias de reglas (`yara_match`, Fase 1B). Esta fase añade hechos derivados: bytes que, al aplicarles una transformación determinista y documentada, producen texto legible.
+LupaBin ya conserva cadenas literales (`string`, Fase 1A) y coincidencias de reglas (`yara_match`, Fase 1B). Esta fase añade hechos derivados: bytes que, al aplicarles una transformación determinista y documentada, producen texto legible.
 
 La afirmación permitida es "estos bytes, transformados con este algoritmo y estos parámetros exactos, producen este texto". No equivale a decir que el programa realiza esa transformación, que el texto sea el pretendido por su autor ni que tenga un significado (URL, comando, ruta). Todo resultado es `confidence="inferred"`. Sigue prohibido ejecutar o emular la muestra.
 
@@ -72,7 +72,7 @@ Procedimiento para cada crib (codificada en ASCII y en UTF-16LE) y cada retardo 
 
 **Reutilización de clave.** Tras la primera pasada, cada clave de periodo ≥ 2 que alguna crib verificó por sí sola se busca en el resto de la muestra, para las cribs que *no* pueden verificar ese periodo solas (p. ej. `http://`, de 7 bytes, con una clave de 8). Se acepta una aparición solo si reproduce la crib completa bajo una clave **idéntica** (salvo la fase) a una ya verificada: una coincidencia casual exige alinear *n* bytes al azar (≤ 256⁻⁷ por posición para la crib más corta). Para no inundar la búsqueda, el diferencial con retardo *p* se usa solo si tiene ≥ 3 bytes no nulos; si no, se busca directamente el texto cifrado de la crib bajo cada rotación de la clave. Se reutilizan como máximo 8 claves distintas. La evidencia resultante **cita en `provenance` la decodificación que estableció la clave**, y el informe y el host comprueban que ambas claves son idénticas. Es el caso habitual en malware: las tablas de cadenas cifradas suelen compartir una sola clave.
 
-### 3.4 Catálogo de anclas `dissect-xor-cribs-v3`
+### 3.4 Catálogo de anclas `lupabin-xor-cribs-v3`
 
 Cadenas neutrales frecuentes en texto de binarios Windows, elegidas por longitud (una crib de *n* bytes solo verifica claves de hasta ~*n*−5 bytes) y no por significado. Encontrarlas **no demuestra ninguna capacidad ni intención**, igual que la regla YARA de nombres de API no demuestra imports ni inyección.
 
@@ -171,7 +171,7 @@ Medido el 2026-09-22 sobre los binarios de `C:\Windows\System32` (4.092 `.dll`/`
 
 La regla de "fragmento de la crib en claro dentro de la ventana" resultó redundante con la de ventana ya-texto y no se incorpora.
 
-**Cobertura XOR** con el motor definitivo (catálogo v3 + reutilización, entre paréntesis la v2; `tests/decode_eval.py recall`, semilla `dissect-decode-eval`, 150 pruebas por celda). Los textos son 43 cadenas realistas por categoría escritas sin mirar el catálogo; 10 de ellas (23 %) no contienen ninguna crib y se incluyen a propósito. Cada texto se cifra y se planta en una DLL real, solo o con una segunda cadena bajo la misma clave ("compartida", como en las tablas de cadenas reales). Cuenta como recuperada una región solapada con la clave exacta:
+**Cobertura XOR** con el motor definitivo (catálogo v3 + reutilización, entre paréntesis la v2; `tests/decode_eval.py recall`, semilla `lupabin-decode-eval`, 150 pruebas por celda). Los textos son 43 cadenas realistas por categoría escritas sin mirar el catálogo; 10 de ellas (23 %) no contienen ninguna crib y se incluyen a propósito. Cada texto se cifra y se planta en una DLL real, solo o con una segunda cadena bajo la misma clave ("compartida", como en las tablas de cadenas reales). Cuenta como recuperada una región solapada con la clave exacta:
 
 | Clave | ASCII, sola | ASCII, compartida | UTF-16LE, sola | UTF-16LE, compartida |
 | --- | --- | --- | --- | --- |
@@ -271,6 +271,6 @@ Bloques pequeños, cada uno cerrado con `ruff`, `mypy`, suite completa y `schema
 2. **Hecho**: Base64/hex sobre cadenas, con los mínimos y la diversidad de la sección 3 fijados por medición.
 3. **Hecho**: motor XOR de la sección 3.3 (claves de 1–8 bytes, catálogo, presupuestos, reverificación), que sustituye al XOR de un byte sobre cadenas de la revisión 1.
 4. **Hecho**: herramienta `tests/decode_eval.py` y mediciones de la sección 8 repetidas con el motor definitivo.
-5. **Hecho**: integración 0.4.0 — fuente `decode` en el registro, colector y límites (`analysis.limits.decode`), validación en el informe, reverificación en el launcher, esquema 0.3.0 preservado, imagen `dissect-worker:0.4.0`, CI, documentación, fixture `decode-demo` y pruebas en contenedor real (recorrido completo y una muestra hostil de un millón de patrones que termina en limitación declarada).
+5. **Hecho**: integración 0.4.0 — fuente `decode` en el registro, colector y límites (`analysis.limits.decode`), validación en el informe, reverificación en el launcher, esquema 0.3.0 preservado, imagen `lupabin-worker:0.4.0`, CI, documentación, fixture `decode-demo` y pruebas en contenedor real (recorrido completo y una muestra hostil de un millón de patrones que termina en limitación declarada).
 6. **Hecho**: optimización medida — niveles de verificación más débiles probados y descartados por falsos positivos; reutilización de clave con cita a la decodificación que la estableció; catálogo v2 con 20 anclas largas; reglas finales de Base64/hex. Resultado en el corpus completo: 0 falsos positivos XOR, 0 decodificaciones Base64/hex espurias, y cobertura de claves de 8 bytes del 81 % con clave compartida.
 7. **Hecho**: optimización medida, segunda ronda (2026-09-23). Corpus benigno ampliado a más de 30.000 archivos sin ruido. Diferenciales a partir de un único entero, con resultado idéntico. Catálogo v3 con 14 anclas de rutas elegidas sobre datos reales con separación entrenamiento/reserva: las rutas reales recuperadas pasan del ~10 % al ~45–50 %, y la clave compartida de 8 bytes del 81 % al 92 %, sin falsos positivos.
