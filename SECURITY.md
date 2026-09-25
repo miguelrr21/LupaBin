@@ -18,6 +18,14 @@ Solo se usa el catálogo propio empaquetado, sin descargas ni bytecodes externos
 
 La decodificación (Base64/hex/XOR) es cómputo puro en Python dentro del mismo worker aislado: no ejecuta, emula ni interpreta la muestra, y no añade dependencias nativas. Una muestra hostil puede intentar agotar la CPU con millones de patrones candidatos; el tope de apariciones examinadas lo convierte en una limitación declarada (probado en contenedor real). El host vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta completa si alguna no se reproduce, así que un worker manipulado no puede publicar un texto "decodificado" que los bytes no produzcan. Un texto decodificado es un dato no fiable más: nunca es una instrucción.
 
+## Servicio web (`dissect-web`)
+
+La web recibe archivos de cualquiera y los analiza con el mismo aislamiento que la CLI: un contenedor nuevo por análisis, sin red, de solo lectura, sin privilegios y con límites. El proceso web no analiza la muestra: lee sus bytes, calcula hashes y la pasa al worker por stdin. Aun así:
+- **El usuario del servicio pertenece al grupo `docker`**, que equivale a root en esa máquina. Despliégala en un servidor dedicado que no guarde nada más y no esté en tu red doméstica. El servicio solo escucha en `127.0.0.1` detrás de Caddy, y systemd lo aísla (`deploy/server/dissect-web.service`).
+- **Todo texto de la muestra o de VirusTotal se neutraliza en el servidor**, y la página lo inserta solo con `textContent`, bajo una CSP sin código en línea. No se usan cookies, terceros ni analítica.
+- **No se guardan muestras ni informes**, y no hay registro de accesos. Los límites por IP y la cuota de VirusTotal viven en memoria y se reinician con el servicio.
+- **VirusTotal:** con la configuración por defecto, un archivo que VirusTotal no conoce se sube con la clave del servidor, y lo subido puede compartirse con sus clientes de pago. La página lo avisa antes de enviar. `DISSECT_VIRUSTOTAL_UPLOAD=off` lo desactiva.
+
 ## Datos y veracidad
 
 Las muestras se leen localmente y se transmiten por stdin al daemon Docker configurado; no uses un contexto Docker remoto para información que no debas transmitir a ese servidor. El worker no sube muestras a servicios externos. Los hashes no son un veredicto y MD5 solo se usa para interoperabilidad.
@@ -26,6 +34,6 @@ Un parser comprometido puede emitir datos engañosos que cumplan un esquema. La 
 
 ## Informar de problemas
 
-No publiques muestras reales ni datos sensibles en issues. Mientras no haya un canal privado de seguridad confirmado para el repositorio, contacta al responsable por un canal privado previamente acordado antes de compartir detalles. No se inventa aquí una dirección de contacto ni se asume que GitHub Private Vulnerability Reporting esté habilitado.
+No publiques muestras reales ni datos sensibles en issues. Para informar de una vulnerabilidad, usa el aviso privado de GitHub (*Security → Report a vulnerability*) si el repositorio lo tiene activado. Si no, abre un issue sin detalles pidiendo un canal privado. No se inventa aquí una dirección de contacto.
 
 Incluye versiones, plataforma, comportamiento esperado/observado y un caso sintético mínimo, si es posible. No adjuntes un binario malicioso para demostrar el fallo. No se declara un plazo de respuesta ni una versión de producción soportada durante esta etapa inicial.
