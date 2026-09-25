@@ -76,9 +76,26 @@ Una herramienta, no una página de marketing. Referencia: la densidad y la sobri
 - Resultado: una cabecera con los hashes, el estado y la puntuación de VirusTotal si la hay. Debajo, pestañas en el orden del informe: Resumen, Hechos, Inferencias, Cobertura, VirusTotal y Glosario. Cada ítem muestra su frase, sus casos, su límite y las evidencias que cita.
 - Accesible: HTML semántico, foco visible, pestañas con roles ARIA y teclado, y contraste AA.
 
-## 8. Despliegue (Raspberry Pi)
+## 8. Despliegue (revisión 4: un VPS, no la Raspberry Pi)
 
-Raspberry Pi OS de 64 bits (Bookworm). Todas las dependencias nativas del worker (capstone, yara-python y pydantic-core) tienen ruedas `manylinux aarch64`, así que la imagen se construye en la Pi sin compilar. `deploy/raspberry-pi/install.sh` instala Docker y Caddy de los repositorios de Debian, uv en su versión fijada, crea el usuario del servicio, construye la imagen, instala la unidad de systemd y deja Caddy sirviendo en el puerto 80 de la red local. La guía `docs/deploy-raspberry-pi.md` explica cada paso para quien no ha desplegado nunca, y cómo añadir después el dominio (Caddy obtiene el certificado HTTPS solo).
+El usuario descartó su Raspberry Pi: una web pública conectada a su red doméstica es un riesgo. Por eso el despliegue es un VPS dedicado, gratis o barato:
+- Oracle Cloud Free Tier (ARM Ampere, gratuito);
+- Hetzner CAX11 (unos 4 €/mes);
+- cualquier otro VPS.
+
+`deploy/server/install.sh` admite Ubuntu 22.04/24.04 y Debian 12, en x86_64 o ARM64. Todas las dependencias nativas del worker tienen ruedas para las dos arquitecturas. Además de lo descrito en la sección 2, el instalador:
+- instala `unattended-upgrades`;
+- ajusta los análisis simultáneos a la memoria y las CPU de la máquina;
+- abre los puertos 80 y 443 si las reglas de iptables del sistema los rechazan, como en las imágenes de Ubuntu de Oracle.
+
+La guía `docs/deploy.md` cubre el alta en los dos proveedores, un dominio gratuito de DuckDNS con HTTPS automático de Caddy y el endurecimiento básico del servidor.
+
+**Cuota global de VirusTotal** (`virustotal/quota.py`). La API pública permite 4 peticiones por minuto y 500 al día por clave, sea cual sea el número de visitantes. Todas las peticiones de la web pasan por un presupuesto común:
+- si el minuto está lleno, espera su turno (65 s como máximo);
+- si se agota el día (en UTC), rechaza la petición antes de llegar a VirusTotal;
+- la web explica que la cuota es compartida, y un seguimiento que encuentra la cuota ocupada sigue intentándolo.
+
+`DISSECT_VT_PER_MINUTE` y `DISSECT_VT_PER_DAY` la adaptan a una clave con más cuota.
 
 ## 9. Verificación (2026-09-25)
 
@@ -106,4 +123,11 @@ Raspberry Pi OS de 64 bits (Bookworm). Todas las dependencias nativas del worker
   - La imagen del worker se construye para `linux/arm64` y analiza la muestra de demostración, emulada, en 17 s.
   - En un Debian Bookworm ARM64 emulado, el paso del instalador que crea el entorno (uv 0.8.22 comprobado con SHA-256, Python 3.12 y el extra `web`) funciona y la aplicación arranca.
   - `bash -n` y shellcheck pasan sobre los scripts.
-  - El instalador completo, con systemd, Caddy y Docker, queda por probar en la Raspberry Pi real.
+- **Instalador de servidor (revisión 4), probado de principio a fin** en un Ubuntu 24.04 x86_64 limpio con systemd, dentro de un contenedor privilegiado con Docker anidado:
+  - instala todo y el servicio arranca;
+  - una página y un análisis completo pasan por Caddy, el servicio y el worker, con las cabeceras de seguridad;
+  - `systemd-analyze security` califica el servicio con una exposición de 3,2 ("OK");
+  - `update.sh` se puede repetir y conserva la configuración;
+  - con reglas de iptables como las de Oracle (todo rechazado salvo SSH), la web deja de responder, y el instalador abre el 80 y el 443 antes del REJECT y la recupera;
+  - shellcheck pasa sobre los scripts.
+- Queda por hacer el despliegue en el proveedor elegido (Oracle Cloud o Hetzner).

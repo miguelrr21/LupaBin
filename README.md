@@ -76,7 +76,7 @@ uv sync --extra web
 uv run dissect-web
 ```
 
-y abre `http://127.0.0.1:8080`. Para desplegarla en una Raspberry Pi, con HTTPS cuando tengas dominio, sigue [la guía](docs/deploy-raspberry-pi.md). Diseño: [web](docs/superpowers/specs/2026-09-25-web-design.md).
+y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker. Diseño: [web](docs/superpowers/specs/2026-09-25-web-design.md).
 
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
