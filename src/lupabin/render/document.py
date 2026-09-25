@@ -1,7 +1,7 @@
 """Terminal and Markdown views of a validated explanation.
 
-Order is fixed by the design: the sample, a summary of the code's capabilities (Phase
-5, section 6), what could not be analysed, observed facts, inferences, and the glossary
+Order is fixed: the sample, a summary of the code's capabilities, what could not be
+analysed, observed facts, inferences, and the glossary
 of the terms used. Only items that regenerate exactly
 from their citations are shown; the number of omitted items is stated.
 """

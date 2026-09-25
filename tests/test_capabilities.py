@@ -1,4 +1,4 @@
-"""Phase 5 capabilities: explanation rules over calls and their constant arguments."""
+"""Capabilities: explanation rules over calls and their constant arguments."""
 
 import pytest
 
@@ -62,7 +62,7 @@ def test_every_capability_reads_parameters_the_argument_catalog_interprets():
 
 
 def test_capabilities_never_read_load_library():
-    """Measured in 53 % of benign binaries (design section 3): it tells nothing apart."""
+    """Measured in 53 % of benign binaries: it tells nothing apart."""
     read = {f for capability in capabilities.CAPABILITIES for f in capability.reads}
     assert not {f for f in read if f.startswith(("LoadLibrary", "GetProcAddress"))}
 
@@ -475,7 +475,7 @@ def test_capabilities_are_rendered_with_their_cases_and_sample_text_is_inert():
     assert f"  - Casos: {code_span(case)}" in markdown.splitlines()
 
 
-# --- the summary that opens the didactic report (design section 6) -----------------------
+# --- the summary that opens the didactic report ------------------------------------------
 
 
 def rendered(data, kind="text", limits=None):
@@ -529,7 +529,7 @@ def test_the_summary_repeats_the_low_walk_density_note():
     assert "se queda por debajo de 20 por KiB" in part
 
 
-# --- benign context (design section 5) ------------------------------------------------------
+# --- benign context --------------------------------------------------------------------------
 
 
 def test_every_capability_states_its_measured_benign_prevalence():
@@ -548,7 +548,7 @@ def test_a_capability_never_seen_in_benign_binaries_says_so():
     assert statement.endswith("Ninguno de los 3.087 binarios benignos medidos contiene un caso.")
 
 
-# --- Phase 5.6: coverage (design section 10) ------------------------------------------------
+# --- more coverage: CFG modifier, RunOnceEx and Winlogon values ------------------------------
 
 RUN_ONCE_EX = r"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnceEx"
 

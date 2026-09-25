@@ -12,7 +12,7 @@ PINNED = {
     "lupabin-api-semantics-v2": "238568b92b75a849ffe0d8fdf75ac5877fe4b86d8d1ba9b75022cc4006579420",
     # v3: + GetProcAddress, checked on Microsoft Learn on 2026-09-24
     "lupabin-api-semantics-v3": "7648350dc53ec4234e65902b06bdbde64827df0a0554792f5aa5046d33f82c56",
-    # v4: the rest of design section 4 (67 entries), checked on 2026-09-24
+    # v4: the rest of the catalog (67 entries), checked on 2026-09-24
     "lupabin-api-semantics-v4": "3b6a6839eaeefafb836cf02db429e5af531cbb0b3b38a19f69ee2c5dca7635bc",
 }
 

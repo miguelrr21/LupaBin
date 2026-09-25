@@ -1,4 +1,4 @@
-"""Canonical byte forms of a call to an imported function (design section 3.3).
+"""Canonical byte forms of a call to an imported function.
 
 The worker finds instruction boundaries with a disassembler; deciding whether an
 instruction calls an import only reads these fixed encodings and their operand

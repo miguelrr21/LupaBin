@@ -1,4 +1,4 @@
-"""Reproduce the Phase 5 measurements of capabilities on benign binaries.
+"""Reproduce the measurements of capabilities on benign binaries.
 
     uv run python -m tests.capability_eval corpus DIR [DIR ...] [--recursive]
         [--ext .exe,.dll,.sys] [--stride N] [--limit N] [--jobs N] [--out cases.jsonl]
@@ -6,7 +6,7 @@
 
 `corpus` treats every file as benign and runs the PE and code extractors on it, then
 the explanation engine, which regenerates every item. For each capability it counts
-the binaries with at least one case, over every PE file analysed (design section 5),
+the binaries with at least one case, over every PE file analysed,
 and the binaries that call one of its functions at all. `--out` writes every case
 with its call site and arguments, one binary per line, so that each case can be
 reviewed by hand: a case whose wording does not describe what the call's arguments

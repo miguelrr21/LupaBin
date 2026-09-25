@@ -1,4 +1,4 @@
-"""Recursive-descent walk over a sample's executable sections (design section 3.1).
+"""Recursive-descent walk over a sample's executable sections.
 
 capstone only decodes: it turns bytes into an instruction's identity, length and
 operand text. The walk follows constant branch and call targets from known entry
@@ -8,7 +8,7 @@ nothing is executed or emulated. Indirect jumps are not resolved.
 The walk calls capstone's `cs_disasm` itself (pinned capstone 5.0.9) and reads only
 each instruction's id and size, plus the operand text of branches: the public
 `disasm_lite` converts every mnemonic and operand to text, which doubled the cost of
-an adversarial 20 MiB input (design section 7).
+an adversarial 20 MiB input.
 """
 
 import bisect
