@@ -32,7 +32,7 @@ Sistemas soportados: **Ubuntu 24.04 o 22.04, o Debian 12**, en x86_64 o ARM64.
    - **Image:** Canonical Ubuntu 24.04.
    - **Shape:** *Ampere*, `VM.Standard.A1.Flex`, con 2 OCPU y 12 GB. Entra en lo gratuito, y aún te sobra para otra máquina.
    - **SSH keys:** "Generate a key pair" y **descarga la clave privada**. Sin ella no podrás entrar.
-   - Si sale *Out of capacity*, prueba otro *Availability domain* o inténtalo más tarde. Es habitual con las máquinas ARM gratuitas.
+   - Si sale *Out of capacity*, no es un fallo de tu cuenta: en ese momento no hay máquinas ARM gratuitas libres. Puedes probar otro *Availability domain* si tu región tiene varios (Madrid, por ejemplo, solo tiene uno). También puedes pedir menos, 1 OCPU y 6 GB, y ampliarla después. O convertir la cuenta a *Pay As You Go* (punto 5); en la práctica, así suele conseguirse la máquina.
 3. Abre los puertos web en la red de Oracle: en la instancia, entra en la *Subnet* y luego en su *Security List*, y pulsa *Add Ingress Rules*:
    - Source CIDR `0.0.0.0/0`, protocolo TCP, puerto de destino `80`;
    - otra regla igual con el puerto `443`.
