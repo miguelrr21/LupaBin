@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from dissect.rules.catalog import CatalogError, load_catalog
+from lupabin.rules.catalog import CatalogError, load_catalog
 
-ROOT = Path(__file__).parents[1] / "src/dissect/rules/yara"
+ROOT = Path(__file__).parents[1] / "src/lupabin/rules/yara"
 
 
 def copy_catalog(tmp_path):

@@ -7,11 +7,11 @@ import struct
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence.code import verify_calls
-from dissect.evidence.models import Report
-from dissect.explain.engine import explain
-from dissect.glossary.catalog import load_glossary
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence.code import verify_calls
+from lupabin.evidence.models import Report
+from lupabin.explain.engine import explain
+from lupabin.glossary.catalog import load_glossary
 from tests.fixtures.pe_builder import (
     CODE_RVA,
     HKCU64,
@@ -117,7 +117,7 @@ def test_opening_run_and_setting_a_value_in_one_range_is_one_case():
     item = found["capability.run_key_open_and_set@1"]
     (case,) = item.slots["cases"]
     assert case.startswith("0x00002000-0x00002043 (rango de .pdata): abre RegOpenKeyExW")
-    assert "Escribe con RegSetValueExW en 0x0000203c (valor «DissectTraining»)" in case
+    assert "Escribe con RegSetValueExW en 0x0000203c (valor «LupaBinTraining»)" in case
     assert case.endswith("No se sabe si la escritura usa la clave abierta (T1547.001)")
     function = facts(report, "code_function")[0]
     assert item.evidence_ids[0] == function.id
@@ -141,7 +141,7 @@ def test_winlogon_pairs_carry_t1547_004_only_for_its_values(value, technique):
         {"pdata": ((0, 0x28),)},  # the write is outside the opening call's range
         {"pdata": ((0, 0x28), (0x28, None))},  # two ranges, one call in each
         {"set_key": HKCU64},  # the write names a predefined key: it goes elsewhere
-        {"subkey": r"Software\Dissect\Training"},  # not a Run key
+        {"subkey": r"Software\LupaBin\Training"},  # not a Run key
     ],
 )
 def test_no_pair_when_the_range_or_the_key_does_not_support_it(variant):

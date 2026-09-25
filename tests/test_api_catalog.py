@@ -2,18 +2,18 @@ import struct
 
 import pytest
 
-from dissect.evidence import api_catalog, argument_forms
-from dissect.evidence.api_catalog import hkey_name, lookup
+from lupabin.evidence import api_catalog, argument_forms
+from lupabin.evidence.api_catalog import hkey_name, lookup
 
 PINNED = {
     # v1: RegOpenKeyExA/W (never published)
-    "dissect-api-semantics-v1": "19e41f8f93976c5ebaf5270cdf2ef40812f8199a14ad968038d3b5d3a2bf8abb",
+    "lupabin-api-semantics-v1": "19e41f8f93976c5ebaf5270cdf2ef40812f8199a14ad968038d3b5d3a2bf8abb",
     # v2: + RegCreateKeyExA/W, checked on Microsoft Learn on 2026-09-24
-    "dissect-api-semantics-v2": "238568b92b75a849ffe0d8fdf75ac5877fe4b86d8d1ba9b75022cc4006579420",
+    "lupabin-api-semantics-v2": "238568b92b75a849ffe0d8fdf75ac5877fe4b86d8d1ba9b75022cc4006579420",
     # v3: + GetProcAddress, checked on Microsoft Learn on 2026-09-24
-    "dissect-api-semantics-v3": "7648350dc53ec4234e65902b06bdbde64827df0a0554792f5aa5046d33f82c56",
+    "lupabin-api-semantics-v3": "7648350dc53ec4234e65902b06bdbde64827df0a0554792f5aa5046d33f82c56",
     # v4: the rest of design section 4 (67 entries), checked on 2026-09-24
-    "dissect-api-semantics-v4": "3ab14b23f9fe91b334a4f4bdea927bf70c86b638b921c76337f6d6a98ffc2b75",
+    "lupabin-api-semantics-v4": "3b6a6839eaeefafb836cf02db429e5af531cbb0b3b38a19f69ee2c5dca7635bc",
 }
 
 

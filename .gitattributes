@@ -1,7 +1,7 @@
-src/dissect/rules/yara/*.yar text eol=lf
-src/dissect/rules/yara/manifest.json text eol=lf
-src/dissect/glossary/entries/*.toml text eol=lf
-src/dissect/glossary/entries/manifest.json text eol=lf
+src/lupabin/rules/yara/*.yar text eol=lf
+src/lupabin/rules/yara/manifest.json text eol=lf
+src/lupabin/glossary/entries/*.toml text eol=lf
+src/lupabin/glossary/entries/manifest.json text eol=lf
 docs/explanation-schema.json text eol=lf
 *.sh text eol=lf
 deploy/** text eol=lf

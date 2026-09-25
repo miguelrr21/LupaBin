@@ -1,0 +1,12 @@
+id = "attack.t1059_003"
+title = "T1059.003: intérprete de órdenes de Windows (cmd)"
+revision = "1.0.0"
+lang = "es"
+summary = "Técnica de ejecución de ATT&CK: usar cmd.exe, el intérprete de órdenes de Windows, para ejecutar órdenes."
+body = "cmd /c ejecuta la orden que recibe y termina; cmd /k la ejecuta y sigue abierto.\n\nLupaBin asocia esta técnica cuando el programa que lanza una llamada (WinExec, CreateProcess o ShellExecute) es cmd o cmd.exe, según su argumento constante: el nombre de la aplicación, el principio de la línea de órdenes o el archivo que se abre."
+not_proven = "Muchos programas y scripts legítimos lanzan cmd.exe."
+related = ["attack.technique", "api.family.process_creation"]
+sources = [
+  { title = "Command and Scripting Interpreter: Windows Command Shell", publisher = "MITRE ATT&CK", url = "https://attack.mitre.org/techniques/T1059/003/", verified_on = 2026-09-24 },
+  { title = "cmd", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmd", verified_on = 2026-09-24 },
+]

@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from dissect.evidence.primitives import YaraLimits
-from dissect.evidence.yara import ScanResult, validate_scan
-from dissect.rules.catalog import load_catalog
-from dissect.rules.native import scan
+from lupabin.evidence.primitives import YaraLimits
+from lupabin.evidence.yara import ScanResult, validate_scan
+from lupabin.rules.catalog import load_catalog
+from lupabin.rules.native import scan
 
 
 @pytest.mark.parametrize(
@@ -26,7 +26,7 @@ from dissect.rules.native import scan
     ],
 )
 def test_invalid_native_responses_are_rejected(mutate):
-    data = b"DISSECT PRACTICE"
+    data = b"LUPABIN PRACTICE"
     payload = json.loads(scan(data).model_dump_json())
     mutate(payload)
     with pytest.raises(ValueError):
@@ -35,7 +35,7 @@ def test_invalid_native_responses_are_rejected(mutate):
 
 
 def test_valid_native_response_is_bound_to_input_and_catalog():
-    data = b"DISSECT PRACTICE"
+    data = b"LUPABIN PRACTICE"
     result = scan(data)
     validate_scan(result, data, load_catalog().info, YaraLimits())
     assert result.matches[0].omitted_instances == 0

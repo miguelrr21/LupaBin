@@ -1,9 +1,9 @@
-# Desplegar la web de Dissect en un servidor
+# Desplegar la web de LupaBin en un servidor
 
 Esta guía es para quien no ha desplegado nunca un servicio. Al terminar tendrás la web pública en la IP de tu servidor y, si quieres, en un dominio con HTTPS.
 
 Qué se instala y por qué está en `docs/superpowers/specs/2026-09-25-web-design.md`. En resumen:
-- una aplicación web (`dissect-web`) que solo escucha dentro del servidor;
+- una aplicación web (`lupabin-web`) que solo escucha dentro del servidor;
 - Caddy delante, que recibe las visitas y gestiona el HTTPS;
 - Docker, que abre cada archivo en un contenedor nuevo, sin red y sin privilegios.
 
@@ -66,28 +66,28 @@ sudo apt update && sudo apt full-upgrade -y && sudo reboot
 Si el repositorio ya es público:
 ```text
 sudo apt install -y git
-git clone https://github.com/miguelrr21/Dissect.git
+git clone https://github.com/miguelrr21/LupaBin.git
 ```
 
 Si todavía es privado, usa como contraseña un token de GitHub de **solo lectura** (*Settings → Developer settings → Fine-grained tokens*, *Contents: Read-only*). También puedes copiarlo desde tu PC:
 ```text
-git archive --format=tar.gz -o dissect.tar.gz HEAD
-scp dissect.tar.gz ubuntu@IP_DEL_SERVIDOR:~
-ssh ubuntu@IP_DEL_SERVIDOR "mkdir -p Dissect && tar -xzf dissect.tar.gz -C Dissect"
+git archive --format=tar.gz -o lupabin.tar.gz HEAD
+scp lupabin.tar.gz ubuntu@IP_DEL_SERVIDOR:~
+ssh ubuntu@IP_DEL_SERVIDOR "mkdir -p LupaBin && tar -xzf lupabin.tar.gz -C LupaBin"
 ```
 
 ## 5. Instalar
 
 ```text
-cd ~/Dissect
+cd ~/LupaBin
 sudo bash deploy/server/install.sh
 ```
 
 La primera vez tarda entre 10 y 20 minutos. El script:
 - instala Docker, Caddy y las actualizaciones automáticas de seguridad;
 - instala uv (el gestor de Python del proyecto), comprobando su SHA-256;
-- copia el código a `/opt/dissect` y construye la imagen del análisis;
-- crea el usuario de servicio `dissect` y ajusta cuántos análisis a la vez caben en la máquina;
+- copia el código a `/opt/lupabin` y construye la imagen del análisis;
+- crea el usuario de servicio `lupabin` y ajusta cuántos análisis a la vez caben en la máquina;
 - arranca el servicio y Caddy, y abre los puertos si el sistema los bloquea.
 
 Al final escribe la dirección: abre `http://IP_DEL_SERVIDOR`.
@@ -95,26 +95,26 @@ Al final escribe la dirección: abre `http://IP_DEL_SERVIDOR`.
 ## 6. VirusTotal (opcional)
 
 ```text
-sudo nano /etc/dissect/web.env
+sudo nano /etc/lupabin/web.env
 ```
 Escribe tu clave en `VT_API_KEY=...`, guarda (Ctrl+O, Enter, Ctrl+X) y reinicia:
 ```text
-sudo systemctl restart dissect-web
+sudo systemctl restart lupabin-web
 ```
 
 La web funciona como la CLI: consulta el SHA-256 y, si VirusTotal no conoce el archivo, lo sube y sigue su análisis. Antes de activarlo:
-- **La cuota se comparte entre todos los visitantes.** El servidor reparte la de tu clave: con la API pública, 4 peticiones por minuto y 500 al día (`DISSECT_VT_PER_MINUTE` y `DISSECT_VT_PER_DAY`). Si se agota, la web lo dice y el análisis de Dissect sigue igual. Si consigues una clave con más cuota, sube esos valores.
-- **Los archivos subidos son de tus visitantes**, y VirusTotal puede compartirlos con sus clientes de pago. La web lo avisa junto a la casilla. Para no subir nunca nada: `DISSECT_VIRUSTOTAL_UPLOAD=off`.
+- **La cuota se comparte entre todos los visitantes.** El servidor reparte la de tu clave: con la API pública, 4 peticiones por minuto y 500 al día (`LUPABIN_VT_PER_MINUTE` y `LUPABIN_VT_PER_DAY`). Si se agota, la web lo dice y el análisis de LupaBin sigue igual. Si consigues una clave con más cuota, sube esos valores.
+- **Los archivos subidos son de tus visitantes**, y VirusTotal puede compartirlos con sus clientes de pago. La web lo avisa junto a la casilla. Para no subir nunca nada: `LUPABIN_VIRUSTOTAL_UPLOAD=off`.
 
 ## 7. Dominio y HTTPS (gratis con DuckDNS)
 
 Sin dominio, la web funciona por HTTP en la IP. Para tener HTTPS:
-1. **Dominio gratuito:** entra en duckdns.org con tu cuenta de GitHub o Google, crea un subdominio (por ejemplo `dissect-tutor`) y pon la IP de tu servidor. También vale un dominio comprado, con un registro **A** hacia esa IP.
+1. **Dominio gratuito:** entra en duckdns.org con tu cuenta de GitHub o Google, crea un subdominio (por ejemplo `lupabin`) y pon la IP de tu servidor. También vale un dominio comprado, con un registro **A** hacia esa IP.
 2. **Edita Caddy:**
    ```text
    sudo nano /etc/caddy/Caddyfile
    ```
-   Cambia `:80 {` por `dissect-tutor.duckdns.org {` (o tu dominio) y recarga:
+   Cambia `:80 {` por `lupabin.duckdns.org {` (o tu dominio) y recarga:
    ```text
    sudo systemctl reload caddy
    ```
@@ -122,30 +122,30 @@ Sin dominio, la web funciona por HTTP en la IP. Para tener HTTPS:
 
 ## 8. Límites de uso
 
-En `/etc/dissect/web.env`:
+En `/etc/lupabin/web.env`:
 
 | Variable | Por defecto | Qué hace |
 | --- | --- | --- |
-| `DISSECT_WEB_RATE` | `6/600` | Análisis por IP: 6 cada 600 segundos. |
-| `DISSECT_WEB_CONCURRENCY` | según la máquina (1 a 3) | Análisis a la vez; cada uno usa hasta 512 MiB y 1 CPU. |
-| `DISSECT_WEB_QUEUE_SECONDS` | `60` | Cuánto espera una petición antes de responder "ocupado". |
-| `DISSECT_VT_PER_MINUTE`, `DISSECT_VT_PER_DAY` | `4`, `500` | Peticiones a VirusTotal para todo el servidor. |
+| `LUPABIN_WEB_RATE` | `6/600` | Análisis por IP: 6 cada 600 segundos. |
+| `LUPABIN_WEB_CONCURRENCY` | según la máquina (1 a 3) | Análisis a la vez; cada uno usa hasta 512 MiB y 1 CPU. |
+| `LUPABIN_WEB_QUEUE_SECONDS` | `60` | Cuánto espera una petición antes de responder "ocupado". |
+| `LUPABIN_VT_PER_MINUTE`, `LUPABIN_VT_PER_DAY` | `4`, `500` | Peticiones a VirusTotal para todo el servidor. |
 
 El tamaño máximo de archivo es 20 MiB.
 
 ## 9. Comprobar que todo va bien
 
 ```text
-systemctl status dissect-web caddy docker
+systemctl status lupabin-web caddy docker
 curl http://127.0.0.1:8080/api/health
-sudo journalctl -u dissect-web -n 50
+sudo journalctl -u lupabin-web -n 50
 ```
 `/api/health` responde `{"status":"ok",...}` si Docker y la imagen están disponibles. Los registros no guardan las IP de los visitantes ni los archivos.
 
 ## 10. Actualizar
 
 ```text
-cd ~/Dissect && git pull && sudo bash deploy/server/update.sh
+cd ~/LupaBin && git pull && sudo bash deploy/server/update.sh
 ```
 La actualización conserva tu `web.env` y un `Caddyfile` con tu dominio.
 
@@ -160,8 +160,8 @@ La actualización conserva tu `web.env` y un `Caddyfile` con tu dominio.
 ## 12. Desinstalar
 
 ```text
-sudo systemctl disable --now dissect-web
-sudo rm -rf /opt/dissect /etc/dissect /var/lib/dissect /etc/systemd/system/dissect-web.service
-sudo cp /etc/caddy/Caddyfile.antes-de-dissect /etc/caddy/Caddyfile 2>/dev/null; sudo systemctl reload caddy
-sudo docker rmi dissect-worker:0.6.0
+sudo systemctl disable --now lupabin-web
+sudo rm -rf /opt/lupabin /etc/lupabin /var/lib/lupabin /etc/systemd/system/lupabin-web.service
+sudo cp /etc/caddy/Caddyfile.antes-de-lupabin /etc/caddy/Caddyfile 2>/dev/null; sudo systemctl reload caddy
+sudo docker rmi lupabin-worker:0.6.0
 ```

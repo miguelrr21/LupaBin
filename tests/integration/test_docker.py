@@ -4,10 +4,10 @@ from uuid import uuid4
 
 import pytest
 
-from dissect.errors import DissectError
-from dissect.evidence.models import Limits
-from dissect.runner import IMAGE, container_args, remove_owned_container, run_isolated
-from dissect.transport import DockerCLI
+from lupabin.errors import LupaBinError
+from lupabin.evidence.models import Limits
+from lupabin.runner import IMAGE, container_args, remove_owned_container, run_isolated
+from lupabin.transport import DockerCLI
 from tests.fixtures.pe_builder import build_pe
 
 pytestmark = pytest.mark.docker
@@ -20,7 +20,7 @@ def require_docker():
         info = await client.run(("info", "--format", "{{.OSType}}"))
         assert info.code == 0 and info.stdout.strip() == b"linux", "Linux Docker is required"
         image = await client.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
-        assert image.code == 0, "Build dissect-worker:0.6.0 before integration tests"
+        assert image.code == 0, "Build lupabin-worker:0.6.0 before integration tests"
 
     asyncio.run(check())
 
@@ -39,7 +39,7 @@ def test_real_worker_round_trip(bits):
 def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
     from typer.testing import CliRunner
 
-    from dissect.cli import app
+    from lupabin.cli import app
     from tests.fixtures.pe_builder import build_demo
 
     path = tmp_path / "demo.bin"
@@ -79,7 +79,7 @@ def test_xor_flood_becomes_a_declared_limit_in_real_container():
 
 
 def test_yara_limited_report_in_real_container():
-    data = build_pe() + b"DISSECT PRACTICE\0" * 20
+    data = build_pe() + b"LUPABIN PRACTICE\0" * 20
     report = asyncio.run(run_isolated(data, Limits(), DockerCLI()))
     assert report.analysis.status == "partial"
     match = next(f for f in report.evidence if f.kind == "yara_match")
@@ -90,9 +90,9 @@ def test_yara_limited_report_in_real_container():
 
 def test_yara_child_timeout_preserves_other_sources_in_container():
     script = (
-        "from dissect.rules.process import scan_child\n"
-        "from dissect.transport import run_command\n"
-        "import dissect.extractors.yara as adapter\n"
+        "from lupabin.rules.process import scan_child\n"
+        "from lupabin.transport import run_command\n"
+        "import lupabin.extractors.yara as adapter\n"
         "async def delayed(data, limits, catalog):\n"
         "    async def execute(executable, args, **kwargs):\n"
         "        kwargs['timeout'] = 0.1\n"
@@ -100,7 +100,7 @@ def test_yara_child_timeout_preserves_other_sources_in_container():
         "        return await run_command(executable, command, **kwargs)\n"
         "    return await scan_child(data, limits, catalog, execute=execute)\n"
         "adapter.scan_child = delayed\n"
-        "from dissect.worker import main\n"
+        "from lupabin.worker import main\n"
         "raise SystemExit(main())\n"
     )
 
@@ -129,14 +129,14 @@ def test_yara_child_timeout_preserves_other_sources_in_container():
 def test_container_runtime_restrictions():
     async def check():
         client = DockerCLI()
-        name = "dissect-test-" + uuid4().hex
+        name = "lupabin-test-" + uuid4().hex
         args = container_args(name, IMAGE, Limits())
         prefix = args[: args.index(IMAGE)]
         probe = (
             "import os, json, socket\n"
             "result = {'uid': os.getuid(), 'interfaces': socket.if_nameindex()}\n"
             "try:\n"
-            "    open('/tmp/dissect-write-probe', 'wb').close()\n"
+            "    open('/tmp/lupabin-write-probe', 'wb').close()\n"
             "    result['write_errno'] = 0\n"
             "except OSError as e:\n"
             "    result['write_errno'] = e.errno\n"
@@ -192,7 +192,7 @@ def test_timeout_removes_real_container():
 
     async def check():
         client = SlowDocker()
-        with pytest.raises(DissectError) as caught:
+        with pytest.raises(LupaBinError) as caught:
             await run_isolated(build_pe(), Limits(timeout_seconds=1), client)
         assert caught.value.code == "timeout"
         result = await client.run(
@@ -215,7 +215,7 @@ def test_timeout_removes_real_container():
 def test_real_cli_didactic_report_and_checked_explanation(tmp_path):
     from typer.testing import CliRunner
 
-    from dissect.cli import app
+    from lupabin.cli import app
     from tests.fixtures.pe_builder import build_decode_demo
 
     runner = CliRunner()

@@ -4,11 +4,11 @@ Estado: diseño de las secciones 1–11 aprobado por el usuario. El plan de impl
 
 ## 1. Propósito y límites del producto
 
-Dissect añadirá coincidencias de reglas a los hechos PE y a las cadenas que ya obtiene. El objetivo educativo es poder contestar: qué regla coincidió, qué versión se usó y qué bytes asociados pueden comprobarse.
+LupaBin añadirá coincidencias de reglas a los hechos PE y a las cadenas que ya obtiene. El objetivo educativo es poder contestar: qué regla coincidió, qué versión se usó y qué bytes asociados pueden comprobarse.
 
 La afirmación permitida es "el motor YARA evaluó como verdadera esta regla sobre estos bytes". No equivale a identificar malware, demostrar una técnica ATT&CK, probar una conexión ni reconstruir una ejecución. Los nombres, descripciones y tags de reglas tampoco se convierten en hechos sobre la muestra.
 
-La interfaz seguirá siendo `dissect analyze <archivo> --json`. Se conserva funcionamiento sin LLM, sin red durante el análisis y sin ejecución/emulación de instrucciones de la muestra. Evaluar reglas de análisis confiables no significa ejecutar código del binario analizado.
+La interfaz seguirá siendo `lupabin analyze <archivo> --json`. Se conserva funcionamiento sin LLM, sin red durante el análisis y sin ejecución/emulación de instrucciones de la muestra. Evaluar reglas de análisis confiables no significa ejecutar código del binario analizado.
 
 Quedan fuera: reglas proporcionadas por argumentos de CLI o subidas por usuarios, feeds descargables, reglas compiladas externas, capa, FLOSS, desofuscación, correlación ATT&CK/MBC, puntuaciones, antivirus, LLM e interfaz web.
 
@@ -24,7 +24,7 @@ Alternativas descartadas para esta fase: integrar YARA y capa simultáneamente, 
 
 ## 3. Catálogo propio y reproducible
 
-La única fuente de reglas será `src/dissect/rules/yara/`, con archivos `.yar` y un manifiesto JSON. Situarlas como recursos del paquete permite usar el mismo catálogo en la instalación editable, el wheel y la imagen Docker, sin duplicar reglas ni buscar archivos según el directorio de trabajo. Esta decisión ajusta la ubicación propuesta inicialmente en el brief, no el principio de contenido como código.
+La única fuente de reglas será `src/lupabin/rules/yara/`, con archivos `.yar` y un manifiesto JSON. Situarlas como recursos del paquete permite usar el mismo catálogo en la instalación editable, el wheel y la imagen Docker, sin duplicar reglas ni buscar archivos según el directorio de trabajo. Esta decisión ajusta la ubicación propuesta inicialmente en el brief, no el principio de contenido como código.
 
 Cada archivo contendrá una regla identificada de forma única. El manifiesto incluirá un ID de catálogo, revisión, identificadores de regla, namespace, nombre de archivo, revisión de la regla, IDs de sus patrones, descripción neutral y licencia. Los IDs y nombres de archivo estarán restringidos; no se aceptarán rutas absolutas, traversal, enlaces fuera del paquete, duplicados ni reglas no enumeradas en el manifiesto.
 
@@ -34,10 +34,10 @@ El catálogo inicial tendrá cuatro reglas propias:
 
 | ID | Condición prevista | Afirmación permitida |
 | --- | --- | --- |
-| `dissect_dos_stub_text` | Presencia literal de `This program cannot be run in DOS mode` | Se encontró ese texto; no demuestra por sí solo el tipo PE. |
-| `dissect_process_memory_api_names` | Presencia conjunta de `VirtualAllocEx`, `WriteProcessMemory` y `CreateRemoteThread` | Aparecen esos tres nombres; no demuestra imports ni inyección. |
-| `dissect_debug_marker_pair` | Presencia de los patrones `RSDS` y `.pdb` | Coinciden esos marcadores; no acredita una ruta PDB ni un directorio de depuración válido. |
-| `dissect_training_marker` | Presencia de `DISSECT PRACTICE` en ASCII o con el modificador `wide` | Se encontró el marcador de práctica; no identifica una familia. |
+| `lupabin_dos_stub_text` | Presencia literal de `This program cannot be run in DOS mode` | Se encontró ese texto; no demuestra por sí solo el tipo PE. |
+| `lupabin_process_memory_api_names` | Presencia conjunta de `VirtualAllocEx`, `WriteProcessMemory` y `CreateRemoteThread` | Aparecen esos tres nombres; no demuestra imports ni inyección. |
+| `lupabin_debug_marker_pair` | Presencia de los patrones `RSDS` y `.pdb` | Coinciden esos marcadores; no acredita una ruta PDB ni un directorio de depuración válido. |
+| `lupabin_training_marker` | Presencia de `LUPABIN PRACTICE` en ASCII o con el modificador `wide` | Se encontró el marcador de práctica; no identifica una familia. |
 
 Se usarán patrones literales y condiciones simples, sin módulos importados, includes, variables externas, referencias entre reglas, reglas privadas/globales, modificadores XOR/Base64, regex ni condiciones sin patrones positivos. Ampliar ese subconjunto requerirá revisar los tests y el diseño de procedencia. No se construirá un intérprete YARA alternativo.
 
@@ -99,7 +99,7 @@ Los componentes de YARA serán `yara_rules`, `yara_scan` y `yara_evidence`:
 - `yara_scan`: obtener una evaluación completa del conjunto sobre el buffer.
 - `yara_evidence`: conservar y validar las coincidencias dentro de las cuotas de salida.
 
-La versión del extractor identifica al adaptador de Dissect; las versiones del paquete/módulo nativo van en el contexto, distinguiendo versión esperada de versión observada. `examined` expresa reglas compiladas o evaluadas cuando ese total está confirmado. Se permitirá valor nulo para ese contador en los componentes YARA cuando una interrupción impida conocerlo; no se usará cero como sustituto de "desconocido". Los contadores actuales de PE/strings mantienen su semántica.
+La versión del extractor identifica al adaptador de LupaBin; las versiones del paquete/módulo nativo van en el contexto, distinguiendo versión esperada de versión observada. `examined` expresa reglas compiladas o evaluadas cuando ese total está confirmado. Se permitirá valor nulo para ese contador en los componentes YARA cuando una interrupción impida conocerlo; no se usará cero como sustituto de "desconocido". Los contadores actuales de PE/strings mantienen su semántica.
 
 Un escaneo normal con cero matches es cobertura completa de ese catálogo, no ausencia de malware. Una instalación sin el binding, un catálogo ausente, una compilación fallida o un proceso hijo sin respuesta válida produce componentes bloqueados y un error identificable, no un éxito silencioso.
 
@@ -195,7 +195,7 @@ Aceptación: punto de partida comprobado, esquema histórico preservado y ningú
 
 ### B. Catálogo y empaquetado de reglas
 
-Archivos: nuevos recursos en `src/dissect/rules/yara/`, manifiesto JSON, cargador `src/dissect/rules/catalog.py`, `.gitattributes`; nuevos tests de catálogo y empaquetado.
+Archivos: nuevos recursos en `src/lupabin/rules/yara/`, manifiesto JSON, cargador `src/lupabin/rules/catalog.py`, `.gitattributes`; nuevos tests de catálogo y empaquetado.
 
 1. Escribir primero pruebas fallidas de inventario, IDs/namespaces duplicados, archivo ausente, regla extra, ruta insegura, enlaces fuera del recurso y límites de fuente/manifiesto.
 2. Implementar modelos tipados y carga mediante recursos del paquete. No depender del cwd ni permitir rutas aportadas por la muestra.
@@ -208,7 +208,7 @@ Aceptación: catálogo único, reproducible y empaquetado; todavía sin activar 
 
 ### C. Modelos de coincidencia y protocolo del subproceso
 
-Archivos: nuevos modelos YARA bajo `src/dissect/evidence/` y protocolo interno tipado; tests de contrato.
+Archivos: nuevos modelos YARA bajo `src/lupabin/evidence/` y protocolo interno tipado; tests de contrato.
 
 1. Escribir pruebas fallidas para `yara_match`, contexto, instancias y estados, incluyendo patrones desconocidos, offsets fuera del archivo, longitudes incoherentes y hexadecimal incorrecto.
 2. Definir la ubicación global nula exclusivamente para YARA. Mantener intactos los requisitos de ubicación de los tipos existentes.
@@ -234,7 +234,7 @@ Aceptación: resultados reales del binding sobre fixtures, con procedencia y con
 
 ### E. Ciclo de vida del subproceso dentro de Docker
 
-Archivos: controlador interno del proceso YARA, posible extracción del transporte acotado reutilizable desde `src/dissect/transport.py`; tests de transporte/worker.
+Archivos: controlador interno del proceso YARA, posible extracción del transporte acotado reutilizable desde `src/lupabin/transport.py`; tests de transporte/worker.
 
 1. Escribir primero tests con procesos controlados que simulen demora, salida excesiva, JSON incompleto, salida no exitosa y finalización nativa anómala. No provocar un fallo real de seguridad ni ejecutar muestras.
 2. Iniciar únicamente el intérprete del entorno y el módulo interno conocido, sin shell y sin construir comandos con datos de la muestra.
@@ -263,7 +263,7 @@ Aceptación: informe 0.3.0 completo/partial/failed coherente, sin conclusiones d
 
 Archivos: Compose, Dockerfile si requiere ajuste de recursos empaquetados, workflow existente, tests de integración y empaquetado.
 
-1. Construir `dissect-worker:0.3.0` con carga explícita y verificar su etiqueta en el contexto usado, conservando las imágenes anteriores.
+1. Construir `lupabin-worker:0.3.0` con carga explícita y verificar su etiqueta en el contexto usado, conservando las imágenes anteriores.
 2. Comprobar el catálogo desde un wheel instalado y desde la imagen; no basta con que los archivos estén presentes en el checkout.
 3. Ejecutar el recorrido real CLI -> worker -> subproceso YARA -> JSON, con positivos, negativos y una representación limitada.
 4. Repetir las comprobaciones de red deshabilitada, usuario no root, raíz de solo lectura, capacidades, recursos y cleanup. El subproceso no justifica relajar controles.
@@ -290,11 +290,11 @@ uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen mypy --platform linux src
 uv run --frozen pytest -m "not docker"
-uv run --frozen python -m dissect.evidence.schema --check
+uv run --frozen python -m lupabin.evidence.schema --check
 uv build
 docker compose config --quiet
-docker build --load -f docker/Dockerfile -t dissect-worker:0.3.0 .
-docker image inspect --format '{{.Id}}' dissect-worker:0.3.0
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.3.0 .
+docker image inspect --format '{{.Id}}' lupabin-worker:0.3.0
 uv run --frozen pytest -m docker
 ```
 

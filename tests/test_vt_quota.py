@@ -4,10 +4,10 @@ from datetime import date
 
 import pytest
 
-from dissect.virustotal.client import HttpResponse, VirusTotalError, follow, submit
-from dissect.virustotal.quota import Quota
-from dissect.web import view
-from dissect.web.guard import Settings
+from lupabin.virustotal.client import HttpResponse, VirusTotalError, follow, submit
+from lupabin.virustotal.quota import Quota
+from lupabin.web import view
+from lupabin.web.guard import Settings
 
 SHA = "ab" * 32
 KEY = {"VT_API_KEY": "k" * 64}
@@ -91,7 +91,7 @@ def test_every_request_of_a_submission_counts_and_none_is_sent_past_the_budget()
 def test_an_exhausted_quota_is_explained_to_the_visitor():
     from datetime import UTC, datetime
 
-    from dissect.virustotal.models import VirusTotalReport
+    from lupabin.virustotal.models import VirusTotalReport
 
     report = VirusTotalReport(
         sample_sha256=SHA,
@@ -104,9 +104,9 @@ def test_an_exhausted_quota_is_explained_to_the_visitor():
 
 
 def test_the_budget_is_configurable_and_validated():
-    shown = Settings.from_env({"DISSECT_VT_PER_MINUTE": "30", "DISSECT_VT_PER_DAY": "20000"})
+    shown = Settings.from_env({"LUPABIN_VT_PER_MINUTE": "30", "LUPABIN_VT_PER_DAY": "20000"})
     assert (shown.vt_per_minute, shown.vt_per_day) == (30, 20000)
     with pytest.raises(ValueError):
-        Settings.from_env({"DISSECT_VT_PER_DAY": "0"})
+        Settings.from_env({"LUPABIN_VT_PER_DAY": "0"})
     with pytest.raises(ValueError):
         Quota(0, 1)

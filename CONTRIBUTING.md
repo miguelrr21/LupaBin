@@ -1,4 +1,4 @@
-# Contribuir a Dissect
+# Contribuir a LupaBin
 
 ## Principio principal
 
@@ -30,7 +30,7 @@ Justifica dependencias nuevas y usa versiones publicadas al menos siete días an
 
 ## Reglas YARA propias
 
-El catálogo está en `src/dissect/rules/yara/`. Cada archivo contiene una regla; su ID, namespace y nombre de archivo deben coincidir con el manifiesto. Las reglas de esta fase solo usan literales, ASCII/wide y condiciones sencillas: no includes, módulos, variables externas, dependencias entre reglas, regex, XOR/Base64 ni reglas privadas/globales.
+El catálogo está en `src/lupabin/rules/yara/`. Cada archivo contiene una regla; su ID, namespace y nombre de archivo deben coincidir con el manifiesto. Las reglas de esta fase solo usan literales, ASCII/wide y condiciones sencillas: no includes, módulos, variables externas, dependencias entre reglas, regex, XOR/Base64 ni reglas privadas/globales.
 
 Para proponer una regla, añade su entrada de manifiesto con revisión, descripción neutral, IDs de patrones y licencia Apache-2.0; incorpora positivos, negativos y casos de límite sintéticos. Conserva UTF-8 y finales LF: no se normalizan bytes silenciosamente durante el análisis. Cambiar fuentes o metadatos cambia el digest del catálogo. La revisión y el hash no son un veredicto de malware ni una firma de autenticidad.
 
@@ -40,15 +40,15 @@ Después de un cambio aprobado, reconstruye la imagen y comprueba los tests YARA
 
 ## Glosario y explicaciones
 
-El glosario (`src/dissect/glossary/entries/`) es contenido revisado: una entrada TOML por concepto, en español, con al menos una fuente editorial (documentación del fabricante, RFC o estándar, documentación oficial de la herramienta o artículo académico) y la fecha en que se comprobó. Los conceptos propios de Dissect citan su documento del proyecto con ruta y ancla. El texto es conocimiento general: nunca habla de una muestra concreta. Si una entrada describe algo que se observa en muestras, incluye `not_proven`.
+El glosario (`src/lupabin/glossary/entries/`) es contenido revisado: una entrada TOML por concepto, en español, con al menos una fuente editorial (documentación del fabricante, RFC o estándar, documentación oficial de la herramienta o artículo académico) y la fecha en que se comprobó. Los conceptos propios de LupaBin citan su documento del proyecto con ruta y ancla. El texto es conocimiento general: nunca habla de una muestra concreta. Si una entrada describe algo que se observa en muestras, incluye `not_proven`.
 
-Tras revisar un cambio, vuelve a fijar el manifiesto con `uv run python -m dissect.glossary.catalog --write <revisión>` y comprueba las fuentes con `uv run python -m tests.check_glossary_sources`. El cargador rechaza cualquier entrada cuyo digest no coincida.
+Tras revisar un cambio, vuelve a fijar el manifiesto con `uv run python -m lupabin.glossary.catalog --write <revisión>` y comprueba las fuentes con `uv run python -m tests.check_glossary_sources`. El cargador rechaza cualquier entrada cuyo digest no coincida.
 
-Las explicaciones (`src/dissect/explain/rules.py`) son reglas puras: una frase solo puede usar campos de las evidencias que cita, y cada regla lleva su texto de límite. No añadas una regla que concluya intención, familia o comportamiento. Una cifra de contexto (como la prevalencia de una familia de APIs) debe estar medida sobre binarios benignos y documentada en el diseño de la Fase 3. Las listas de familias tienen digest fijado: cambiarlas exige nueva versión y repetir la medición.
+Las explicaciones (`src/lupabin/explain/rules.py`) son reglas puras: una frase solo puede usar campos de las evidencias que cita, y cada regla lleva su texto de límite. No añadas una regla que concluya intención, familia o comportamiento. Una cifra de contexto (como la prevalencia de una familia de APIs) debe estar medida sobre binarios benignos y documentada en el diseño de la Fase 3. Las listas de familias tienen digest fijado: cambiarlas exige nueva versión y repetir la medición.
 
 ## Decodificación y catálogo de cribs
 
-El catálogo XOR (`CRIBS` en `src/dissect/extractors/decode_xor.py`, versión `dissect-xor-cribs-v3`) es código revisado. Una crib es un ancla de búsqueda neutral elegida por su longitud, no por su significado: nombres de API o de DLL no se añaden para "detectar" nada. Una crib de *n* bytes solo verifica por sí sola claves de hasta unos *n*−5 bytes; las cribs cortas se aprovechan sobre todo cuando otra cadena de la muestra ya verificó la misma clave (reutilización de clave).
+El catálogo XOR (`CRIBS` en `src/lupabin/extractors/decode_xor.py`, versión `lupabin-xor-cribs-v3`) es código revisado. Una crib es un ancla de búsqueda neutral elegida por su longitud, no por su significado: nombres de API o de DLL no se añaden para "detectar" nada. Una crib de *n* bytes solo verifica por sí sola claves de hasta unos *n*−5 bytes; las cribs cortas se aprovechan sobre todo cuando otra cadena de la muestra ya verificó la misma clave (reutilización de clave).
 
 Para cambiar el catálogo:
 

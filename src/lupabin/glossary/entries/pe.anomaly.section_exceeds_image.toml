@@ -1,0 +1,12 @@
+id = "pe.anomaly.section_exceeds_image"
+title = "Sección más allá de SizeOfImage"
+revision = "1.0.0"
+lang = "es"
+summary = "Una sección declara que se extiende en memoria más allá del tamaño total de la imagen (SizeOfImage) indicado en la cabecera."
+body = "Indica que la cabecera y la tabla de secciones no son coherentes entre sí.\n\nCódigo de la regla en el informe: section_exceeds_image (versión pe-structure-v1)."
+not_proven = "Esta incoherencia no demuestra intención maliciosa ni cómo se comportará el archivo."
+related = ["pe.anomaly"]
+sources = [
+  { title = "PE Format: Section Table (Section Headers)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers", verified_on = 2026-09-23 },
+  { title = "Fase 1A, 5.6 Anomalías estructurales", publisher = "Proyecto LupaBin", document = "docs/superpowers/specs/2026-09-20-static-evidence-design.md#56-anomalías-estructurales", verified_on = 2026-09-23 },
+]
