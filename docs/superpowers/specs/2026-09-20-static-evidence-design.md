@@ -4,11 +4,11 @@ Estado del diseño (secciones 1–9): aprobado por el usuario. El plan de implem
 
 ## 1. Propósito y resultado para el usuario
 
-Dissect debe enseñar a observar un binario antes de atribuirle comportamientos. Esta ampliación permitirá consultar secciones, medidas de entropía, cabeceras, exports y cadenas literales junto con los imports existentes. Cada dato tendrá una ubicación verificable y una descripción de lo que se pudo revisar.
+LupaBin debe enseñar a observar un binario antes de atribuirle comportamientos. Esta ampliación permitirá consultar secciones, medidas de entropía, cabeceras, exports y cadenas literales junto con los imports existentes. Cada dato tendrá una ubicación verificable y una descripción de lo que se pudo revisar.
 
 Se mantiene la prioridad explícita del usuario: abstenerse antes que inventar datos. No se ejecuta ni emula la muestra; no se usa un LLM, red ni código de la muestra para producir hallazgos.
 
-El resultado visible seguirá siendo JSON mediante `dissect analyze <archivo> --json`. No habrá todavía web, informe narrativo ni clasificación de malware. Al terminar la implementación se mostrará una demostración real y un cierre que explique cada cambio, su fundamento y qué prepara para el futuro.
+El resultado visible seguirá siendo JSON mediante `lupabin analyze <archivo> --json`. No habrá todavía web, informe narrativo ni clasificación de malware. Al terminar la implementación se mostrará una demostración real y un cierre que explique cada cambio, su fundamento y qué prepara para el futuro.
 
 ## 2. Alcance y alternativas
 
@@ -18,7 +18,7 @@ Alternativas consideradas:
 
 - **Ampliación progresiva del núcleo actual, elegida:** pefile para cabeceras, lectura acotada de tablas y algoritmos pequeños de biblioteca estándar. Conserva la trazabilidad sin añadir dependencias.
 - **Integrar primero YARA/capa/FLOSS:** aporta reglas y capacidades, pero añade dependencias, licencias, políticas de ejecución y nuevas interpretaciones antes de completar la observación básica. Queda para el siguiente bloque.
-- **Construir primero la web sobre imports:** hace visible la interfaz, pero no amplía lo que Dissect puede enseñar sobre la muestra. No es el orden acordado.
+- **Construir primero la web sobre imports:** hace visible la interfaz, pero no amplía lo que LupaBin puede enseñar sobre la muestra. No es el orden acordado.
 
 Quedan fuera de esta fase: YARA, capa, FLOSS, Base64/XOR, desempaquetado, análisis del flujo de instrucciones, ELF, interpretación de scripts, firmas Authenticode, VirusTotal, detección de familias, puntuaciones de riesgo, LLM y renderers didácticos. Extraer cadenas literales de bytes de tipo desconocido no equivale a soportar su formato ni su comportamiento.
 
@@ -177,7 +177,7 @@ La demostración de aceptación mostrará un PE sintético con varios tipos de e
 
 ## 9. Fundamento y evolución posterior
 
-Fundamentos: brief original, prioridad de veracidad indicada por el usuario, contrato 0.1.0, código actual y especificación oficial [PE Format de Microsoft](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format). Las decisiones sobre secciones, RVA, tablas de exportación y significado limitado de timestamps se apoyan en esa especificación. Los límites de producto y de cadenas son decisiones conservadoras de Dissect, no propiedades universales del formato.
+Fundamentos: brief original, prioridad de veracidad indicada por el usuario, contrato 0.1.0, código actual y especificación oficial [PE Format de Microsoft](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format). Las decisiones sobre secciones, RVA, tablas de exportación y significado limitado de timestamps se apoyan en esa especificación. Los límites de producto y de cadenas son decisiones conservadoras de LupaBin, no propiedades universales del formato.
 
 La entropía usa una medida matemática de distribución de bytes; su utilidad educativa no autoriza inferencias de peligrosidad. Las cadenas son patrones literales definidos por una política explícita, no resultados de ejecución ni desofuscación.
 
@@ -199,11 +199,11 @@ Archivos afectados: esquema existente y nuevo archivo histórico `docs/schemas/0
 2. Conservar una copia exacta del JSON Schema 0.1.0 antes de regenerar nada. Comprobar mediante un test que la copia histórica no se modifica al exportar el esquema activo.
 3. Trabajar en la rama actual; no sobrescribir ni eliminar la imagen Docker 0.1.0.
 
-Verificación: `uv run --frozen pytest -m "not docker"` y `uv run --frozen python -m dissect.evidence.schema --check`. Las verificaciones Docker se ejecutarán cuando el motor esté disponible; su ausencia no se contabiliza como prueba superada.
+Verificación: `uv run --frozen pytest -m "not docker"` y `uv run --frozen python -m lupabin.evidence.schema --check`. Las verificaciones Docker se ejecutarán cuando el motor esté disponible; su ausencia no se contabiliza como prueba superada.
 
 ### B. Modelos tipados, cobertura y validaciones cruzadas
 
-Archivos: `src/dissect/evidence/models.py`, nuevos módulos de payloads y cobertura bajo `src/dissect/evidence/` si lo exige el tamaño, `src/dissect/extractors/base.py`; `tests/test_evidence.py`, `tests/test_schema.py` y nuevos tests focalizados de payloads/cobertura.
+Archivos: `src/lupabin/evidence/models.py`, nuevos módulos de payloads y cobertura bajo `src/lupabin/evidence/` si lo exige el tamaño, `src/lupabin/extractors/base.py`; `tests/test_evidence.py`, `tests/test_schema.py` y nuevos tests focalizados de payloads/cobertura.
 
 1. Escribir primero tests fallidos para cada variante nueva y para combinaciones inválidas: `kind`/payload incompatibles, floats no finitos, texto distinto de los bytes originales, estados contradictorios y referencias a tipos o ubicaciones incorrectos.
 2. Definir la unión discriminada de los siete tipos, sin sustituir la validación por `dict[str, Any]`.
@@ -216,7 +216,7 @@ Verificación focalizada: tests de modelos/esquema y `uv run --frozen mypy src`.
 
 ### C. Cabeceras, secciones y conservación de imports
 
-Archivos: `src/dissect/extractors/pe.py`, nuevos módulos `pe_layout.py` y `pe_imports.py`; `tests/fixtures/pe_builder.py`, `tests/test_pe.py` y nuevos tests de cabeceras/secciones.
+Archivos: `src/lupabin/extractors/pe.py`, nuevos módulos `pe_layout.py` y `pe_imports.py`; `tests/fixtures/pe_builder.py`, `tests/test_pe.py` y nuevos tests de cabeceras/secciones.
 
 1. Extender el generador sintético para disponer de varias secciones y campos conocidos sin ejecutar ni descargar binarios.
 2. Escribir tests de cabeceras válidas/truncadas, números de máquina desconocidos, timestamps originales y nombres de sección UTF-8 válidos o no decodificables.
@@ -229,7 +229,7 @@ Verificación: suite PE existente y nueva, determinismo con reloj fijo y comprob
 
 ### D. Entropía y anomalías estructurales
 
-Archivos: nuevos `src/dissect/extractors/pe_sections.py` y `pe_checks.py`, integración en el extractor PE; nuevos `tests/test_entropy.py` y `tests/test_pe_checks.py`.
+Archivos: nuevos `src/lupabin/extractors/pe_sections.py` y `pe_checks.py`, integración en el extractor PE; nuevos `tests/test_entropy.py` y `tests/test_pe_checks.py`.
 
 1. Escribir los vectores matemáticos conocidos: entropía 0, 1 y 8; incluir entradas vacías y rangos truncados antes de implementar el cálculo.
 2. Calcular la medida únicamente sobre intervalos completos de bytes físicos. Redondear según el método aprobado, normalizar cero y rechazar resultados no finitos.
@@ -241,7 +241,7 @@ Verificación: valores matemáticos, límites y referencias válidas; ausencia d
 
 ### E. Exports fieles a las tablas
 
-Archivos: nuevo `src/dissect/extractors/pe_exports.py`, integración en `pe.py`; fixtures y nuevo `tests/test_exports.py`.
+Archivos: nuevo `src/lupabin/extractors/pe_exports.py`, integración en `pe.py`; fixtures y nuevo `tests/test_exports.py`.
 
 1. Crear fixtures de EAT y tablas de nombres/ordinales: símbolo con nombre, solo ordinal, aliases, hueco cero y forwarder.
 2. Escribir pruebas fallidas de índices fuera de rango, suma ordinal fuera de 32 bits, contadores excesivos, terminadores ausentes y nombres corruptos.
@@ -253,7 +253,7 @@ Verificación: cada salida se contrasta con los bytes del fixture; ninguna entra
 
 ### F. Strings estáticas independientes
 
-Archivos: nuevo `src/dissect/extractors/strings.py`, integración posterior del registro; nuevo `tests/test_strings.py`.
+Archivos: nuevo `src/lupabin/extractors/strings.py`, integración posterior del registro; nuevo `tests/test_strings.py`.
 
 1. Escribir primero casos de ASCII y UTF-16LE restringido en ambos alineamientos, cuatro caracteres exactos, secuencias cortas, EOF, repeticiones y datos sin texto reconocido.
 2. Implementar barridos acotados que no materialicen todas las coincidencias antes de aplicar cuotas. Intercalar candidatos por offset y codificación de forma determinista.
@@ -265,7 +265,7 @@ Verificación: suite de strings, consumo de cuotas y conservación exacta de byt
 
 ### G. Ensamblado, presupuestos e integración 0.2.0
 
-Archivos: `src/dissect/analysis.py`, `extractors/base.py`, nuevo `evidence/collector.py`, `evidence/models.py`, `evidence/schema.py`, `runner.py`, `worker.py`, `errors.py`, `__init__.py`, `pyproject.toml` y `uv.lock`; tests de análisis, presupuestos, runner, worker y CLI.
+Archivos: `src/lupabin/analysis.py`, `extractors/base.py`, nuevo `evidence/collector.py`, `evidence/models.py`, `evidence/schema.py`, `runner.py`, `worker.py`, `errors.py`, `__init__.py`, `pyproject.toml` y `uv.lock`; tests de análisis, presupuestos, runner, worker y CLI.
 
 1. Escribir pruebas de agregación independientes de la cantidad de hallazgos: completo vacío, parcial sin hallazgos, PE fallido con strings completas, y todas las fuentes bloqueadas.
 2. Introducir el registro cerrado `pe`/`strings` y un recolector que admita hallazgos bajo presupuestos antes de acumular una salida demasiado grande. Mantener el orden acordado y reservar espacio para explicar omisiones.
@@ -281,7 +281,7 @@ Verificación: suite unitaria completa, mypy, Ruff y comprobación del esquema. 
 
 Archivos: `compose.yaml`, `docker/Dockerfile` si requiere adaptar empaquetado, `.github/workflows/ci.yml`, `tests/integration/test_docker.py`, fixtures, `README.md`, `docs/evidence-schema.md`, `samples/README.md` y `AGENTS.md`.
 
-1. Apuntar build, launcher, Compose y CI a `dissect-worker:0.2.0`; no modificar controles de red, privilegios, montajes ni recursos. No borrar la imagen anterior.
+1. Apuntar build, launcher, Compose y CI a `lupabin-worker:0.2.0`; no modificar controles de red, privilegios, montajes ni recursos. No borrar la imagen anterior.
 2. Ampliar el recorrido real CLI -> worker -> JSON con los tipos nuevos y un caso parcial; repetir las pruebas de aislamiento y timeout que ya existen.
 3. Mantener comprobaciones de Windows/Linux en CI, pero no atribuir a esta rama los resultados verdes anteriores de `master`. El push y el PR requieren autorización explícita.
 4. Actualizar documentación de contrato, códigos de salida y límites. Indicar que el comando sigue siendo de consola y que la web y las explicaciones narrativas aún no existen.
@@ -296,10 +296,10 @@ uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen mypy --platform linux src
 uv run --frozen pytest -m "not docker"
-uv run --frozen python -m dissect.evidence.schema --check
+uv run --frozen python -m lupabin.evidence.schema --check
 uv build
 docker compose config --quiet
-docker build -f docker/Dockerfile -t dissect-worker:0.2.0 .
+docker build -f docker/Dockerfile -t lupabin-worker:0.2.0 .
 uv run --frozen pytest -m docker
 ```
 

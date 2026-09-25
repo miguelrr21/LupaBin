@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from dissect.errors import DissectError
-from dissect.evidence.models import Limits
-from dissect.transport import Completed
-from dissect.web import app as web
-from dissect.web.guard import RateLimit, Settings, client_address
+from lupabin.errors import LupaBinError
+from lupabin.evidence.models import Limits
+from lupabin.transport import Completed
+from lupabin.web import app as web
+from lupabin.web.guard import RateLimit, Settings, client_address
 from tests.fixtures.pe_builder import build_call_demo, build_pe, build_same_function_demo
 from tests.test_render import HOSTILE_DLL, HOSTILE_FUNCTION
 from tests.test_runner import FakeDocker
@@ -118,7 +118,7 @@ def test_config_reports_the_limits_and_whether_virustotal_is_offered():
 
 def test_an_upload_is_analysed_in_the_isolated_worker_and_explained():
     test = client()
-    data = build_call_demo("RegSetKeyValueW", {0: 0x80000001, 1: RUN, 2: "DissectTraining"})
+    data = build_call_demo("RegSetKeyValueW", {0: 0x80000001, 1: RUN, 2: "LupaBinTraining"})
     response = analyze(test, data)
     assert response.status_code == 200
     body = response.json()
@@ -132,7 +132,7 @@ def test_an_upload_is_analysed_in_the_isolated_worker_and_explained():
     assert group["items"][0]["techniques"][0].startswith("T1547.001")
     assert {item["level"] for item in body["items"]} == {"observed", "inferred"}
     assert json.loads(body["downloads"]["report"])["sample"]["sha256"] == body["sample"]["sha256"]
-    assert body["downloads"]["markdown"].startswith("# Dissect: informe didáctico")
+    assert body["downloads"]["markdown"].startswith("# LupaBin: informe didáctico")
     assert body["virustotal"] is None and body["glossary"]
 
 
@@ -175,12 +175,12 @@ def test_empty_or_too_large_uploads_never_reach_the_worker(data, status, code):
 def test_worker_failures_are_reported_with_their_reviewed_message(failure, status, code):
     response = analyze(client(docker=Worker(failure=failure)), build_pe())
     assert response.status_code == status
-    assert response.json() == {"error": code, "message": DissectError(code).args[0]}
+    assert response.json() == {"error": code, "message": LupaBinError(code).args[0]}
 
 
 def test_a_docker_cli_that_is_missing_is_a_503():
     def missing():
-        raise DissectError("docker_unavailable")
+        raise LupaBinError("docker_unavailable")
 
     app = web.create_app(Settings(virustotal=False), transport=missing)
     response = analyze(TestClient(app), build_pe())
@@ -193,7 +193,7 @@ def test_a_docker_cli_that_is_missing_is_a_503():
 def vt_report(sha256, data, upload):
     from datetime import UTC, datetime
 
-    from dissect.virustotal.models import VirusTotalReport
+    from lupabin.virustotal.models import VirusTotalReport
 
     return VirusTotalReport(
         sample_sha256=sha256,
@@ -269,13 +269,13 @@ def test_the_server_can_forbid_uploads_or_virustotal_whatever_the_page_asks():
 
 
 def test_settings_follow_the_same_switches_as_the_cli():
-    assert Settings.from_env({"DISSECT_VIRUSTOTAL": "off"}).virustotal is False
-    assert Settings.from_env({"DISSECT_VIRUSTOTAL": "off"}).upload is False
-    assert Settings.from_env({"DISSECT_VIRUSTOTAL_UPLOAD": "0"}).upload is False
-    shown = Settings.from_env({"DISSECT_WEB_RATE": "3/60", "DISSECT_WEB_CONCURRENCY": "2"})
+    assert Settings.from_env({"LUPABIN_VIRUSTOTAL": "off"}).virustotal is False
+    assert Settings.from_env({"LUPABIN_VIRUSTOTAL": "off"}).upload is False
+    assert Settings.from_env({"LUPABIN_VIRUSTOTAL_UPLOAD": "0"}).upload is False
+    shown = Settings.from_env({"LUPABIN_WEB_RATE": "3/60", "LUPABIN_WEB_CONCURRENCY": "2"})
     assert (shown.rate, shown.window, shown.concurrency) == (3, 60.0, 2)
     with pytest.raises(ValueError):
-        Settings.from_env({"DISSECT_WEB_CONCURRENCY": "0"})
+        Settings.from_env({"LUPABIN_WEB_CONCURRENCY": "0"})
 
 
 # --- limits of the public service ---------------------------------------------------------
@@ -305,7 +305,7 @@ def test_only_a_trusted_local_proxy_decides_the_client_address():
 def test_a_request_that_waits_too_long_for_a_free_slot_is_told_to_retry():
     import asyncio
 
-    from dissect.web.guard import Busy, Slots
+    from lupabin.web.guard import Busy, Slots
 
     async def scenario():
         slots = Slots(1, 0.05)

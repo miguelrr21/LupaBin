@@ -2,9 +2,9 @@ import base64
 
 import pytest
 
-from dissect.evidence.facts import StringEvidence
-from dissect.evidence.primitives import Location
-from dissect.extractors.decode_strings import base64_candidate, candidates, hex_candidate, verify
+from lupabin.evidence.facts import StringEvidence
+from lupabin.evidence.primitives import Location
+from lupabin.extractors.decode_strings import base64_candidate, candidates, hex_candidate, verify
 
 
 def string_evidence(text, *, encoding="ascii", complete=True, evidence_id="E1", offset=100):

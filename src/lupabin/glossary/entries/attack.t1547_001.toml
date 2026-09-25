@@ -1,0 +1,12 @@
+id = "attack.t1547_001"
+title = "T1547.001: claves Run del registro y carpeta de inicio"
+revision = "1.0.0"
+lang = "es"
+summary = "Técnica de persistencia de ATT&CK: añadir un programa a una clave Run del registro, o a la carpeta de inicio, para que se ejecute cuando el usuario inicia sesión."
+body = "Windows ejecuta en cada inicio de sesión las órdenes guardadas como valores en las claves Run, y una sola vez las de RunOnce, tanto las del usuario (HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run) como las del equipo (HKEY_LOCAL_MACHINE\\…). ATT&CK lista además RunServices, RunServicesOnce y Policies\\Explorer\\Run.\n\nLupaBin asocia esta técnica solo a una llamada que escribe un valor en una de esas claves (RegSetKeyValue). Abrir la clave con permiso para escribir no escribe nada, así que no se asocia."
+not_proven = "Muchos instaladores y programas legítimos se registran así para arrancar con Windows."
+related = ["attack.technique", "api.family.registry"]
+sources = [
+  { title = "Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder", publisher = "MITRE ATT&CK", url = "https://attack.mitre.org/techniques/T1547/001/", verified_on = 2026-09-24 },
+  { title = "Run and RunOnce Registry Keys", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys", verified_on = 2026-09-24 },
+]

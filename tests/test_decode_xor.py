@@ -2,9 +2,9 @@ import hashlib
 
 import pytest
 
-from dissect.evidence.facts import DecodedStringData, DecodedStringEvidence, XorAnchor
-from dissect.evidence.primitives import Location, Transform, minimal_period
-from dissect.extractors import decode_xor as x
+from lupabin.evidence.facts import DecodedStringData, DecodedStringEvidence, XorAnchor
+from lupabin.evidence.primitives import Location, Transform, minimal_period
+from lupabin.extractors import decode_xor as x
 from tests.fixtures.pe_builder import xor_stream
 
 LONG = "This program cannot be run in DOS mode."  # contains a crib verifying periods 1-8

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instala la web de Dissect en un servidor Linux (VPS) con Ubuntu 22.04/24.04 o Debian 12,
+# Instala la web de LupaBin en un servidor Linux (VPS) con Ubuntu 22.04/24.04 o Debian 12,
 # en x86_64 o ARM64 (aarch64).
 # Uso, desde la carpeta del repositorio:  sudo bash deploy/server/install.sh
 # Guía paso a paso (Oracle Cloud Free Tier, Hetzner u otro): docs/deploy.md
@@ -7,9 +7,9 @@
 # Qué hace:
 #  1. instala Docker, Caddy y las actualizaciones automáticas de seguridad;
 #  2. instala uv 0.8.22 comprobando su SHA-256 publicado;
-#  3. copia el código a /opt/dissect y crea su entorno (Python 3.12, extra "web");
-#  4. construye la imagen aislada dissect-worker:0.6.0;
-#  5. crea el usuario de servicio "dissect", la configuración /etc/dissect/web.env,
+#  3. copia el código a /opt/lupabin y crea su entorno (Python 3.12, extra "web");
+#  4. construye la imagen aislada lupabin-worker:0.6.0;
+#  5. crea el usuario de servicio "lupabin", la configuración /etc/lupabin/web.env,
 #     la unidad de systemd y el sitio de Caddy (puerto 80; HTTPS al poner un dominio);
 #  6. abre los puertos 80 y 443 si el sistema trae reglas de iptables que los bloquean
 #     (las imágenes de Ubuntu de Oracle Cloud).
@@ -17,11 +17,11 @@
 set -euo pipefail
 
 UV_VERSION="0.8.22"
-APP="/opt/dissect"
-STATE="/var/lib/dissect"
-CONFIG="/etc/dissect"
-SERVICE_USER="dissect"
-IMAGE="dissect-worker:0.6.0"
+APP="/opt/lupabin"
+STATE="/var/lib/lupabin"
+CONFIG="/etc/lupabin"
+SERVICE_USER="lupabin"
+IMAGE="lupabin-worker:0.6.0"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="$(cd "$HERE/../.." && pwd)"
 
@@ -30,7 +30,7 @@ warn() { printf '\n\033[1;33mAviso:\033[0m %s\n' "$*" >&2; }
 die() { printf '\n\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "ejecuta el script con sudo."
-[ -f "$SOURCE/pyproject.toml" ] && [ -d "$SOURCE/src/dissect" ] || die "no encuentro el repositorio en $SOURCE."
+[ -f "$SOURCE/pyproject.toml" ] && [ -d "$SOURCE/src/lupabin" ] || die "no encuentro el repositorio en $SOURCE."
 case "$(uname -m)" in
   x86_64) UV_ARCH="x86_64" ;;
   aarch64 | arm64) UV_ARCH="aarch64" ;;
@@ -86,7 +86,7 @@ rsync -a --delete \
   "$SOURCE/" "$APP/"
 
 say "Creando el entorno de Python (puede tardar unos minutos la primera vez)"
-export UV_PYTHON_INSTALL_DIR="$APP/.python" UV_CACHE_DIR="/var/cache/dissect-uv" UV_LINK_MODE=copy
+export UV_PYTHON_INSTALL_DIR="$APP/.python" UV_CACHE_DIR="/var/cache/lupabin-uv" UV_LINK_MODE=copy
 (cd "$APP" && uv sync --frozen --no-dev --extra web --python 3.12)
 chmod -R a+rX "$APP"
 
@@ -99,24 +99,24 @@ if [ ! -f "$CONFIG/web.env" ]; then
   install -m 0640 -g "$SERVICE_USER" "$HERE/web.env.example" "$CONFIG/web.env"
   cpus=$(nproc)
   concurrency=$(( memory_mb >= 7000 && cpus >= 4 ? 3 : (memory_mb >= 3500 && cpus >= 2 ? 2 : 1) ))
-  sed -i "s/^DISSECT_WEB_CONCURRENCY=.*/DISSECT_WEB_CONCURRENCY=$concurrency/" "$CONFIG/web.env"
+  sed -i "s/^LUPABIN_WEB_CONCURRENCY=.*/LUPABIN_WEB_CONCURRENCY=$concurrency/" "$CONFIG/web.env"
   echo "Creada (análisis a la vez: $concurrency, según $cpus CPU y ${memory_mb} MB)."
   echo "Para usar VirusTotal, escribe tu clave en VT_API_KEY."
 else
   echo "Ya existía; no se cambia."
 fi
 
-say "Servicio de systemd dissect-web"
-install -m 0644 "$HERE/dissect-web.service" /etc/systemd/system/dissect-web.service
+say "Servicio de systemd lupabin-web"
+install -m 0644 "$HERE/lupabin-web.service" /etc/systemd/system/lupabin-web.service
 systemctl daemon-reload
-systemctl enable dissect-web
-systemctl restart dissect-web
+systemctl enable lupabin-web
+systemctl restart lupabin-web
 
 say "Sitio de Caddy"
-if [ -f /etc/caddy/Caddyfile ] && ! grep -q "Dissect" /etc/caddy/Caddyfile; then
-  cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.antes-de-dissect"
+if [ -f /etc/caddy/Caddyfile ] && ! grep -q "LupaBin" /etc/caddy/Caddyfile; then
+  cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.antes-de-lupabin"
 fi
-if ! grep -q "Dissect" /etc/caddy/Caddyfile 2>/dev/null; then
+if ! grep -q "LupaBin" /etc/caddy/Caddyfile 2>/dev/null; then
   install -m 0644 "$HERE/Caddyfile" /etc/caddy/Caddyfile
 fi
 systemctl enable caddy
@@ -154,5 +154,5 @@ if curl -fsS http://127.0.0.1:8080/api/health; then
   printf '\n\nListo. Abre http://%s desde tu navegador.\n' "$address"
   printf 'Si no carga, abre los puertos 80 y 443 en el cortafuegos de tu proveedor (docs/deploy.md).\n'
 else
-  die "el servicio no responde. Mira: sudo journalctl -u dissect-web -n 50"
+  die "el servicio no responde. Mira: sudo journalctl -u lupabin-web -n 50"
 fi

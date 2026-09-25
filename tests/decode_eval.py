@@ -18,12 +18,12 @@ from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
-from dissect.evidence.collector import Collector, Progress
-from dissect.evidence.facts import StringEvidence
-from dissect.evidence.models import Limits
-from dissect.evidence.primitives import minimal_period
-from dissect.extractors import decode_strings, decode_xor
-from dissect.extractors.strings import StringsExtractor
+from lupabin.evidence.collector import Collector, Progress
+from lupabin.evidence.facts import StringEvidence
+from lupabin.evidence.models import Limits
+from lupabin.evidence.primitives import minimal_period
+from lupabin.extractors import decode_strings, decode_xor
+from lupabin.extractors.strings import StringsExtractor
 
 MAX_INPUT = 20 * 1024 * 1024
 
@@ -289,7 +289,7 @@ def main() -> None:
     rc = sub.add_parser("recall")
     rc.add_argument("directory", type=Path)
     rc.add_argument("--trials", type=int, default=300)
-    rc.add_argument("--seed", default="dissect-decode-eval")
+    rc.add_argument("--seed", default="lupabin-decode-eval")
     sub.add_parser("timing")
     args = parser.parse_args()
     if args.command == "false-positives":

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
-from dissect.analysis import analyze_bytes
-from dissect.extractors.pe import PEExtractor
+from lupabin.analysis import analyze_bytes
+from lupabin.extractors.pe import PEExtractor
 from tests.fixtures.pe_builder import build_pe
 
 

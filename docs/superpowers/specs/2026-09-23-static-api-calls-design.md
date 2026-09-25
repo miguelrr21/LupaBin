@@ -1,6 +1,6 @@
 # Fase 4: qué hace el código, en estático (llamadas a API y sus argumentos)
 
-Estado: revisión 2 (2026-09-23). La primera entrega, la versión reducida (sección 9), está implementada en la rama `feat/static-api-calls`: qué funciones importadas llama el código y desde dónde, sin leer argumentos. Los argumentos (secciones 3.4 y 4) siguen solo diseñados. Responde a la petición del usuario: que Dissect "analice en estático el binario y diga exactamente lo que hace". El alcance y sus límites se registraron en `docs/roadmap.md`.
+Estado: revisión 2 (2026-09-23). La primera entrega, la versión reducida (sección 9), está implementada en la rama `feat/static-api-calls`: qué funciones importadas llama el código y desde dónde, sin leer argumentos. Los argumentos (secciones 3.4 y 4) siguen solo diseñados. Responde a la petición del usuario: que LupaBin "analice en estático el binario y diga exactamente lo que hace". El alcance y sus límites se registraron en `docs/roadmap.md`.
 
 ## 1. Qué se puede afirmar y qué no
 
@@ -16,7 +16,7 @@ No puede afirmar que esa llamada llegue a ejecutarse. Depende de condiciones, en
 | Opción | Resultado |
 | --- | --- |
 | capa 9.4.0 (reglas de capacidades de Mandiant) | **Descartada.** Su motor por defecto, vivisect, **emula instrucciones** durante el análisis: el módulo `vivisect.analysis.generic.emucode` y los pases `i386/amd64 emulation`, comprobado en el código instalado. `AGENTS.md` prohíbe emular la muestra. Desactivar esos pases a mano sería frágil, y además vivisect es lento para el límite de 30 s del worker. |
-| Motor propio sobre capstone 5.0.9 (BSD, wheels para Linux x86-64 y Windows) | **Elegida.** capstone solo decodifica: traduce bytes a instrucciones y operandos. Dissect recorre el código por descenso recursivo y lee operandos constantes. No hay ningún estado de ejecución, memoria simulada ni saltos tomados. |
+| Motor propio sobre capstone 5.0.9 (BSD, wheels para Linux x86-64 y Windows) | **Elegida.** capstone solo decodifica: traduce bytes a instrucciones y operandos. LupaBin recorre el código por descenso recursivo y lee operandos constantes. No hay ningún estado de ejecución, memoria simulada ni saltos tomados. |
 
 Prototipo medido el 2026-09-23 sobre 205 binarios de System32:
 - Se encontraron 233.816 llamadas a funciones importadas y 14.915 argumentos que son cadenas.
@@ -64,13 +64,13 @@ Un argumento se publica solo si su tipo coincide con el que declara el catálogo
 - **HKEY**: una de las constantes predefinidas `0x80000000`–`0x80000006`;
 - **entero**: por ejemplo, permisos de memoria o de acceso.
 
-Si no coincide, Dissect se abstiene, y se mide cuántas veces pasa (sección 7).
+Si no coincide, LupaBin se abstiene, y se mide cuántas veces pasa (sección 7).
 
 ### 3.5 Límites
 
 Hay presupuestos declarados para instrucciones decodificadas, llamadas publicadas y argumentos publicados. Alcanzarlos deja el componente como parcial y lo dice con un código propio. Una arquitectura que no sea x86 ni x64 bloquea el componente (`unsupported_architecture`).
 
-## 4. Catálogo `dissect-api-semantics-v1`
+## 4. Catálogo `lupabin-api-semantics-v1`
 
 Lista revisada y versionada, con digest fijado por un test como las cribs y las familias. Cada API tiene su aridad (necesaria para leer la pila en x86), su familia de la Fase 3 y los parámetros que se interpretan, con nombre y tipo:
 
@@ -91,7 +91,7 @@ Se incluyen las variantes A y W. Cada aridad y cada nombre de parámetro se comp
 Cambios respecto a 0.4.0 (el esquema 0.4.0 se conserva en `docs/schemas/`):
 
 - `import` gana `iat_rva`: la dirección de su casilla en la tabla de direcciones de import, que es a donde apuntan las llamadas.
-- Nueva fuente `code` (`dissect-code-v1`), con los componentes `disassembly`, `api_calls` y `call_arguments`, y límites en `analysis.limits.code`.
+- Nueva fuente `code` (`lupabin-code-v1`), con los componentes `disassembly`, `api_calls` y `call_arguments`, y límites en `analysis.limits.code`.
 - **`api_call`** (`observed`): la instrucción de llamada (desplazamiento, RVA, bytes), la vía, las instrucciones auxiliares (thunk o carga del registro) con sus bytes, el nombre de la API y la DLL. Cita el `import` correspondiente.
 - **`call_argument`** (`inferred`): índice y nombre del parámetro, tipo, valor, instrucción que lo fija (con sus bytes) y, si es una cadena, sus bytes y su ubicación. Cita su `api_call`. Método: `block-constant-v1`.
 
@@ -125,14 +125,14 @@ Sobre el corpus benigno de las fases anteriores:
 2. Dependencia capstone 5.0.9 fijada; contrato 0.5.0 con `iat_rva` en imports y esquema 0.4.0 archivado.
 3. Motor de desensamblado (pasada ligera, bloques y presupuesto), con fixtures sintéticos x86/x64 construidos byte a byte.
 4. Llamadas a imports (tres vías) y argumentos (pasada detallada), con casos negativos de sobrescritura, bloques partidos y aridad.
-5. Catálogo `dissect-api-semantics-v1`, verificado contra Microsoft Learn.
-6. Integración: evidencias, colector, límites, extractor `code`, verificación aritmética en el host e imagen `dissect-worker:0.5.0`.
+5. Catálogo `lupabin-api-semantics-v1`, verificado contra Microsoft Learn.
+6. Integración: evidencias, colector, límites, extractor `code`, verificación aritmética en el host e imagen `lupabin-worker:0.5.0`.
 7. Mediciones de la sección 7 y ajustes.
 8. Explicaciones, glosario, renderizado, documentación, demostración con fixture sintético y PR.
 
 ## 9. Entrega 1: versión reducida (implementada)
 
-Responde a "qué funciones importadas llama el código y desde dónde", sin argumentos ni catálogo semántico. Cubre los pasos 2, 3, 4 (sin argumentos), 6, 7 y 8 del plan de la sección 8. Los argumentos y el catálogo `dissect-api-semantics-v1` quedan para la entrega 2.
+Responde a "qué funciones importadas llama el código y desde dónde", sin argumentos ni catálogo semántico. Cubre los pasos 2, 3, 4 (sin argumentos), 6, 7 y 8 del plan de la sección 8. Los argumentos y el catálogo `lupabin-api-semantics-v1` quedan para la entrega 2.
 
 ### 9.1 Diferencias con las secciones anteriores
 
@@ -187,7 +187,7 @@ La base del proceso (intérprete y entrada de 20 MiB) ocupa 101 MiB. Variantes m
 - Parsear el operando con `int()` y capturar la excepción: 3,5 µs por llamada; sin excepciones es casi gratis.
 - `tracemalloc` para medir memoria ralentizaba el recorrido más de 10 veces: se mide el pico real del proceso.
 
-**En el contenedor** (`dissect-worker:0.5.0`, 1 CPU, 512 MiB; las cinco fuentes y el arranque del contenedor; 11 pruebas `-m docker` en verde):
+**En el contenedor** (`lupabin-worker:0.5.0`, 1 CPU, 512 MiB; las cinco fuentes y el arranque del contenedor; 11 pruebas `-m docker` en verde):
 
 | Entrada | Tiempo total | Código |
 | --- | --- | --- |
@@ -253,13 +253,13 @@ El caso `nop` es también el peor combinado: agota a la vez el tiempo de la bús
 
 ## 10. Entrega 2: argumentos constantes (implementada: las 72 funciones de la sección 4)
 
-Responde a "con qué constantes llama el código a una función del catálogo". Publica `call_argument` (`inferred`, componente `call_arguments`) dentro del contrato 0.5.0, que no se había publicado. El catálogo `dissect-api-semantics-v1` empieza con `RegOpenKeyExA/W`; el resto de la sección 4 se añadirá en cambios separados, comprobando cada firma.
+Responde a "con qué constantes llama el código a una función del catálogo". Publica `call_argument` (`inferred`, componente `call_arguments`) dentro del contrato 0.5.0, que no se había publicado. El catálogo `lupabin-api-semantics-v1` empieza con `RegOpenKeyExA/W`; el resto de la sección 4 se añadirá en cambios separados, comprobando cada firma.
 
 ### 10.1 Diferencias con la sección 3.4
 
 - **Tramo lineal, no bloque básico.** El recorrido pasa a cada llamada el inicio de su tramo: el inicio de la ejecución lineal o la instrucción siguiente a la llamada anterior del mismo tramo. Una llamada reinicia el seguimiento porque, según la convención x64 de Microsoft Learn, `RCX`, `RDX`, `R8` y `R9` son volátiles ("consider volatile registers destroyed on function calls"). En x86, la llamada mueve la pila. Los saltos condicionales no cortan el tramo: la entrada de otro camino está en su destino.
 - **Marcas de entrada.** Un `bytearray` por sección marca los puntos de partida, los destinos constantes de saltos y llamadas (también los que un límite dejó pendientes) y los puntos donde una ejecución alcanza código ya decodificado por otra. Esto último cubre la entrada por un flujo de instrucciones desalineado. El coste no se pudo medir: shell32 2,67 → 2,69 s, mshtml 7,26 → 7,18 s.
-- **Se decodifica solo desde la última entrada.** El modo detallado empieza en la última marca anterior a la llamada, o en el inicio del tramo si no hay ninguna. Si la decodificación no cae exactamente en la llamada, Dissect no publica nada: la llamada está en otro flujo de instrucciones. Si hay una marca en la propia llamada, tampoco se publica nada.
+- **Se decodifica solo desde la última entrada.** El modo detallado empieza en la última marca anterior a la llamada, o en el inicio del tramo si no hay ninguna. Si la decodificación no cae exactamente en la llamada, LupaBin no publica nada: la llamada está en otro flujo de instrucciones. Si hay una marca en la propia llamada, tampoco se publica nada.
 - **Solo instrucciones revisadas.** capstone 5.0.9 no declara todas las escrituras implícitas: `syscall` no incluye `RCX`, `rdpkru` no incluye `EDX` y `rdsspq rcx` no incluye `RCX` (comprobado al escribir el módulo). Por eso solo se confía en su lista de registros escritos para las instrucciones de `_TRUSTED` (`mov`, `lea`, aritmética y lógica, `push`/`pop`, `setcc`/`cmovcc`, copias SSE y saltos condicionales), cada una comprobada en `tests/test_code_args.py`. Cualquier otra olvida todo lo seguido.
 - **x86.** Solo `push` de 32 bits. Cualquier otra escritura de `esp` (incluido `push` de 16 bits) o cualquier escritura en memoria direccionada desde `esp` olvida la lista. Límite aceptado: una escritura en la pila a través de otro registro que apunte a ella no se detecta.
 - **Escrituras en memoria según la semántica de x86, no según capstone** (corregido el 2026-09-24). capstone 5.0.9 marca como lectura el destino en memoria de `movups [mem], xmm` y de `movq [mem], xmm`, aunque los dos escriben. Por eso, con la primera versión, un `movups [esp], xmm0` después de los `push` no olvidaba la lista. Ahora una instrucción escribe su primer operando si es memoria (el destino en sintaxis Intel), y `xchg` escribe cualquiera de los suyos. `push [mem]` solo lee su operando. Un `cmp` o un `test` de memoria cuenta como escritura: se pierde un argumento, pero nunca se da uno erróneo. Medido en SysWOW64 (278 archivos que importan el catálogo): 0 argumentos cambian de 4.688. Era un fallo latente que ningún binario benigno activaba, y queda cubierto por pruebas de regresión.
@@ -302,7 +302,7 @@ Mismas muestras que la sección 9.4. Todo lo publicado es coherente con su tipo 
 | `argument-values` (cuatro `push` constantes por llamada) | 7,38 s (paso: 0,44 s) | 135 MiB | 4.096 argumentos publicados, `call_argument_limit` |
 | `nop`, `jz`, `call rel32`, `call [casilla]` | 4,3 / 10,1 / 3,4 / 4,2 s | 124–125 MiB | Sin cambio respecto a la sección 9.5 en lo que declaran |
 
-**En el contenedor** (`dissect-worker:0.5.0` reconstruida con esta entrega, 1 CPU y 512 MiB, con las cinco fuentes y el arranque; portátil conectado a la corriente; valores por defecto, incluido el presupuesto de 65.536):
+**En el contenedor** (`lupabin-worker:0.5.0` reconstruida con esta entrega, 1 CPU y 512 MiB, con las cinco fuentes y el arranque; portátil conectado a la corriente; valores por defecto, incluido el presupuesto de 65.536):
 
 | Entrada | Total | Código |
 | --- | --- | --- |
@@ -315,13 +315,13 @@ El paso de argumentos no mueve el peor caso: el más lento sigue siendo el recor
 
 ### 10.3 Explicación y glosario
 
-- `code.arguments@1`: una por llamada con argumentos. Cita la llamada y todos sus argumentos, en orden del informe, y hereda `inferred`. Por ejemplo: "En 0x00002017 el código llama a «RegOpenKeyExW» con hKey = HKEY_CURRENT_USER, lpSubKey = «Software\Dissect\Training», samDesired = 0x20019". Las cadenas de más de 200 caracteres se recortan indicando su longitud.
+- `code.arguments@1`: una por llamada con argumentos. Cita la llamada y todos sus argumentos, en orden del informe, y hereda `inferred`. Por ejemplo: "En 0x00002017 el código llama a «RegOpenKeyExW» con hKey = HKEY_CURRENT_USER, lpSubKey = «Software\LupaBin\Training», samDesired = 0x20019". Las cadenas de más de 200 caracteres se recortan indicando su longitud.
 - Nueva entrada `code.call_argument` (glosario 1.2.0), con cinco fuentes de Learn comprobadas el 2026-09-24. Su límite recoge además que `RegOverridePredefKey` puede redirigir una clave predefinida: `hKey = HKEY_CURRENT_USER` no demuestra qué clave se abre.
 - El título de la sección 3 del informe pasa a "resultados de aplicar un método a los bytes": un argumento no es una transformación.
 
 ### 10.4 Catálogo v2: `RegCreateKeyExA/W` (2026-09-24)
 
-Firma comprobada en Microsoft Learn el 2026-09-24: 9 parámetros (`hKey`, `lpSubKey`, `Reserved`, `lpClass`, `dwOptions`, `samDesired`, `lpSecurityAttributes`, `phkResult`, `lpdwDisposition`). Las mismas cinco claves para `hKey` y las mismas DLL exportadoras que `RegOpenKeyEx`, salvo que la página ANSI no lista `kernel32.dll`. Se interpretan `hKey`, `lpSubKey`, `dwOptions` y `samDesired`. En x64, `dwOptions` y `samDesired` son el 5.º y el 6.º argumento y van en la pila, que Dissect no lee: solo se recuperan en x86. (Desde la sección 11 también se leen en x64.) El catálogo pasa a `dissect-api-semantics-v2`, con su digest fijado.
+Firma comprobada en Microsoft Learn el 2026-09-24: 9 parámetros (`hKey`, `lpSubKey`, `Reserved`, `lpClass`, `dwOptions`, `samDesired`, `lpSecurityAttributes`, `phkResult`, `lpdwDisposition`). Las mismas cinco claves para `hKey` y las mismas DLL exportadoras que `RegOpenKeyEx`, salvo que la página ANSI no lista `kernel32.dll`. Se interpretan `hKey`, `lpSubKey`, `dwOptions` y `samDesired`. En x64, `dwOptions` y `samDesired` son el 5.º y el 6.º argumento y van en la pila, que LupaBin no lee: solo se recuperan en x86. (Desde la sección 11 también se leen en x64.) El catálogo pasa a `lupabin-api-semantics-v2`, con su digest fijado.
 
 Mismo corpus y método que la sección 10.2:
 
@@ -342,7 +342,7 @@ Mismo corpus y método que la sección 10.2:
 - **`samDesired`**: el tipo entero acepta cualquier valor, así que aquí la coherencia de tipos no prueba nada. Lo que respalda estos valores es la revisión manual. Los más frecuentes son 0x2001f (164), 0x20006 (`KEY_WRITE`, 75), 0x2 (63), 0xf003f (`KEY_ALL_ACCESS`, 61) y 0x2000000 (`MAXIMUM_ALLOWED`, 30).
 - **Los 27 `lpSubKey` rechazados:**
   - 22 están en una sección escribible;
-  - 4 son una cadena vacía en `.rdata` de schedsvc.dll, que Learn permite pero Dissect no publica;
+  - 4 son una cadena vacía en `.rdata` de schedsvc.dll, que Learn permite pero LupaBin no publica;
   - 1 apunta a un búfer sin bytes en disco.
   - Ninguno es `NULL`, coherente con Learn: "This parameter cannot be NULL".
 
@@ -382,7 +382,7 @@ Se añaden 67 entradas, versiones A y W, de 38 funciones: registro (`RegSetValue
 - Nombres, orden y número de parámetros: contra el origen de su página de Learn (`MicrosoftDocs/sdk-api`, el contenido que Learn publica). `URLDownloadToFile`, que está en la referencia archivada de Internet Explorer, contra la página misma. El generador de las entradas falla si algún parámetro interpretado no está en su posición con su nombre exacto.
 - Anchos: contra el prototipo de las cabeceras del Windows SDK 10.0.26100.0. DWORD, UINT, INT y ULONG son de 32 bits; INTERNET_PORT es un WORD (16 bits).
 - DLL: el `api_location` de cada página.
-- Claves: todas las páginas del registro listan al menos las cinco claves aceptadas. Algunas listan además las `HKEY_PERFORMANCE_*`, y en esas Dissect se abstiene.
+- Claves: todas las páginas del registro listan al menos las cinco claves aceptadas. Algunas listan además las `HKEY_PERFORMANCE_*`, y en esas LupaBin se abstiene.
 
 **Qué se deja fuera:**
 - `OpenMutexA`, que no tiene página propia en Learn.

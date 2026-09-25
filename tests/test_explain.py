@@ -4,14 +4,14 @@ from typing import get_args
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence.models import ErrorCode
-from dissect.evidence.yara import YaraReason
-from dissect.explain.engine import ExplanationError, check_item, explain, notes, validate
-from dissect.explain.models import Explanation
-from dissect.explain.rules import RULES
-from dissect.explain.text import MESSAGES
-from dissect.glossary.catalog import load_glossary
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence.models import ErrorCode
+from lupabin.evidence.yara import YaraReason
+from lupabin.explain.engine import ExplanationError, check_item, explain, notes, validate
+from lupabin.explain.models import Explanation
+from lupabin.explain.rules import RULES
+from lupabin.explain.text import MESSAGES
+from lupabin.glossary.catalog import load_glossary
 from tests.fixtures.pe_builder import (
     ARGS_SUBKEY,
     RESOLVE_NAME,
@@ -248,7 +248,7 @@ def test_an_explanation_belongs_to_one_report_and_glossary(reports):
 def test_published_explanation_schema_is_current():
     from pathlib import Path
 
-    from dissect.explain.schema import schema_text
+    from lupabin.explain.schema import schema_text
 
     assert Path("docs/explanation-schema.json").read_text(encoding="utf-8") == schema_text()
 
@@ -264,7 +264,7 @@ def test_high_entropy_note_needs_both_the_value_and_enough_bytes(reports):
 
 
 def test_api_families_are_pinned_disjoint_measured_and_documented():
-    from dissect.explain.families import (
+    from lupabin.explain.families import (
         FAMILIES,
         FAMILIES_SHA256,
         PREVALENCE,
@@ -376,8 +376,8 @@ def test_no_density_note_for_small_or_managed_code(build):
 
 
 def test_no_density_note_when_the_walk_was_cut_short():
-    from dissect.evidence.models import Limits
-    from dissect.evidence.primitives import CodeLimits
+    from lupabin.evidence.models import Limits
+    from lupabin.evidence.primitives import CodeLimits
 
     code = bytes.fromhex("90c3") + bytes.fromhex("cc") * (0x10000 - 2)  # nop; ret
     report = analyze_bytes(build_code_pe(code), Limits(code=CodeLimits(instructions=1)))
@@ -414,7 +414,7 @@ def test_the_report_index_is_built_per_report_and_released_with_it(reports):
     never outlive its report nor be shared between two reports."""
     import gc
 
-    from dissect.explain import rules
+    from lupabin.explain import rules
 
     one = analyze_bytes(build_code_demo())
     two = one.model_copy()

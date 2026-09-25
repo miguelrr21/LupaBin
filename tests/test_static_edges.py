@@ -4,8 +4,8 @@ import struct
 import pytest
 from pydantic import ValidationError
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence.models import Limits, Report
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence.models import Limits, Report
 from tests.fixtures.pe_builder import build_demo, build_pe
 from tests.test_static_evidence import export_fixture, facts
 
@@ -17,7 +17,7 @@ def test_demo_is_complete_and_covers_new_kinds(bits):
     assert len(facts(report, "section")) == 2
     assert len(facts(report, "entropy")) == 2
     assert len(facts(report, "export")) == 1
-    assert any(f.data.text == "DISSECT PRACTICE" for f in facts(report, "string"))
+    assert any(f.data.text == "LUPABIN PRACTICE" for f in facts(report, "string"))
 
 
 def test_duplicate_names_remain_distinct_sections():

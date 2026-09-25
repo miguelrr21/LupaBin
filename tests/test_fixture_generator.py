@@ -25,7 +25,7 @@ def test_yara_limited_fixture_is_reproducible(tmp_path, monkeypatch):
         "sys.argv", ["pe_builder", "--scenario", "yara-limited", "--output", str(path)]
     )
     main()
-    assert path.read_bytes() == build_pe() + b"DISSECT PRACTICE\0" * 20
+    assert path.read_bytes() == build_pe() + b"LUPABIN PRACTICE\0" * 20
 
 
 def test_decode_demo_fixture_is_reproducible(tmp_path, monkeypatch):
