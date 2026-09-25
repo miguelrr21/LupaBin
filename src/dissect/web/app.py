@@ -30,6 +30,7 @@ from dissect.web import view
 from dissect.web.guard import Busy, RateLimit, Settings, Slots, client_address
 
 STATIC = files("dissect.web") / "static"
+ANALYSIS_ID = re.compile(r"[A-Za-z0-9_=-]{1,200}")  # VirusTotal analysis IDs (base64url)
 STATUS: dict[FailureCode, int] = {
     "input_empty": 400,
     "invalid_input": 400,
@@ -109,7 +110,8 @@ async def read_limited(request: Request, limit: int) -> bytes:
 def create_app(
     settings: Settings | None = None,
     transport: Callable[[], Transport] = DockerCLI,
-    consult: Callable[..., Any] = virustotal_client.consult,
+    submit: Callable[..., Any] = virustotal_client.submit,
+    follow: Callable[..., Any] = virustotal_client.follow,
 ) -> Starlette:
     settings = settings or Settings.from_env()
     limits = Limits()
@@ -117,6 +119,8 @@ def create_app(
     rate = RateLimit(settings.rate, settings.window)
     # lookups spend the server owner's VirusTotal quota; re-checks of a queued file count
     vt_rate = RateLimit(settings.rate * 5, settings.window)
+    # following an uploaded file's analysis: one check every 20 s for up to 15 minutes
+    follow_rate = RateLimit(settings.rate * 10 + 45, settings.window)
     slots = Slots(settings.concurrency, settings.queue_seconds)
 
     async def index(request: Request) -> Response:
@@ -182,10 +186,15 @@ def create_app(
         # VirusTotal is asked separately (/api/virustotal), so the report never waits for it
         return JSONResponse(view.build(report, explanation, items, glossary, None))
 
-    def vt_refused(client: str) -> Response | None:
+    def vt_refused(request: Request, limit: RateLimit) -> Response | None:
         if not settings.virustotal:
             return failure("virustotal_off", 404, "Este servidor no consulta VirusTotal.")
-        if not vt_rate.allow(client):
+        client = client_address(
+            request.client.host if request.client else None,
+            request.headers.get("x-forwarded-for"),
+            settings.trust_proxy,
+        )
+        if not limit.allow(client):
             return failure(
                 "rate_limited",
                 429,
@@ -195,13 +204,8 @@ def create_app(
 
     async def virustotal(request: Request) -> Response:
         """Lookup by SHA-256 and, if VirusTotal does not know the file and the page asks for
-        it, upload it without waiting for its analysis (status "queued")."""
-        client = client_address(
-            request.client.host if request.client else None,
-            request.headers.get("x-forwarded-for"),
-            settings.trust_proxy,
-        )
-        refused = vt_refused(client)
+        it, upload it without waiting: the answer carries the analysis ID to follow."""
+        refused = vt_refused(request, vt_rate)
         if refused is not None:
             return refused
         try:
@@ -212,24 +216,21 @@ def create_app(
             return failure("invalid_input", 400)
         upload = settings.upload and request.query_params.get("upload") == "1"
         sha256 = hashlib.sha256(data).hexdigest()
-        found = await asyncio.to_thread(consult, sha256, data, upload=upload, wait_seconds=0)
-        return JSONResponse(view.virustotal(found))
+        found, analysis = await asyncio.to_thread(submit, sha256, data, upload=upload)
+        return JSONResponse({**view.virustotal(found), "analysis": analysis})
 
-    async def virustotal_again(request: Request) -> Response:
-        """A new lookup by hash only, e.g. while an uploaded file is queued."""
+    async def virustotal_follow(request: Request) -> Response:
+        """One check of an uploaded file's analysis: "queued" until VirusTotal completes it,
+        then its results."""
         sha256 = request.path_params["sha256"]
-        if not re.fullmatch(r"[a-f0-9]{64}", sha256):
+        analysis = request.query_params.get("analysis", "")
+        if not re.fullmatch(r"[a-f0-9]{64}", sha256) or not ANALYSIS_ID.fullmatch(analysis):
             return failure("invalid_input", 400)
-        client = client_address(
-            request.client.host if request.client else None,
-            request.headers.get("x-forwarded-for"),
-            settings.trust_proxy,
-        )
-        refused = vt_refused(client)
+        refused = vt_refused(request, follow_rate)
         if refused is not None:
             return refused
-        found = await asyncio.to_thread(consult, sha256, None, upload=False)
-        return JSONResponse(view.virustotal(found))
+        found = await asyncio.to_thread(follow, sha256, analysis)
+        return JSONResponse({**view.virustotal(found), "analysis": analysis})
 
     app = Starlette(
         routes=[
@@ -238,7 +239,7 @@ def create_app(
             Route("/api/health", health),
             Route("/api/analyze", analyze, methods=["POST"]),
             Route("/api/virustotal", virustotal, methods=["POST"]),
-            Route("/api/virustotal/{sha256}", virustotal_again),
+            Route("/api/virustotal/{sha256}", virustotal_follow),
             Mount("/static", StaticFiles(directory=str(STATIC)), name="static"),
         ]
     )

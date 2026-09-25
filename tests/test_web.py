@@ -33,20 +33,28 @@ class Worker(FakeDocker):
 
 
 def client(settings=None, docker=None, consult=None):
-    """A test client whose worker is FakeDocker and whose VirusTotal calls are recorded."""
+    """A test client whose worker is FakeDocker and whose VirusTotal calls are recorded.
+    `consult(sha256, data, upload)` stands for VirusTotal: an upload of an unknown file
+    comes back "queued" with the analysis ID "an=1", and following it completes."""
     docker = docker or Worker()
     calls = []
 
-    def recorded(sha256, data, upload=False, wait_seconds=180):
-        calls.append((sha256, upload, wait_seconds, data is not None))
+    def submit(sha256, data, upload=True):
+        calls.append(("submit", sha256, upload))
         if consult is None:
             raise AssertionError("VirusTotal must not be consulted")
-        return consult(sha256, data, upload)
+        report = consult(sha256, data, upload)
+        return report, ("an=1" if report.status == "queued" else None)
+
+    def follow(sha256, analysis):
+        calls.append(("follow", sha256, analysis))
+        return consult(sha256, None, True).model_copy(update={"status": "found"})
 
     app = web.create_app(
         settings or Settings(virustotal=False, upload=False),
         transport=lambda: docker,
-        consult=recorded,
+        submit=submit,
+        follow=follow,
     )
     test = TestClient(app)
     test.docker, test.vt_calls = docker, calls
@@ -211,41 +219,53 @@ def test_the_report_never_waits_for_virustotal():
     assert body["virustotal"] is None and test.vt_calls == []
 
 
-def test_virustotal_is_asked_apart_and_an_upload_does_not_wait_for_its_analysis():
+def queued_when_uploaded(sha256, data, upload):
+    report = vt_report(sha256, data, upload)
+    return report.model_copy(update={"status": "queued"}) if upload else report
+
+
+def test_virustotal_is_asked_apart_and_an_upload_is_followed_by_its_analysis_id():
     import hashlib
 
-    test = client(Settings(virustotal=True, upload=True), consult=vt_report)
+    test = client(Settings(virustotal=True, upload=True), consult=queued_when_uploaded)
     data = build_pe()
     shown = vt_post(test, data, 1).json()
-    assert shown["stats"] == {"malicious": 2, "undetected": 60}
-    assert shown["sha256"] == hashlib.sha256(data).hexdigest()
-    assert test.vt_calls[-1] == (shown["sha256"], True, 0, True)
-    vt_post(test, data, 0)
-    assert test.vt_calls[-1][1] is False
+    sha256 = hashlib.sha256(data).hexdigest()
+    assert shown["status"] == "queued" and shown["analysis"] == "an=1"
+    assert shown["sha256"] == sha256 and "La página sigue su análisis" in shown["note"]
+    assert test.vt_calls[-1] == ("submit", sha256, True)
+    done = test.get(f"/api/virustotal/{sha256}?analysis=an%3D1").json()
+    assert done["status"] == "found" and done["stats"]["malicious"] == 2
+    assert test.vt_calls[-1] == ("follow", sha256, "an=1")
 
 
-def test_a_queued_file_is_looked_up_again_by_hash_only():
+def test_a_lookup_without_upload_has_nothing_to_follow():
+    test = client(Settings(virustotal=True, upload=True), consult=queued_when_uploaded)
+    shown = vt_post(test, build_pe(), 0).json()
+    assert shown["status"] == "found" and shown["analysis"] is None
+    assert test.vt_calls[-1][2] is False
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/api/virustotal/{'ab' * 32}",
+        f"/api/virustotal/{'ab' * 32}?analysis=a b",
+        "/api/virustotal/x?analysis=an",
+    ],
+)
+def test_following_needs_a_hash_and_a_well_formed_analysis_id(path):
     test = client(Settings(virustotal=True, upload=True), consult=vt_report)
-    sha256 = "ab" * 32
-    assert test.get(f"/api/virustotal/{sha256}").status_code == 200
-    assert test.vt_calls[-1][:2] == (sha256, False) and test.vt_calls[-1][3] is False
-    assert test.get("/api/virustotal/not-a-hash").status_code == 400
-
-
-def test_queued_uploads_explain_that_the_page_asks_again():
-    from dissect.web import view
-
-    queued = vt_report("cd" * 32, None, True).model_copy(update={"status": "queued"})
-    assert "vuelve a consultar sola" in view.virustotal(queued)["note"]
+    assert test.get(path).status_code == 400 and test.vt_calls == []
 
 
 def test_the_server_can_forbid_uploads_or_virustotal_whatever_the_page_asks():
     test = client(Settings(virustotal=True, upload=False), consult=vt_report)
     vt_post(test, build_pe(), 1)
-    assert test.vt_calls[-1][1] is False
+    assert test.vt_calls[-1][2] is False
     off = client(Settings(virustotal=False, upload=False))
     assert vt_post(off, build_pe(), 1).status_code == 404
-    assert off.get(f"/api/virustotal/{'ab' * 32}").status_code == 404
+    assert off.get(f"/api/virustotal/{'ab' * 32}?analysis=an").status_code == 404
 
 
 def test_settings_follow_the_same_switches_as_the_cli():

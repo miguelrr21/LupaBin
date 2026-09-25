@@ -36,9 +36,8 @@
 
       <fieldset class="options" id="vt-options" hidden>
         <legend>VirusTotal</legend>
-        <label class="check"><input type="checkbox" id="vt" checked> Consultar VirusTotal por el SHA-256 del archivo</label>
-        <label class="check" id="upload-row"><input type="checkbox" id="vt-upload" checked> Si VirusTotal no lo conoce, subirlo para que lo analice</label>
-        <p class="notice" id="upload-notice">Lo que se sube a VirusTotal puede compartirse con sus clientes de pago. No subas documentos ni programas internos o confidenciales.</p>
+        <label class="check"><input type="checkbox" id="vt" checked> <span id="vt-label">Analizar también en VirusTotal</span></label>
+        <p class="notice" id="upload-notice">Si VirusTotal no conoce el archivo, se sube para que lo analice, y el resultado aparece en cuanto termine. Lo subido puede compartirse con sus clientes de pago: no subas documentos ni programas internos o confidenciales.</p>
       </fieldset>
 
       <div class="actions">
@@ -71,6 +70,11 @@
         <h2 id="result-name"></h2>
         <span class="badge" id="result-status"></span>
         <span class="score" id="vt-score" hidden></span>
+      </div>
+      <div class="vt-status" id="vt-status" role="status" aria-live="polite" hidden>
+        <span class="vt-dot" id="vt-dot" aria-hidden="true"></span>
+        <span id="vt-status-text"></span>
+        <button type="button" class="link-button" id="vt-status-open">Ver detalle</button>
       </div>
       <dl class="hashes" id="hashes"></dl>
       <div class="actions">
