@@ -2,6 +2,7 @@
 
 import bisect
 import struct
+from array import array
 from collections.abc import Iterable
 
 from lupabin.extractors.code_disasm import Region
@@ -9,6 +10,11 @@ from lupabin.extractors.pe_layout import InvalidTable, Layout
 
 _TLS = 9
 _EXCEPTION = 3
+_BASERELOC = 5
+_HIGHLOW, _DIR64 = 3, 10  # base relocation types (winnt.h)
+# Twice the most measured on 2026-09-25 in 6,444 benign binaries (532,810, edgehtml.dll
+# x86); an image declaring more gets no relocated fields.
+_MAX_RELOCATIONS = 1 << 20
 _LOAD_CONFIG = 10
 # IMAGE_LOAD_CONFIG_DIRECTORY offsets (winnt.h): SEHandlerTable/Count (x86 only) and
 # GuardCFFunctionTable/Count/GuardFlags, for 32 and 64 bits.
@@ -23,15 +29,57 @@ _RUNTIME_FUNCTION = 12
 
 
 def regions(layout: Layout) -> list[Region]:
-    """Sections marked executable, with their bytes on disk (the report's mapping)."""
-    return [
-        Region(
-            s.data.rva,
-            bytearray(layout.data[s.data.raw_offset : s.data.raw_offset + s.data.raw_size]),
-        )
-        for s in layout.sections
-        if "execute" in s.data.permissions and s.data.raw_status == "present"
-    ]
+    """Sections marked executable, with their bytes on disk (the report's mapping) and
+    the relocated fields that lie in them."""
+    found = relocations(layout)
+    width = 4 if layout.bits == 32 else 8
+    result = []
+    for s in layout.sections:
+        if "execute" not in s.data.permissions or s.data.raw_status != "present":
+            continue
+        start, size = s.data.rva, s.data.raw_size
+        fields = None
+        if found is not None:
+            fields = bytearray(size)
+            begin = bisect.bisect_left(found, start - width + 1)
+            end = bisect.bisect_left(found, start + size)
+            for at in found[begin:end]:
+                first, last = max(at - start + 1, 0), min(at - start + width, size)
+                if first < last:
+                    fields[first:last] = b"" * (last - first)
+        data = bytearray(layout.data[s.data.raw_offset : s.data.raw_offset + size])
+        result.append(Region(start, data, fields))
+    return result
+
+
+def relocations(layout: Layout) -> array[int] | None:
+    """Sorted RVAs of the image's pointer-sized base relocations (HIGHLOW in x86,
+    DIR64 in x64), or None when it has none or the table cannot be read whole."""
+    rva, size = _directory(layout, _BASERELOC)
+    if not rva or size < 8:
+        return None
+    try:
+        offset, _ = layout.locate(rva, size)
+    except InvalidTable:
+        return None
+    kind = _HIGHLOW if layout.bits == 32 else _DIR64
+    found = array("I")
+    position, stop = offset, offset + size
+    while position + 8 <= stop:
+        page, block = struct.unpack_from("<II", layout.data, position)
+        if block < 8 or block % 2 or position + block > stop:
+            return None
+        for (item,) in struct.iter_unpack("<H", layout.data[position + 8 : position + block]):
+            if item >> 12 == kind:
+                found.append(page + (item & 0xFFF))
+                if len(found) > _MAX_RELOCATIONS:
+                    return None
+        position += block
+    if not found:
+        return None
+    if any(a > b for a, b in zip(found, found[1:], strict=False)):
+        found = array("I", sorted(found))  # linkers write them in order; rarely needed
+    return found
 
 
 def entries(

@@ -20,6 +20,7 @@ from lupabin.extractors.code_args import ArgumentFinder, Budget, Found
 from lupabin.extractors.code_calls import Call, CallFinder
 from lupabin.extractors.code_disasm import Region, Targets, walk
 from lupabin.extractors.code_entries import FunctionRanges, entries, regions
+from lupabin.extractors.code_switch import SwitchTables
 from lupabin.extractors.pe_layout import InvalidPE, InvalidTable, Layout, parse_layout
 
 _ARCHITECTURES = {(32, 0x14C), (64, 0x8664)}
@@ -65,6 +66,21 @@ class CodeExtractor:
         )
         seconds = min(limits.seconds, collector.limits.timeout_seconds / 2)
         deadline = collector.started + seconds
+        functions = FunctionRanges(layout, limits.entries) if layout.bits == 64 else None
+        switches = SwitchTables(layout, code, functions)
+
+        def jumped(
+            data: bytearray,
+            offset: int,
+            rva: int,
+            size: int,
+            previous: int,
+            start: int,
+            history: list[int],
+        ) -> list[int]:
+            finder.jumped(data, offset, rva, size, previous, start, history)
+            return switches.jumped(data, offset, rva, size, previous, start, history)
+
         result = walk(
             code,
             starts,
@@ -73,6 +89,7 @@ class CodeExtractor:
             finder.visit,
             limits.call_sites,
             deadline,
+            jumped,
         )
         progress.examined["disassembly"] = result.instructions
         progress.examined["api_calls"] = result.calls
@@ -186,6 +203,9 @@ def _arguments(
             return
         progress.examined["call_arguments"] += 1
         for parameter in entry.parameters:
+            if call.via == "tail" and (layout.bits != 64 or parameter.position >= 4):
+                # at a tail jump the caller's return address is already on the stack
+                continue
             known = found.get(parameter.position)
             if known is None:
                 continue  # no canonical constant sets it in the stretch
