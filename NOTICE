@@ -1,0 +1,24 @@
+LupaBin
+Copyright 2026 Miguel Ángel Rodríguez Romero (https://github.com/miguelrr21)
+
+LupaBin was created by, and is the work of, Miguel Ángel Rodríguez Romero.
+It is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Attribution required. Under section 4(d) of the Apache License 2.0, any
+redistribution of LupaBin or of a work derived from it must include a readable
+copy of this NOTICE file, and must display the following attribution wherever
+third-party notices normally appear in the derivative work (for example, an
+"about" page, the documentation, or the footer of a web interface):
+
+    Based on LupaBin, by Miguel Ángel Rodríguez Romero
+    https://github.com/miguelrr21/LupaBin
+
+The name "LupaBin" and its logo are not licensed for use by derivative works:
+see TRADEMARKS.md.
+
+---
+
+LupaBin es obra de Miguel Ángel Rodríguez Romero y se distribuye con la
+licencia Apache 2.0. Cualquier redistribución u obra derivada debe conservar
+este archivo NOTICE y mostrar la atribución anterior ("Basado en LupaBin, de
+Miguel Ángel Rodríguez Romero") allí donde muestre los avisos de terceros.
