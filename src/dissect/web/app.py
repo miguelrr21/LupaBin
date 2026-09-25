@@ -6,7 +6,9 @@ CLI (runner.run_isolated), and sends only items that regenerate from their citat
 """
 
 import asyncio
+import hashlib
 import os
+import re
 from collections.abc import Awaitable, Callable, MutableMapping
 from importlib.resources import files
 from typing import Any
@@ -113,6 +115,8 @@ def create_app(
     limits = Limits()
     glossary = load_glossary()
     rate = RateLimit(settings.rate, settings.window)
+    # lookups spend the server owner's VirusTotal quota; re-checks of a queued file count
+    vt_rate = RateLimit(settings.rate * 5, settings.window)
     slots = Slots(settings.concurrency, settings.queue_seconds)
 
     async def index(request: Request) -> Response:
@@ -159,8 +163,6 @@ def create_app(
             return failure(error.code, STATUS.get(error.code, 400))
         except ClientDisconnect:
             return failure("invalid_input", 400)
-        use_vt = settings.virustotal and request.query_params.get("virustotal") == "1"
-        upload = use_vt and settings.upload and request.query_params.get("upload") == "1"
         try:
             async with slots:
                 report = await run_isolated(data, limits, transport())
@@ -177,10 +179,57 @@ def create_app(
             items = validate(explanation, report, glossary)
         except ExplanationError:
             return failure("invalid_worker_output", 500)
-        external = None
-        if use_vt:
-            external = await asyncio.to_thread(consult, report.sample.sha256, data, upload=upload)
-        return JSONResponse(view.build(report, explanation, items, glossary, external))
+        # VirusTotal is asked separately (/api/virustotal), so the report never waits for it
+        return JSONResponse(view.build(report, explanation, items, glossary, None))
+
+    def vt_refused(client: str) -> Response | None:
+        if not settings.virustotal:
+            return failure("virustotal_off", 404, "Este servidor no consulta VirusTotal.")
+        if not vt_rate.allow(client):
+            return failure(
+                "rate_limited",
+                429,
+                "Has alcanzado el límite de consultas a VirusTotal. Espera unos minutos.",
+            )
+        return None
+
+    async def virustotal(request: Request) -> Response:
+        """Lookup by SHA-256 and, if VirusTotal does not know the file and the page asks for
+        it, upload it without waiting for its analysis (status "queued")."""
+        client = client_address(
+            request.client.host if request.client else None,
+            request.headers.get("x-forwarded-for"),
+            settings.trust_proxy,
+        )
+        refused = vt_refused(client)
+        if refused is not None:
+            return refused
+        try:
+            data = await read_limited(request, limits.input_bytes)
+        except DissectError as error:
+            return failure(error.code, STATUS.get(error.code, 400))
+        except ClientDisconnect:
+            return failure("invalid_input", 400)
+        upload = settings.upload and request.query_params.get("upload") == "1"
+        sha256 = hashlib.sha256(data).hexdigest()
+        found = await asyncio.to_thread(consult, sha256, data, upload=upload, wait_seconds=0)
+        return JSONResponse(view.virustotal(found))
+
+    async def virustotal_again(request: Request) -> Response:
+        """A new lookup by hash only, e.g. while an uploaded file is queued."""
+        sha256 = request.path_params["sha256"]
+        if not re.fullmatch(r"[a-f0-9]{64}", sha256):
+            return failure("invalid_input", 400)
+        client = client_address(
+            request.client.host if request.client else None,
+            request.headers.get("x-forwarded-for"),
+            settings.trust_proxy,
+        )
+        refused = vt_refused(client)
+        if refused is not None:
+            return refused
+        found = await asyncio.to_thread(consult, sha256, None, upload=False)
+        return JSONResponse(view.virustotal(found))
 
     app = Starlette(
         routes=[
@@ -188,6 +237,8 @@ def create_app(
             Route("/api/config", config),
             Route("/api/health", health),
             Route("/api/analyze", analyze, methods=["POST"]),
+            Route("/api/virustotal", virustotal, methods=["POST"]),
+            Route("/api/virustotal/{sha256}", virustotal_again),
             Mount("/static", StaticFiles(directory=str(STATIC)), name="static"),
         ]
     )

@@ -153,6 +153,17 @@ def test_upload_that_does_not_finish_in_time_is_reported_as_queued():
     assert report.status == "queued" and report.uploaded
 
 
+def test_an_upload_that_must_not_wait_returns_queued_at_once():
+    """The web uploads without waiting and looks the hash up again later."""
+    routes = lookup_routes(file=(404, {}))
+    routes[("POST", "/files")] = [(200, {"data": {"id": "abc=="}})]
+    fake, sleeps = Fake(routes), []
+    report = consult(
+        SHA, b"x", upload=True, wait_seconds=0, transport=fake, sleep=sleeps.append, environ=KEY
+    )
+    assert report.status == "queued" and report.uploaded and sleeps == []
+
+
 @pytest.mark.parametrize(
     "status,problem",
     [(401, "auth_failed"), (403, "auth_failed"), (429, "quota_exceeded"), (503, "network_error")],

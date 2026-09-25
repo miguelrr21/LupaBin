@@ -10,6 +10,9 @@ let config = { max_bytes: 20 * 1024 * 1024, virustotal: false, upload: false };
 let chosen = null;
 let lastResult = null;
 let painted = new Set(); // panes already built for the current result (built when opened)
+let vtTimer = null; // the next automatic re-check of a file queued at VirusTotal
+const VT_RECHECK_MS = 30000;
+const VT_RECHECKS = 20; // about ten minutes
 
 function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
@@ -72,10 +75,8 @@ async function loadConfig() {
 async function submit(event) {
   event.preventDefault();
   if (!chosen) return;
-  const params = new URLSearchParams();
   const vt = config.virustotal && $("vt").checked;
-  params.set("virustotal", vt ? "1" : "0");
-  params.set("upload", vt && config.upload && $("vt-upload").checked ? "1" : "0");
+  const upload = vt && config.upload && $("vt-upload").checked;
   show("progress");
   $("progress-text").textContent = "Enviando el archivo…";
   const started = Date.now();
@@ -83,13 +84,12 @@ async function submit(event) {
     const seconds = Math.round((Date.now() - started) / 1000);
     $("progress-time").textContent = `${seconds} s`;
     if (seconds >= 1) $("progress-text").textContent = "Analizando en un contenedor aislado, sin red…";
-    if (seconds >= 25 && vt) $("progress-text").textContent = "Consultando VirusTotal…";
   }, 500);
   let response;
   let data = null;
   try {
     const body = await chosen.arrayBuffer();
-    response = await fetch(`/api/analyze?${params}`, {
+    response = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body,
@@ -107,9 +107,10 @@ async function submit(event) {
     return;
   }
   try {
-    lastResult = { data, name: chosen.name };
+    lastResult = { data, name: chosen.name, file: chosen, vt: vt ? { state: "loading", upload } : null };
     render(data, chosen.name); // uses lastResult to paint panes when they open
     show("result");
+    if (vt) askVirusTotal(upload);
   } catch (error) {
     console.error(error);
     fail("El análisis terminó, pero la página no pudo mostrarlo. Recarga la página y vuelve a intentarlo.");
@@ -152,8 +153,11 @@ function renderHead(data, name) {
   for (const [label, value, copy] of rows) {
     hashes.append(el("dt", { text: label }), el("dd", {}, el("span", { text: value }), copy ? copyButton(value) : null));
   }
+  renderScore(data.virustotal);
+}
+
+function renderScore(vt) {
   const score = $("vt-score");
-  const vt = data.virustotal;
   const stats = vt && vt.stats;
   const total = stats ? Object.values(stats).reduce((a, b) => a + b, 0) : 0;
   score.hidden = !total;
@@ -255,10 +259,19 @@ function renderItems(data) {
 
 function renderVirusTotal(data) {
   const vt = data.virustotal;
-  $("tab-vt").hidden = !vt;
   const box = $("vt-report");
   clear(box);
-  if (!vt) return;
+  const state = lastResult && lastResult.vt;
+  if (!vt) {
+    if (state && state.state === "loading") {
+      box.append(el("p", { className: "muted", text: state.upload
+        ? "Consultando VirusTotal por el SHA-256. Si no conoce el archivo, se subirá sin esperar a su análisis…"
+        : "Consultando VirusTotal por el SHA-256…" }));
+    } else if (state && state.state === "error") {
+      box.append(el("p", { text: state.message }));
+    }
+    return;
+  }
   box.append(el("h3", { text: vt.title }), el("p", { className: "notice", text: vt.disclaimer }));
   if (vt.note) box.append(el("p", { text: vt.note }));
   const stats = Object.entries(vt.stats || {});
@@ -282,8 +295,75 @@ function renderVirusTotal(data) {
     }
     if (vt.omitted) box.append(el("p", { className: "muted small", text: `${vt.omitted} entradas omitidas por formato o límite.` }));
   }
+  if (vt.status === "queued") {
+    const again = el("button", { type: "button", className: "button", text: "Volver a consultar ahora",
+      onclick: () => recheck(vt.sha256, (state && state.attempt) || 0) });
+    const next = state && state.attempt >= VT_RECHECKS
+      ? "Ya no se consulta sola; puedes volver a consultar cuando quieras."
+      : "Se vuelve a consultar sola cada 30 segundos.";
+    box.append(el("div", { className: "actions" }, again, el("span", { className: "muted small", text: next })));
+  }
   if (vt.permalink) {
     box.append(el("p", {}, el("a", { href: vt.permalink, target: "_blank", rel: "noopener noreferrer", text: "Ver la ficha en VirusTotal" })));
+  }
+}
+
+// --- VirusTotal, asked apart so the report never waits for it ------------------------------
+
+function applyVirusTotal(vt, attempt) {
+  if (!lastResult) return;
+  lastResult.data.virustotal = vt;
+  lastResult.vt = { state: "done", attempt };
+  renderScore(vt);
+  painted.delete("pane-vt");
+  if ($("tab-vt").getAttribute("aria-selected") === "true") paint("pane-vt");
+  clearTimeout(vtTimer);
+  if (vt.status === "queued" && attempt < VT_RECHECKS) {
+    vtTimer = setTimeout(() => recheck(vt.sha256, attempt + 1), VT_RECHECK_MS);
+  }
+}
+
+function virusTotalFailed(message) {
+  if (!lastResult) return;
+  lastResult.vt = { state: "error", message };
+  painted.delete("pane-vt");
+  if ($("tab-vt").getAttribute("aria-selected") === "true") paint("pane-vt");
+}
+
+async function askVirusTotal(upload) {
+  const result = lastResult;
+  try {
+    const response = await fetch(`/api/virustotal?upload=${upload ? "1" : "0"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: await result.file.arrayBuffer(),
+    });
+    const vt = await response.json().catch(() => null);
+    if (result !== lastResult) return; // the user moved on to another file
+    if (!response.ok || !vt || vt.error) {
+      virusTotalFailed(vt && vt.message ? vt.message : "No se pudo consultar VirusTotal.");
+      return;
+    }
+    applyVirusTotal(vt, 0);
+  } catch (_) {
+    if (result === lastResult) virusTotalFailed("No se pudo contactar con el servidor para consultar VirusTotal.");
+  }
+}
+
+async function recheck(sha256, attempt) {
+  const result = lastResult;
+  clearTimeout(vtTimer);
+  try {
+    const response = await fetch(`/api/virustotal/${sha256}`);
+    const vt = await response.json().catch(() => null);
+    if (result !== lastResult) return;
+    if (!response.ok || !vt || vt.error) {
+      virusTotalFailed(vt && vt.message ? vt.message : "No se pudo consultar VirusTotal.");
+      return;
+    }
+    applyVirusTotal(vt, attempt);
+  } catch (_) {
+    if (result === lastResult) virusTotalFailed("No se pudo contactar con el servidor para consultar VirusTotal.");
   }
 }
 
@@ -326,7 +406,7 @@ function render(data, name) {
   renderHead(data, name);
   renderSummary(data);
   renderItems(data);
-  $("tab-vt").hidden = !data.virustotal;
+  $("tab-vt").hidden = !(data.virustotal || (lastResult && lastResult.vt));
   $("absence").textContent = data.absence;
   select("tab-summary");
 }
@@ -399,6 +479,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("form").addEventListener("submit", submit);
   $("error-back").addEventListener("click", () => show("upload"));
   $("again").addEventListener("click", () => {
+    clearTimeout(vtTimer);
+    lastResult = null;
     $("file").value = "";
     choose(null);
     show("upload");
