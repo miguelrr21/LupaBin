@@ -2,16 +2,22 @@
 
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
+
+import pytest
 
 ROOT = Path(__file__).parents[1]
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 
 
 def tracked_files() -> set[str]:
-    listed = subprocess.run(
-        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+    git = shutil.which("git")
+    if git is None or not (ROOT / ".git").exists():
+        pytest.skip("needs a git checkout (not an unpacked sdist)")
+    listed = subprocess.run(  # noqa: S603 - fixed argv: the resolved git and a constant command
+        [git, "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
     ).stdout
     return set(listed.split("\n")) - {""}
 
