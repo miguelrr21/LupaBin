@@ -302,6 +302,60 @@ def test_only_a_trusted_local_proxy_decides_the_client_address():
     assert client_address("127.0.0.1", "198.51.100.7", trust_proxy=False) == "127.0.0.1"
 
 
+def test_behind_cloudflare_the_visitor_comes_from_cf_connecting_ip():
+    def address(peer, forwarded, connecting, cloudflare=True, trust_proxy=True):
+        return client_address(peer, forwarded, trust_proxy, connecting, cloudflare)
+
+    # proxied DNS: Caddy saw a Cloudflare server; IPv4 and IPv6 ranges
+    assert address("127.0.0.1", "172.70.1.2", "198.51.100.7") == "198.51.100.7"
+    assert address("::1", "2a06:98c0:3600::103", " 2001:db8::1 ") == "2001:db8::1"
+    # a Tunnel ending on this host: cloudflared reaches Caddy through the loopback
+    assert address("127.0.0.1", "127.0.0.1", "198.51.100.7") == "198.51.100.7"
+    assert address("127.0.0.1", None, "198.51.100.7") == "198.51.100.7"
+    assert address("127.0.0.1", "::1", "198.51.100.7") == "198.51.100.7"
+
+
+def test_a_forged_cf_connecting_ip_is_ignored():
+    def address(peer, forwarded, connecting, cloudflare=True, trust_proxy=True):
+        return client_address(peer, forwarded, trust_proxy, connecting, cloudflare)
+
+    # straight to the server's IP, past Cloudflare: Caddy saw the sender itself
+    assert address("127.0.0.1", "203.0.113.9", "198.51.100.7") == "203.0.113.9"
+    # the sender's own X-Forwarded-For entries come before the one Caddy added
+    assert address("127.0.0.1", "172.70.1.2, 203.0.113.9", "198.51.100.7") == "203.0.113.9"
+    # no local proxy in front, or the switch off
+    assert address("172.70.1.2", None, "198.51.100.7") == "172.70.1.2"
+    assert address("127.0.0.1", "172.70.1.2", "198.51.100.7", trust_proxy=False) == "127.0.0.1"
+    assert address("127.0.0.1", "172.70.1.2", "198.51.100.7", cloudflare=False) == "172.70.1.2"
+    # a value that is not an address, or none at all
+    assert address("127.0.0.1", "172.70.1.2", "unknown") == "172.70.1.2"
+    assert address("127.0.0.1", "172.70.1.2", "198.51.100.7, 1.1.1.1") == "172.70.1.2"
+    assert address("127.0.0.1", "172.70.1.2", None) == "172.70.1.2"
+    assert address("127.0.0.1", "not an address", "198.51.100.7") == "not an address"
+
+
+def test_visitors_behind_cloudflare_do_not_share_one_budget():
+    settings = Settings(rate=1, window=600, trust_proxy=True, cloudflare=True, virustotal=False)
+    app = web.create_app(settings, transport=lambda: Worker())
+    test = TestClient(app, client=("127.0.0.1", 50000))
+
+    def send(visitor):
+        headers = {
+            "content-type": "application/octet-stream",
+            "x-forwarded-for": "172.70.1.2",
+            "cf-connecting-ip": visitor,
+        }
+        return test.post("/api/analyze", content=build_pe(), headers=headers).status_code
+
+    assert [send("198.51.100.7"), send("198.51.100.8"), send("198.51.100.7")] == [200, 200, 429]
+
+
+def test_the_cloudflare_switch_is_off_unless_asked_for():
+    assert Settings.from_env({}).cloudflare is False
+    assert Settings.from_env({"LUPABIN_WEB_CLOUDFLARE": "on"}).cloudflare is True
+    assert Settings.from_env({"LUPABIN_WEB_CLOUDFLARE": "off"}).cloudflare is False
+
+
 def test_a_request_that_waits_too_long_for_a_free_slot_is_told_to_retry():
     import asyncio
 
