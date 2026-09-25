@@ -17,6 +17,8 @@ class Settings:
     trust_proxy: bool = False  # client address from the last X-Forwarded-For entry
     virustotal: bool = True  # consult VirusTotal when the page asks (and a key exists)
     upload: bool = True  # upload unknown files when the page asks
+    vt_per_minute: int = 4  # VirusTotal requests for the whole server (public API limits)
+    vt_per_day: int = 500
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
@@ -41,8 +43,12 @@ class Settings:
             virustotal=switched_on("DISSECT_VIRUSTOTAL", True),
             upload=switched_on("DISSECT_VIRUSTOTAL", True)
             and switched_on("DISSECT_VIRUSTOTAL_UPLOAD", True),
+            vt_per_minute=int(env.get("DISSECT_VT_PER_MINUTE", cls.vt_per_minute)),
+            vt_per_day=int(env.get("DISSECT_VT_PER_DAY", cls.vt_per_day)),
         )
         if settings.rate < 1 or settings.window <= 0 or settings.concurrency < 1:
+            raise ValueError("invalid web limits")
+        if settings.vt_per_minute < 1 or settings.vt_per_day < 1:
             raise ValueError("invalid web limits")
         return settings
 
