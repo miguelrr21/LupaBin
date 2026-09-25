@@ -4,7 +4,7 @@ Membership says "this imported name is on the list", never "the sample does this
 Names are matched exactly; for functions with ANSI and wide variants both the A and
 W names are listed. Imports by ordinal cannot be matched and are not guessed.
 Changing the lists requires a new FAMILIES_ID and a new benign-prevalence measurement
-(design of Phase 3, section 6.3).
+(docs/metodo.md, «Explicaciones y glosario»).
 """
 
 import hashlib

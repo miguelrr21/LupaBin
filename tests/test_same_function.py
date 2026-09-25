@@ -1,4 +1,4 @@
-"""Phase 5.4 (a): x64 .pdata function ranges (contract 0.6.0) and the capabilities that
+"""x64 .pdata function ranges (contract 0.6.0) and the capabilities that
 pair a key opened for writing with RegSetValueEx in the same range."""
 
 import copy

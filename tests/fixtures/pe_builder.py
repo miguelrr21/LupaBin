@@ -350,10 +350,10 @@ def build_capability_demo():
     return build_call_demo("RegSetKeyValueW", {0: 0x80000001, 1: run, 2: CAPABILITY_VALUE, 3: 1})
 
 
-# Inert training code for Phase 5.4: in one x64 function, RegOpenKeyExW(HKEY_CURRENT_USER,
-# the Run key, 0, KEY_WRITE, &key), then RegSetValueExW(key, a made-up value name, 0,
-# REG_SZ, ...). The .pdata entry that declares the function is at RVA 0x1800, in the
-# read-only .idata. Never executed.
+# Inert training code for the same-function capabilities: in one x64 function,
+# RegOpenKeyExW(HKEY_CURRENT_USER, the Run key, 0, KEY_WRITE, &key), then
+# RegSetValueExW(key, a made-up value name, 0, REG_SZ, ...). The .pdata entry that
+# declares the function is at RVA 0x1800, in the read-only .idata. Never executed.
 SAME_FUNCTION_VALUE = "LupaBinTraining"
 PDATA_RVA = 0x1800
 

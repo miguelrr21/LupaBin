@@ -477,7 +477,7 @@
     },
     "CodeFunctionData": {
       "additionalProperties": false,
-      "description": "An x64 `.pdata` RUNTIME_FUNCTION entry: one contiguous range of one function,\nas the file declares it (Phase 5, design section 11).",
+      "description": "An x64 `.pdata` RUNTIME_FUNCTION entry: one contiguous range of one function,\nas the file declares it.",
       "properties": {
         "begin": {
           "maximum": 4294967295,

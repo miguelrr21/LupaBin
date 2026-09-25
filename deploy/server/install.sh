@@ -72,8 +72,8 @@ if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$STATE" --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
 # The service starts one isolated worker container per analysis, so it needs Docker.
-# Membership of the docker group is equivalent to root on this machine (design of the
-# web, section 2): the service only listens on 127.0.0.1, behind Caddy. Use a server
+# Membership of the docker group is equivalent to root on this machine: the service
+# only listens on 127.0.0.1, behind Caddy. Use a server
 # that holds nothing else.
 usermod -aG docker "$SERVICE_USER"
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$STATE"

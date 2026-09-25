@@ -1,9 +1,10 @@
-"""Catalog `lupabin-capabilities-v1`: what one call contains, from its constant arguments.
+"""Catalog `lupabin-capabilities-v3`: what the code contains, from calls and their constant
+arguments (docs/metodo.md, «Capacidades»).
 
-Design of Phase 5, sections 2 and 3. A capability is an explanation rule, not a fact:
-it reads `api_call` and `call_argument` facts that the report already validates, and
-its item cites every call of the report that meets its condition, each with all of
-its published arguments, in report order. The statement says what the code contains,
+A capability is an explanation rule, not a fact: it reads `api_call` and
+`call_argument` facts that the report already validates, and its item cites every
+call of the report that meets its condition, each with all of its published
+arguments, in report order. The statement says what the code contains,
 never that the program does it or why.
 
 Conditions only read the parameters listed for each function, which must exist in
@@ -38,7 +39,7 @@ Arguments = dict[str, CallArgumentEvidence]
 Slots = dict[str, SlotValue]
 Derived = tuple[Slots, tuple[str, ...]]  # slots and glossary entry ids
 
-# Benign context (design section 5): on 2026-09-24, binaries with at least one case among
+# Benign context: on 2026-09-24, binaries with at least one case among
 # 3,087 benign PE files (System32 --stride 3: 1,363; SysWOW64 --stride 5: 521; Program
 # Files and Program Files (x86) --recursive --stride 40: 1,203), measured with
 # `uv run python -m tests.capability_eval`. Each of the 821 cases was reviewed by hand
@@ -87,7 +88,7 @@ TACTICS = {
 CASES_SHOWN = 20
 TEXT_SHOWN = 200
 
-# MITRE ATT&CK techniques whose definition a case's mechanism meets (design section 4),
+# MITRE ATT&CK techniques whose definition a case's mechanism meets,
 # with their names as attack.mitre.org gives them on 2026-09-24.
 TECHNIQUES = {
     "T1547.001": "Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder",
@@ -117,7 +118,7 @@ class Capability:
     glossary_ids: tuple[str, ...]
     # the ATT&CK technique of every case, or a function that gives it for each case
     technique: str | Callable[[str, Arguments], str | None] | None = None
-    # Phase 5.4: functions that write through a key opened in the same .pdata range;
+    # Functions that write through a key opened in the same .pdata range;
     # `describe` then decides which calls open it
     writes: frozenset[str] = frozenset()
     unit: tuple[str, str] = ("llamada", "llamadas")  # what a case is, singular and plural

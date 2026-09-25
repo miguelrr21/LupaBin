@@ -1,4 +1,4 @@
-"""Limits of the public web service (design of the web, section 4)."""
+"""Limits of the public web service."""
 
 import asyncio
 import os

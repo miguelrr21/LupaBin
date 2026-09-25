@@ -1,4 +1,4 @@
-"""Constant arguments of calls to catalog functions (design section 3.4).
+"""Constant arguments of calls to catalog functions.
 
 Only the end of the linear stretch that leads to the call is decoded, in capstone's
 detail mode: from the stretch start the walk reported, or from the last point after
@@ -8,7 +8,7 @@ is executed: an argument is known only when an instruction of a canonical form
 
 - x64 (rcx, rdx, r8, r9): any write of the register or of a subregister, explicit
   or implicit, forgets it. From the fifth argument on, the stack slot [rsp + 8*i]
-  holds it (design section 11): a canonical store of an immediate, or of a register
+  holds it: a canonical store of an immediate, or of a register
   that a canonical form set earlier, fills the slot; a write of rsp, a store that
   overlaps it, or a memory write through any other base forgets it.
 - x86 (stack): the i-th 32-bit `push` counting back from the call is argument i. Any
@@ -77,7 +77,7 @@ class Found:
     position: int
     setting: Setting
     setter: tuple[int, int]  # (rva, size): for a stack slot, the store
-    # a stack slot (design section 11): bytes the store wrote, and the instruction
+    # a stack slot: bytes the store wrote, and the instruction
     # that set the register it copies, if any
     width: int = 8
     source: tuple[int, int] | None = None

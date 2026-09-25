@@ -1,4 +1,4 @@
-"""Reproduce the Fase 4 measurements of calls to imported functions.
+"""Reproduce the measurements of calls to imported functions.
 
     uv run python -m tests.code_eval corpus DIR [DIR ...] [--recursive] [--ext .exe,.dll]
         [--stride N] [--limit N] [--review N] [--seed N]
@@ -40,7 +40,7 @@ from lupabin.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
 from tests.fixtures.pe_builder import CODE_RVA, build_code_pe
 
 MAX_INPUT = 20 * 1024 * 1024
-STACK = " [pila]"  # marks an argument read from an x64 stack slot (design section 11)
+STACK = " [pila]"  # marks an argument read from an x64 stack slot
 
 
 def files(roots: list[Path], recursive: bool, ext: tuple[str, ...], stride: int) -> Iterator[Path]:
@@ -91,7 +91,7 @@ def use_entries(names: str) -> None:
 
 class ArgumentProbe:
     """Records, inside the extractor, every constant the stretch rule recovers for a
-    catalog parameter and whether its type accepted it (design section 7).
+    catalog parameter and whether its type accepted it.
 
     Published arguments are type-coherent by construction; the error indicator is the
     recovered constants the type rejects, each of which is examined. A random sample
@@ -328,7 +328,7 @@ def corpus(args: argparse.Namespace) -> None:
     probe.report(args.review, args.seed, args.review_match)
     if args.dump:
         # every published and rejected argument, for analyses that should not walk the
-        # corpus again (design section 10.6)
+        # corpus again
         with open(args.dump, "w", encoding="utf-8") as stream:
             json.dump({"published": probe.published, "rejected": probe.rejected}, stream)
 
@@ -391,7 +391,7 @@ def worst_case(name: str) -> bytes:
     }
     if name == "argument-stack-x64":
         # x64 calls to RegCreateKeyExW, each after 15 stores to a stack slot: every
-        # instruction goes through the stack-slot rule (design section 11)
+        # instruction goes through the stack-slot rule
         stores = bytes.fromhex("c744242806000200") * 15  # mov dword ptr [rsp+0x28], imm32
         body = bytearray()
         while len(body) + len(stores) + 6 <= size:

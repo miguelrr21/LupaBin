@@ -1,5 +1,5 @@
 """Canonical byte forms of an instruction that sets a call argument to a constant
-(design sections 3.4 and 11), shared by the worker and the host.
+shared by the worker and the host (docs/metodo.md, «Argumentos constantes»).
 
 The worker decides which instruction sets which argument (the walk's rule); these
 functions only say what constant a given instruction's bytes set and where. Anything
@@ -18,7 +18,7 @@ class Setting(NamedTuple):
 
 
 class StackStore(NamedTuple):
-    """A store to argument `position`'s stack slot in x64 (design section 11.1)."""
+    """A store to argument `position`'s stack slot in x64."""
 
     position: int  # 4..15: the slot [rsp + 8 * position] at the call
     width: int  # bytes written: 4 or 8
