@@ -3,8 +3,8 @@
 If c[i] = p[i] ^ k[i mod L], then c[i] ^ c[i+L] = p[i] ^ p[i+L] for any key of
 period L. Searching a crib's lag-L differential in the sample's lag-L differential
 finds that crib under every period-L key at once; the key is then derived from the
-bytes, never chosen among candidates. Design: docs/superpowers/specs/
-2026-09-22-static-decoding-design.md, sections 3.3-3.5 and 8.
+bytes, never chosen among candidates. Method and measurements: docs/metodo.md,
+«XOR anclado por diferenciales».
 """
 
 import hashlib
@@ -79,7 +79,7 @@ CRIBS: tuple[str, ...] = (
     "\\Microsoft\\Windows\\",
     "C:\\Windows\\System32",
     # v3: path and registry fragments, chosen by coverage of real path strings in
-    # benign binaries (design section 8), plus two common persistence locations.
+    # benign binaries, plus two common persistence locations.
     "\\Microsoft\\",
     "\\windows\\",
     "\\Windows\\",
@@ -109,7 +109,7 @@ MIN_VERIFIED_BYTES = 5
 # this, the exact ciphertext of the crib under each key rotation is searched instead.
 _REUSE_SELECTIVE_BYTES = 3
 # Windows whose bytes are already text are rejected: text XOR text produces the
-# small differentials that collide with crib differentials (design section 8).
+# small differentials that collide with crib differentials.
 _TEXTLIKE = bytes(range(0x20, 0x7F)) + b"\x00\t\n\r"
 
 

@@ -166,7 +166,7 @@ def _stack_setting(
     bits: int,
     parameter: api_catalog.Parameter,
 ) -> argument_forms.Setting | None:
-    """The value an x64 stack store puts in its slot (design section 11), or None."""
+    """The value an x64 stack store puts in its slot, or None."""
     data, where = fact.data, fact.location
     store = argument_forms.x64_stack_store(raw) if bits == 64 else None
     if store is None or store.position != data.position or where.rva is None:

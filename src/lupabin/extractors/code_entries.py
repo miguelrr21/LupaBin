@@ -102,7 +102,7 @@ def _function_starts(layout: Layout, max_functions: int) -> list[int]:
 
 
 class FunctionRanges:
-    """The x64 `.pdata` entries (Phase 5, design section 11), to find the one entry that
+    """The x64 `.pdata` entries, to find the one entry that
     holds an address. Learn documents the table as sorted and without overlaps; if two
     entries overlap the table is malformed and no address has an entry (never guessed)."""
 

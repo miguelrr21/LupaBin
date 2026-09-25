@@ -1,6 +1,6 @@
 """LupaBin on the web: the same isolated analysis and didactic report as the CLI.
 
-Design: docs/superpowers/specs/2026-09-25-web-design.md. The server never stores a
+See docs/metodo.md, «Interfaz web». The server never stores a
 sample or a report, runs every analysis in a fresh worker container exactly like the
 CLI (runner.run_isolated), and sends only items that regenerate from their citations.
 """
@@ -116,7 +116,7 @@ def create_app(
     follow: Callable[..., Any] | None = None,
 ) -> Starlette:
     settings = settings or Settings.from_env()
-    # one budget of VirusTotal requests for every visitor (design of the web, section 5)
+    # one budget of VirusTotal requests for every visitor (virustotal/quota.py)
     quota = Quota(settings.vt_per_minute, settings.vt_per_day)
     budgeted = quota.transport(virustotal_client.urllib_transport)
     if submit is None:

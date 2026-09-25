@@ -1,5 +1,5 @@
 """Catalog `lupabin-api-semantics-v4`: which parameters of which imported functions
-LupaBin interprets, with their type (design section 4).
+LupaBin interprets, with their type (docs/metodo.md, «Argumentos constantes»).
 
 Each entry's arity, parameter names and exporting DLLs were checked against the page
 published on Microsoft Learn (the URL is kept with the entry; the DLLs are the page's
@@ -141,7 +141,7 @@ _GET_PROC_ADDRESS = Function(
 )
 
 
-# Catalog v4 (2026-09-24): the rest of design section 4. Each entry's parameter names
+# Catalog v4 (2026-09-24): the rest of the catalog. Each entry's parameter names
 # and positions were checked against the source of its Learn page (MicrosoftDocs/
 # sdk-api; URLDownloadToFile, in the archived Internet Explorer reference, against
 # the page itself), its widths against the Windows SDK 10.0.26100.0 prototype, and its

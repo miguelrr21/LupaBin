@@ -312,7 +312,7 @@ def test_analyze_adds_an_attributed_external_section(tmp_path, monkeypatch):
 
 
 def user_defaults(monkeypatch):
-    """The user's defaults, not the tests' ones: consult and upload."""
+    """The CLI defaults, not the tests' ones: consult and upload."""
     monkeypatch.delenv("LUPABIN_VIRUSTOTAL")
     monkeypatch.delenv("LUPABIN_VIRUSTOTAL_UPLOAD")
 

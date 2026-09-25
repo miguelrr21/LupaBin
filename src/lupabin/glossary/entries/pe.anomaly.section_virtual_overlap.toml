@@ -1,6 +1,6 @@
 id = "pe.anomaly.section_virtual_overlap"
 title = "Secciones solapadas en memoria"
-revision = "1.0.0"
+revision = "1.0.1"
 lang = "es"
 summary = "Dos secciones declaran rangos en memoria que se solapan, calculados de forma conservadora con el mayor de VirtualSize y SizeOfRawData."
 body = "Es una comprobación de campos declarados: el cargador real alinea las secciones, así que el resultado no reproduce exactamente la memoria.\n\nCódigo de la regla en el informe: section_virtual_overlap (versión pe-structure-v1)."
@@ -8,5 +8,5 @@ not_proven = "Esta incoherencia no demuestra intención maliciosa ni cómo se co
 related = ["pe.anomaly"]
 sources = [
   { title = "PE Format: Section Table (Section Headers)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers", verified_on = 2026-09-23 },
-  { title = "Fase 1A, 5.6 Anomalías estructurales", publisher = "Proyecto LupaBin", document = "docs/superpowers/specs/2026-09-20-static-evidence-design.md#56-anomalías-estructurales", verified_on = 2026-09-23 },
+  { title = "Cómo trabaja LupaBin: anomalías estructurales", publisher = "Proyecto LupaBin", document = "docs/metodo.md#anomalías-estructurales", verified_on = 2026-09-25 },
 ]

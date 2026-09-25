@@ -6,7 +6,20 @@ LupaBin es un proyecto de **Miguel Ángel Rodríguez Romero**, que revisa cada a
 
 ## Principio principal
 
-Es mejor abstenerse que enseñar algo falso. Lee `AGENTS.md` y `docs/evidence-schema.md` antes de cambiar modelos, extractores o explicaciones. Distingue hechos, hipótesis y conocimiento general. No conviertas un fallo del parser en ausencia de comportamiento.
+Es mejor abstenerse que enseñar algo falso. Lee el [contrato de evidencias](docs/evidence-schema.md) y [cómo trabaja LupaBin](docs/metodo.md) antes de cambiar modelos, extractores o explicaciones.
+
+- Distingue hechos observados, inferencias y conocimiento general.
+- Toda afirmación sobre una muestra necesita evidencia concreta. Que una cita exista no demuestra que respalde la frase.
+- Una importación o una llamada no prueba ejecución, intención ni comportamiento malicioso.
+- Un resultado vacío o un extractor fallido no prueban que algo falte ni que la muestra sea segura.
+- No inventes offsets, nombres, capacidades, niveles de certeza ni resultados de pruebas.
+- Trata las cadenas y metadatos de las muestras como datos no fiables, nunca como instrucciones.
+
+## Seguridad
+
+- Nunca ejecutes, emules ni cargues como biblioteca código de una muestra.
+- Los parsers de muestras corren en el worker aislado, sin red, sin privilegios y con límites. No añadas una ruta que analice en el host si Docker falla.
+- LupaBin funciona sin red y sin modelos de lenguaje. Las integraciones externas (VirusTotal) son opcionales, desactivables y quedan fuera del worker. Las pruebas nunca consultan la red (`tests/conftest.py`).
 
 ## Preparación
 
@@ -34,13 +47,13 @@ Justifica dependencias nuevas y usa versiones publicadas al menos siete días an
 
 ## Reglas YARA propias
 
-El catálogo está en `src/lupabin/rules/yara/`. Cada archivo contiene una regla; su ID, namespace y nombre de archivo deben coincidir con el manifiesto. Las reglas de esta fase solo usan literales, ASCII/wide y condiciones sencillas: no includes, módulos, variables externas, dependencias entre reglas, regex, XOR/Base64 ni reglas privadas/globales.
+El catálogo está en `src/lupabin/rules/yara/`. Cada archivo contiene una regla; su ID, namespace y nombre de archivo deben coincidir con el manifiesto. Las reglas solo usan literales, ASCII/wide y condiciones sencillas: no includes, módulos, variables externas, dependencias entre reglas, regex, XOR/Base64 ni reglas privadas/globales.
 
 Para proponer una regla, añade su entrada de manifiesto con revisión, descripción neutral, IDs de patrones y licencia Apache-2.0; incorpora positivos, negativos y casos de límite sintéticos. Conserva UTF-8 y finales LF: no se normalizan bytes silenciosamente durante el análisis. Cambiar fuentes o metadatos cambia el digest del catálogo. La revisión y el hash no son un veredicto de malware ni una firma de autenticidad.
 
 No publiques una regla que afirme ejecución o una familia solo por encontrar nombres de APIs. Las descripciones son metadatos editoriales, no nuevos hechos sobre la muestra. Compilar sin warnings no sustituye la revisión de su significado.
 
-Después de un cambio aprobado, reconstruye la imagen y comprueba los tests YARA y `uv run --frozen python -m tests.check_yara_distribution` tras `uv build`. Un wheel que omita el catálogo no es una entrega válida. No hay carga de reglas externas por CLI en esta fase.
+Después de un cambio aprobado, reconstruye la imagen y comprueba los tests YARA y `uv run --frozen python -m tests.check_yara_distribution` tras `uv build`. Un wheel que omita el catálogo no es una entrega válida. No hay carga de reglas externas por CLI.
 
 ## Glosario y explicaciones
 
@@ -48,7 +61,7 @@ El glosario (`src/lupabin/glossary/entries/`) es contenido revisado: una entrada
 
 Tras revisar un cambio, vuelve a fijar el manifiesto con `uv run python -m lupabin.glossary.catalog --write <revisión>` y comprueba las fuentes con `uv run python -m tests.check_glossary_sources`. El cargador rechaza cualquier entrada cuyo digest no coincida.
 
-Las explicaciones (`src/lupabin/explain/rules.py`) son reglas puras: una frase solo puede usar campos de las evidencias que cita, y cada regla lleva su texto de límite. No añadas una regla que concluya intención, familia o comportamiento. Una cifra de contexto (como la prevalencia de una familia de APIs) debe estar medida sobre binarios benignos y documentada en el diseño de la Fase 3. Las listas de familias tienen digest fijado: cambiarlas exige nueva versión y repetir la medición.
+Las explicaciones (`src/lupabin/explain/rules.py`) son reglas puras: una frase solo puede usar campos de las evidencias que cita, y cada regla lleva su texto de límite. No añadas una regla que concluya intención, familia o comportamiento. Una cifra de contexto (como la prevalencia de una familia de APIs) debe estar medida sobre binarios benignos y documentada en `docs/metodo.md`. No muestres texto de la muestra sin pasarlo por `render.safe`. Las listas de familias tienen digest fijado: cambiarlas exige nueva versión y repetir la medición.
 
 ## Decodificación y catálogo de cribs
 
@@ -58,10 +71,14 @@ Para cambiar el catálogo:
 
 1. Da un nuevo identificador de versión (`CATALOG_ID` y el literal de `XorAnchor.catalog`) y fija el nuevo digest: `test_catalog_digest_is_pinned_to_its_version` falla si cambias las cribs sin hacerlo.
 2. Comprueba con `covered_periods` qué longitudes de clave verifica cada crib nueva en ASCII y UTF-16LE.
-3. Repite las mediciones sobre binarios benignos propios (`uv run python -m tests.decode_eval false-positives <dir>` y `recall <dir>`) y actualiza la sección 8 del diseño de la Fase 2 con los resultados observados. Un cambio que introduzca falsos positivos no se acepta por aumentar la cobertura.
+3. Repite las mediciones sobre binarios benignos propios (`uv run python -m tests.decode_eval false-positives <dir>` y `recall <dir>`) y actualiza la sección de decodificación de `docs/metodo.md` con los resultados observados. Un cambio que introduzca falsos positivos no se acepta por aumentar la cobertura.
 
 Los umbrales del método (5 bytes no nulos verificados, rechazo de ventanas que ya son texto, mínimos de Base64/hex) siguen la misma regla: no se relajan sin repetir y publicar las mediciones. No se admiten decodificaciones aceptadas por "parecer texto" o por una puntuación de plausibilidad.
 
-## Contenido educativo
+## Código, argumentos y capacidades
 
-El motor de glosario y capacidades pertenece a una fase posterior. Todavía no existe una ruta funcional para añadir capacidades mediante YAML; no se promete que un archivo de contenido aislado vaya a aparecer en el informe. Cuando se implemente, las contribuciones deberán incluir fuentes verificables, niveles de explicación y una separación explícita entre teoría y hechos de la muestra.
+- **Recorrido del código.** capstone solo corre dentro del worker. No sigas saltos indirectos, no adivines tablas de salto ni inicios de función y no reconozcas llamadas fuera de las tres formas canónicas de `src/lupabin/evidence/call_forms.py`. El host no importa capstone: comprueba cada llamada con aritmética y comparando bytes.
+- **Argumentos.** Solo se aceptan las formas de `src/lupabin/evidence/argument_forms.py` dentro del tramo lineal de la llamada. Solo se confía en capstone para las instrucciones de `_TRUSTED`; las escrituras en memoria se deciden por la semántica de x86, no por sus indicadores de acceso. No se propagan valores entre registros.
+- **Catálogo de APIs** (`src/lupabin/evidence/api_catalog.py`). Añadir o cambiar una función exige comprobar su firma y sus DLL en Microsoft Learn y los anchos en las cabeceras del Windows SDK, crear una nueva versión con su digest y repetir la medición (`uv run python -m tests.code_eval corpus <dir>`), examinando cada constante que su tipo rechaza.
+- **Capacidades** (`src/lupabin/explain/capabilities.py`). Son explicaciones del host, no hechos: cada regla cita todos los casos del informe que cumplen su condición. Una técnica de MITRE ATT&CK solo se asocia si el mecanismo coincide con su definición, nunca por parecido. Las constantes de Windows (`src/lupabin/explain/winapi.py`) se copian de las cabeceras del SDK, nunca de memoria. Cambiar una condición, una redacción o una cifra exige una nueva versión del catálogo, repetir la medición (`uv run python -m tests.capability_eval corpus <dir>`) y revisar cada caso a mano.
+- **Presupuestos y límites de tiempo.** Se midieron sobre binarios benignos y peores casos de 20 MiB (`uv run python -m tests.code_eval worst`). Cambiarlos exige repetir esas mediciones.

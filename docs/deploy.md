@@ -2,7 +2,7 @@
 
 Esta guía es para quien no ha desplegado nunca un servicio. Al terminar tendrás la web pública en la IP de tu servidor y, si quieres, en un dominio con HTTPS.
 
-Qué se instala y por qué está en `docs/superpowers/specs/2026-09-25-web-design.md`. En resumen:
+Qué se instala (el porqué está en [cómo trabaja LupaBin](metodo.md#interfaz-web)):
 - una aplicación web (`lupabin-web`) que solo escucha dentro del servidor;
 - Caddy delante, que recibe las visitas y gestiona el HTTPS;
 - Docker, que abre cada archivo en un contenedor nuevo, sin red y sin privilegios.

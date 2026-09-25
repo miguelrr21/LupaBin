@@ -220,7 +220,7 @@ def test_x86_a_push_from_stack_memory_is_an_unknown_argument_not_a_reset():
     assert found == {1: (0x80000001, 0x1000)}
 
 
-# --- x64 stack slots (design section 11) -----------------------------------------
+# --- x64 stack slots ---------------------------------------------------------------
 
 SLOT5_IMM = b"\xc7\x44\x24\x28\x06\x00\x02\x00"  # mov dword ptr [rsp+0x28], 0x20006
 SLOT4_ZERO = b"\x83\x64\x24\x20\x00"  # and dword ptr [rsp+0x20], 0

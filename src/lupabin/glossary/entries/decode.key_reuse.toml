@@ -1,11 +1,11 @@
 id = "decode.key_reuse"
 title = "Reutilización de clave"
-revision = "1.0.0"
+revision = "1.0.1"
 lang = "es"
 summary = "Cuando una decodificación XOR ya ha verificado una clave con una crib larga, LupaBin busca cribs más cortas bajo esa misma clave en el resto del archivo."
 body = "Una crib corta no basta para verificar sola una clave larga. Pero si la clave ya se estableció en otra parte de la muestra, basta con que la crib corta aparezca exactamente bajo esa clave. La evidencia resultante cita la decodificación que estableció la clave.\n\nEs habitual que un programa use la misma clave para toda su tabla de cadenas. Por eso esta técnica recupera cadenas que, aisladas, no se encontrarían."
 not_proven = "Compartir clave no demuestra que dos textos se usen juntos ni que el programa los descifre."
 related = ["decode.xor", "decode.crib"]
 sources = [
-  { title = "Antecedente: contrato 0.4.0", publisher = "Proyecto LupaBin", document = "docs/evidence-schema.md#antecedente-contrato-040", verified_on = 2026-09-23 },
+  { title = "Contrato de evidencias: reutilización de clave", publisher = "Proyecto LupaBin", document = "docs/evidence-schema.md#reutilización-de-clave", verified_on = 2026-09-25 },
 ]

@@ -1,4 +1,4 @@
-"""Reproduce the Fase 2 decoding measurements on a directory of benign binaries.
+"""Reproduce the decoding measurements on a directory of benign binaries.
 
     uv run python -m tests.decode_eval false-positives DIR [DIR ...] [--limit N]
         [--recursive] [--ext .exe,.dll] [--stride N] [--only all|xor|text]
