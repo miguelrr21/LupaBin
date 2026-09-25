@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "lupabin_glossary",
- "revision": "1.7.0",
+ "revision": "1.8.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -106,7 +106,7 @@
   {
    "id": "code.import_call",
    "filename": "code.import_call.toml",
-   "sha256": "fe859a37d04d0ba5f056f9547aa9bb3b2e32f6399e94152695c7a4c1b66e44eb"
+   "sha256": "8ad5937553cd57eba830e2cc507d00544173ab20deb81b460b9e93464bc29a91"
   },
   {
    "id": "decode.base64",
