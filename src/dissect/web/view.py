@@ -22,6 +22,11 @@ NOT_FOUND = (
     "VirusTotal, que puede compartir su contenido con sus clientes de pago."
 )
 KEY_MISSING = "Este servidor no tiene configurada una clave de API de VirusTotal."
+QUEUED = (
+    "Dissect acaba de subir el archivo a VirusTotal porque no lo conocía, y su análisis está "
+    "en cola: suele tardar unos minutos. Esta pestaña vuelve a consultar sola cada 30 "
+    "segundos. Lo subido puede compartirse con los clientes de pago de VirusTotal."
+)
 
 
 def neutral(value: Any) -> Any:
@@ -80,10 +85,19 @@ def _summary(items: tuple[Item, ...], report: Report) -> dict[str, Any]:
 
 def _virustotal(report: VirusTotalReport) -> dict[str, Any]:
     shown = external.structured(report)
+    shown["sha256"] = report.sample_sha256
     if report.status == "not_found":
         shown["note"] = NOT_FOUND
+    elif report.status == "queued":
+        shown["note"] = QUEUED
     elif report.problem == "key_missing":
         shown["note"] = KEY_MISSING
+    return shown
+
+
+def virustotal(report: VirusTotalReport) -> dict[str, Any]:
+    """The external section on its own, neutralised (the page asks for it separately)."""
+    shown: dict[str, Any] = neutral(_virustotal(report))
     return shown
 
 

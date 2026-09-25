@@ -37,8 +37,8 @@ def client(settings=None, docker=None, consult=None):
     docker = docker or Worker()
     calls = []
 
-    def recorded(sha256, data, upload=False):
-        calls.append((sha256, upload))
+    def recorded(sha256, data, upload=False, wait_seconds=180):
+        calls.append((sha256, upload, wait_seconds, data is not None))
         if consult is None:
             raise AssertionError("VirusTotal must not be consulted")
         return consult(sha256, data, upload)
@@ -197,21 +197,55 @@ def vt_report(sha256, data, upload):
     )
 
 
-def test_virustotal_is_consulted_and_uploads_only_when_asked_and_allowed():
+def vt_post(test, data, upload):
+    return test.post(
+        f"/api/virustotal?upload={upload}",
+        content=data,
+        headers={"content-type": "application/octet-stream"},
+    )
+
+
+def test_the_report_never_waits_for_virustotal():
     test = client(Settings(virustotal=True, upload=True), consult=vt_report)
     body = analyze(test, build_pe(), "?virustotal=1&upload=1").json()
-    assert body["virustotal"]["stats"] == {"malicious": 2, "undetected": 60}
-    assert test.vt_calls[-1][1] is True
-    analyze(test, build_pe(), "?virustotal=1&upload=0")
+    assert body["virustotal"] is None and test.vt_calls == []
+
+
+def test_virustotal_is_asked_apart_and_an_upload_does_not_wait_for_its_analysis():
+    import hashlib
+
+    test = client(Settings(virustotal=True, upload=True), consult=vt_report)
+    data = build_pe()
+    shown = vt_post(test, data, 1).json()
+    assert shown["stats"] == {"malicious": 2, "undetected": 60}
+    assert shown["sha256"] == hashlib.sha256(data).hexdigest()
+    assert test.vt_calls[-1] == (shown["sha256"], True, 0, True)
+    vt_post(test, data, 0)
     assert test.vt_calls[-1][1] is False
-    body = analyze(test, build_pe(), "?virustotal=0").json()
-    assert body["virustotal"] is None and len(test.vt_calls) == 2
 
 
-def test_the_server_can_forbid_uploads_whatever_the_page_asks():
+def test_a_queued_file_is_looked_up_again_by_hash_only():
+    test = client(Settings(virustotal=True, upload=True), consult=vt_report)
+    sha256 = "ab" * 32
+    assert test.get(f"/api/virustotal/{sha256}").status_code == 200
+    assert test.vt_calls[-1][:2] == (sha256, False) and test.vt_calls[-1][3] is False
+    assert test.get("/api/virustotal/not-a-hash").status_code == 400
+
+
+def test_queued_uploads_explain_that_the_page_asks_again():
+    from dissect.web import view
+
+    queued = vt_report("cd" * 32, None, True).model_copy(update={"status": "queued"})
+    assert "vuelve a consultar sola" in view.virustotal(queued)["note"]
+
+
+def test_the_server_can_forbid_uploads_or_virustotal_whatever_the_page_asks():
     test = client(Settings(virustotal=True, upload=False), consult=vt_report)
-    analyze(test, build_pe(), "?virustotal=1&upload=1")
-    assert test.vt_calls == [(test.vt_calls[0][0], False)]
+    vt_post(test, build_pe(), 1)
+    assert test.vt_calls[-1][1] is False
+    off = client(Settings(virustotal=False, upload=False))
+    assert vt_post(off, build_pe(), 1).status_code == 404
+    assert off.get(f"/api/virustotal/{'ab' * 32}").status_code == 404
 
 
 def test_settings_follow_the_same_switches_as_the_cli():
