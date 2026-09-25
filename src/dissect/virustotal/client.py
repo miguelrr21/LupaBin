@@ -208,11 +208,15 @@ def consult(
     data: bytes | None = None,
     *,
     upload: bool = False,
+    wait_seconds: float = 180,
     transport: Transport = urllib_transport,
     sleep: Callable[[float], None] = time.sleep,
     environ: dict[str, str] | None = None,
 ) -> VirusTotalReport:
-    """Never raises: failures become status "unavailable" with their problem."""
+    """Never raises: failures become status "unavailable" with their problem.
+
+    After an upload, waits up to `wait_seconds` for VirusTotal's analysis; with 0 it
+    returns at once with status "queued" (the web asks again later by hash)."""
     key = api_key(environ)
     client = Client(key, transport, sleep)
     if not key:
@@ -220,7 +224,7 @@ def consult(
     try:
         report = client.lookup(sha256)
         if report.status == "not_found" and upload and data is not None:
-            report = client.upload(data, sha256)
+            report = client.upload(data, sha256, wait_seconds=wait_seconds)
         return report
     except VirusTotalError as error:
         return client._report(sha256, status="unavailable", problem=error.problem)
