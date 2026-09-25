@@ -7,7 +7,8 @@
 `corpus` treats every file as benign and runs the PE and code extractors on it: every
 report must validate and every call must match the sample's bytes (a single failure
 would invalidate a report). In x64 it also counts calls outside the functions that
-`.pdata` declares, the error indicator of the walk, and for call arguments the
+`.pdata` declares, the error indicator of the walk (tail jumps apart: leaf functions
+have no entry), and for call arguments the
 constants that the parameter's type rejects, the error indicator of the stretch rule
 (`--review N` prints N random published arguments with their stretch). Files are only read as bytes:
 nothing is executed, and they never enter the repository. `worst` times synthetic
@@ -306,7 +307,13 @@ def corpus(args: argparse.Namespace) -> None:
             totals["x64_guard_targets_in_pdata"] += sum(t in starts for t in guard)
             totals["x64_files"] += 1
             totals["x64_calls"] += len(calls)
-            totals["outside_pdata"] += outside(calls, ranges)
+            # A leaf function that ends in a tail jump reserves no stack and calls nothing,
+            # so it has no .pdata entry: outside .pdata is an error indicator only for
+            # the other forms, and tail jumps are counted apart for review.
+            tails = [call for call in calls if call.data.via == "tail"]
+            others = [call for call in calls if call.data.via != "tail"]
+            totals["outside_pdata"] += outside(others, ranges)
+            totals["tail_outside_pdata"] += outside(tails, ranges)
         totals["walked"] += 1
         totals["calls"] += len(calls)
         totals["imports_named"] += len(named)
@@ -389,6 +396,30 @@ def worst_case(name: str) -> bytes:
             + absolute
         ),  # fmt: skip
     }
+    if name in ("switch-x86", "switch-x64"):
+        # a jump-table candidate every few bytes, each reached through the jz before
+        # it: every one is matched in detail mode and then rejected (no relocations,
+        # no .pdata)
+        if name == "switch-x86":
+            dispatch = bytes.fromhex("83f8027700ff2485") + struct.pack("<I", 0x400000)
+        else:
+            dispatch = bytes.fromhex("83f90277004863c1488d1500000000")
+            dispatch += bytes.fromhex("8b8c82000000004803caffe1")
+        unit = bytes([0x74, len(dispatch)]) + dispatch  # jz: the next unit
+        bits = 32 if name == "switch-x86" else 64
+        return build_code_pe(unit * (size // len(unit)), bits=bits)
+    if name == "relocations":
+        # a base relocation table filling the code section: parsed up to its cap
+        blocks = bytearray()
+        page = 0
+        while len(blocks) + 8 + 2 * 4096 <= size:
+            blocks += struct.pack("<II", page, 8 + 2 * 4096)
+            blocks += struct.pack("<4096H", *(0x3000 | offset for offset in range(4096)))
+            page += 0x1000
+        data = bytearray(build_code_pe(bytes(blocks)))
+        directory = 0x98 + 92 + 4 + 8 * 5
+        struct.pack_into("<II", data, directory, CODE_RVA, len(blocks))
+        return bytes(data)
     if name == "argument-stack-x64":
         # x64 calls to RegCreateKeyExW, each after 15 stores to a stack slot: every
         # instruction goes through the stack-slot rule
@@ -414,6 +445,9 @@ WORST = (
     "argument-stretches",
     "argument-values",
     "argument-stack-x64",
+    "switch-x86",
+    "switch-x64",
+    "relocations",
 )
 
 

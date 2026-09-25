@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.6.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.7.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -30,7 +30,7 @@ El host trata la respuesta del worker como entrada no fiable: la valida, comprue
 
 | Campo | Contenido |
 | --- | --- |
-| `schema_version` | Literal `0.6.0`; versiones distintas se rechazan. |
+| `schema_version` | Literal `0.7.0`; versiones distintas se rechazan. |
 | `sample` | SHA-256, MD5, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. MD5 se incluye solo por interoperabilidad. |
 | `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
 | `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `yara_match`, `decoded_string`, `api_call`, `call_argument` y `code_function`. |
@@ -98,10 +98,12 @@ Los límites efectivos aparecen en `analysis.limits.decode`. Cero decodificacion
 | --- | --- |
 | `component` | `api_calls`. |
 | `location` | La instrucción de llamada: `offset`, `rva`, `length` y `section`, que debe ser la única sección ejecutable que contiene esos bytes en disco. |
-| `data.via` | `direct` (`call [casilla]`), `thunk` (`call rel32` a un `jmp [casilla]`) o `register` (`mov reg, [casilla]` inmediatamente antes de `call reg`). |
+| `data.via` | `direct` (`call [casilla]`), `thunk` (`call rel32` a un `jmp [casilla]`), `register` (`mov reg, [casilla]` inmediatamente antes de `call reg`) o `tail` (`jmp [casilla]` que termina un tramo: una llamada en cola). |
 | `data.raw_hex` | Los bytes de la instrucción de llamada. |
 | `data.helper` | Solo `thunk` y `register`: el `jmp` del thunk o la carga del registro, con `offset`, `rva` y `raw_hex`. |
 | `provenance.evidence_ids` | Exactamente el `import` al que llama. |
+
+Una llamada en cola solo admite argumentos de registro y solo en x64: en el salto, la dirección de retorno de quien llamó ya está en la pila.
 
 **Verificación en el propio informe.** Sin la muestra, el modelo vuelve a derivar la casilla desde los bytes citados con las formas canónicas de `src/lupabin/evidence/call_forms.py` y exige que sea el `iat_rva` del import citado. En x86 la dirección es absoluta (menos la base de imagen de la cabecera); en x64, relativa a la instrucción siguiente. En un thunk, el destino del `call` debe ser el `jmp` citado; en la vía por registro, la carga debe terminar justo donde empieza la llamada y usar el mismo registro. También comprueba que cada `offset` corresponde a su `rva` según la tabla de secciones.
 
@@ -163,6 +165,7 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 | 0.3.0 | Fuente `yara` y `yara_match` | `docs/schemas/0.3.0.json` |
 | 0.4.0 | Fuente `decode` y `decoded_string` | `docs/schemas/0.4.0.json` |
 | 0.5.0 | Fuente `code`: `api_call`, `call_argument` e `iat_rva` en los imports | `docs/schemas/0.5.0.json` |
-| 0.6.0 | `code_function` (rangos de `.pdata` en x64) | `docs/evidence-schema.json` (activo) |
+| 0.6.0 | `code_function` (rangos de `.pdata` en x64) | `docs/schemas/0.6.0.json` |
+| 0.7.0 | La vía `tail` de `api_call` (saltos en cola a una función importada) | `docs/evidence-schema.json` (activo) |
 
 Los consumidores rechazan versiones de esquema no soportadas. La CLI no transforma informes antiguos.
