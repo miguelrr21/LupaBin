@@ -8,6 +8,9 @@
 #
 # y ejecuta "sudo systemctl reload caddy". Caddy obtendrá y renovará solo el
 # certificado HTTPS (Let's Encrypt) y redirigirá HTTP a HTTPS.
+#
+# Con Cloudflare Tunnel, deja ":80": el HTTPS lo pone Cloudflare, y con el dominio aquí
+# Caddy redirigiría a HTTPS cada visita del túnel, en un bucle sin fin.
 :80 {
 	# el máximo de LupaBin es 20 MiB; un poco de margen para las cabeceras
 	request_body {
