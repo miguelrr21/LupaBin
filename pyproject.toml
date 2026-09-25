@@ -18,6 +18,13 @@ dependencies = [
 
 [project.scripts]
 dissect = "dissect.cli:app"
+dissect-web = "dissect.web.app:main"
+
+[project.optional-dependencies]
+web = [
+    "starlette==1.6.0",
+    "uvicorn==0.52.4",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dissect"]
@@ -54,9 +61,12 @@ ignore_missing_imports = true
 
 [dependency-groups]
 dev = [
+    "httpx==0.28.1",
     "jsonschema==4.25.1",
     "mypy==1.17.1",
     "pre-commit==4.3.0",
     "pytest==8.4.1",
     "ruff==0.12.12",
+    "starlette==1.6.0",
+    "uvicorn==0.52.4",
 ]

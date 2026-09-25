@@ -498,7 +498,7 @@ def test_the_summary_comes_first_and_groups_capabilities_by_tactic(kind):
     assert positions == sorted(positions)
     part = summary_of(output)
     assert "Ejecución" in part and "de este tipo: ejecutar un programa" in part
-    assert "T1059" in part and document.ONE_CALL.split(":")[0] in part
+    assert "T1059" in part and document.ONE_CALL[:30] in part
     assert document.NO_CAPABILITY.split(".")[0] not in part
 
 

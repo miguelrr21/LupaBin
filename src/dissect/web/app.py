@@ -1,0 +1,209 @@
+"""Dissect on the web: the same isolated analysis and didactic report as the CLI.
+
+Design: docs/superpowers/specs/2026-09-25-web-design.md. The server never stores a
+sample or a report, runs every analysis in a fresh worker container exactly like the
+CLI (runner.run_isolated), and sends only items that regenerate from their citations.
+"""
+
+import asyncio
+import os
+from collections.abc import Awaitable, Callable, MutableMapping
+from importlib.resources import files
+from typing import Any
+
+from starlette.applications import Starlette
+from starlette.requests import ClientDisconnect, Request
+from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
+
+from dissect.errors import MESSAGES, DissectError, FailureCode
+from dissect.evidence.models import Limits
+from dissect.explain.engine import ExplanationError, explain, validate
+from dissect.glossary.catalog import load_glossary
+from dissect.runner import IMAGE, run_isolated
+from dissect.transport import DockerCLI, Transport
+from dissect.virustotal import client as virustotal_client
+from dissect.web import view
+from dissect.web.guard import Busy, RateLimit, Settings, Slots, client_address
+
+STATIC = files("dissect.web") / "static"
+STATUS: dict[FailureCode, int] = {
+    "input_empty": 400,
+    "invalid_input": 400,
+    "input_limit": 413,
+    "docker_unavailable": 503,
+    "image_unavailable": 503,
+    "timeout": 504,
+}
+SECURITY_HEADERS = {
+    "content-security-policy": (
+        "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+        "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    ),
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "cross-origin-opener-policy": "same-origin",
+    "cross-origin-resource-policy": "same-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "x-frame-options": "DENY",
+}
+Scope = MutableMapping[str, Any]
+Message = MutableMapping[str, Any]
+Receive = Callable[[], Awaitable[Message]]
+Send = Callable[[Message], Awaitable[None]]
+ASGI = Callable[[Scope, Receive, Send], Awaitable[None]]
+
+
+class SecurityHeaders:
+    """Adds the page's security headers to every HTTP response."""
+
+    def __init__(self, app: ASGI):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {name.lower() for name, _ in headers}
+                for name, value in SECURITY_HEADERS.items():
+                    if name.encode() not in present:
+                        headers.append((name.encode(), value.encode()))
+                if scope["path"].startswith("/api/"):
+                    headers.append((b"cache-control", b"no-store"))
+                else:  # the page and its assets: revalidate, so an update is seen at once
+                    headers.append((b"cache-control", b"no-cache"))
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, with_headers)
+
+
+def failure(code: str, status: int, message: str | None = None) -> JSONResponse:
+    known: dict[str, str] = {key: value for key, value in MESSAGES.items()}
+    text = message if message is not None else known.get(code, code)
+    return JSONResponse({"error": code, "message": text}, status_code=status)
+
+
+async def read_limited(request: Request, limit: int) -> bytes:
+    """The request body, refused as soon as it passes `limit` bytes (nothing on disk)."""
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > limit:
+        raise DissectError("input_limit")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > limit:
+            raise DissectError("input_limit")
+    if not body:
+        raise DissectError("input_empty")
+    return bytes(body)
+
+
+def create_app(
+    settings: Settings | None = None,
+    transport: Callable[[], Transport] = DockerCLI,
+    consult: Callable[..., Any] = virustotal_client.consult,
+) -> Starlette:
+    settings = settings or Settings.from_env()
+    limits = Limits()
+    glossary = load_glossary()
+    rate = RateLimit(settings.rate, settings.window)
+    slots = Slots(settings.concurrency, settings.queue_seconds)
+
+    async def index(request: Request) -> Response:
+        return FileResponse(str(STATIC / "index.html"), media_type="text/html; charset=utf-8")
+
+    async def config(request: Request) -> Response:
+        return JSONResponse(
+            {
+                "max_bytes": limits.input_bytes,
+                "virustotal": settings.virustotal,
+                "upload": settings.upload,
+                "rate": settings.rate,
+                "window_minutes": round(settings.window / 60),
+            }
+        )
+
+    async def health(request: Request) -> Response:
+        try:
+            docker = transport()
+            image = await docker.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
+        except DissectError as error:
+            return failure(error.code, 503)
+        if image.code != 0:
+            return failure("image_unavailable", 503)
+        return JSONResponse({"status": "ok", "image": IMAGE})
+
+    async def analyze(request: Request) -> Response:
+        client = client_address(
+            request.client.host if request.client else None,
+            request.headers.get("x-forwarded-for"),
+            settings.trust_proxy,
+        )
+        if not rate.allow(client):
+            minutes = round(settings.window / 60)
+            return failure(
+                "rate_limited",
+                429,
+                f"Has alcanzado el límite de {settings.rate} análisis cada {minutes} minutos. "
+                "Espera un poco y vuelve a intentarlo.",
+            )
+        try:
+            data = await read_limited(request, limits.input_bytes)
+        except DissectError as error:
+            return failure(error.code, STATUS.get(error.code, 400))
+        except ClientDisconnect:
+            return failure("invalid_input", 400)
+        use_vt = settings.virustotal and request.query_params.get("virustotal") == "1"
+        upload = use_vt and settings.upload and request.query_params.get("upload") == "1"
+        try:
+            async with slots:
+                report = await run_isolated(data, limits, transport())
+        except Busy:
+            return failure(
+                "busy",
+                503,
+                "El servidor está analizando otros archivos. Vuelve a intentarlo en un minuto.",
+            )
+        except DissectError as error:
+            return failure(error.code, STATUS.get(error.code, 500))
+        try:
+            explanation = await asyncio.to_thread(explain, report, glossary)
+            items = validate(explanation, report, glossary)
+        except ExplanationError:
+            return failure("invalid_worker_output", 500)
+        external = None
+        if use_vt:
+            external = await asyncio.to_thread(consult, report.sample.sha256, data, upload=upload)
+        return JSONResponse(view.build(report, explanation, items, glossary, external))
+
+    app = Starlette(
+        routes=[
+            Route("/", index),
+            Route("/api/config", config),
+            Route("/api/health", health),
+            Route("/api/analyze", analyze, methods=["POST"]),
+            Mount("/static", StaticFiles(directory=str(STATIC)), name="static"),
+        ]
+    )
+    app.add_middleware(SecurityHeaders)
+    return app
+
+
+def main() -> None:
+    """`dissect-web`: serve on DISSECT_WEB_HOST:DISSECT_WEB_PORT (127.0.0.1:8080)."""
+    import uvicorn
+
+    uvicorn.run(
+        create_app(),
+        host=os.environ.get("DISSECT_WEB_HOST", "127.0.0.1"),
+        port=int(os.environ.get("DISSECT_WEB_PORT", "8080")),
+        access_log=False,
+        proxy_headers=False,  # the client address is decided by guard.client_address
+        server_header=False,
+    )
