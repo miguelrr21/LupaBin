@@ -22,6 +22,11 @@ NOT_FOUND = (
     "VirusTotal, que puede compartir su contenido con sus clientes de pago."
 )
 KEY_MISSING = "Este servidor no tiene configurada una clave de API de VirusTotal."
+QUOTA = (
+    "La cuota de VirusTotal de este servidor está agotada por ahora: la comparten todos los "
+    "visitantes (con la API pública, 4 consultas por minuto y 500 al día). El análisis de "
+    "Dissect no cambia; puedes volver a intentarlo más tarde."
+)
 QUEUED = (
     "Dissect ha subido el archivo a VirusTotal porque no lo conocía, y VirusTotal lo está "
     "analizando; suele tardar unos minutos. La página sigue su análisis y muestra el "
@@ -87,12 +92,15 @@ def _summary(items: tuple[Item, ...], report: Report) -> dict[str, Any]:
 def _virustotal(report: VirusTotalReport) -> dict[str, Any]:
     shown = external.structured(report)
     shown["sha256"] = report.sample_sha256
+    shown["problem"] = report.problem
     if report.status == "not_found":
         shown["note"] = NOT_FOUND
     elif report.status == "queued":
         shown["note"] = QUEUED
     elif report.problem == "key_missing":
         shown["note"] = KEY_MISSING
+    elif report.status == "unavailable" and report.problem == "quota_exceeded":
+        shown["note"] = QUOTA
     return shown
 
 

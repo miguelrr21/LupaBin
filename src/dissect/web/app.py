@@ -6,6 +6,7 @@ CLI (runner.run_isolated), and sends only items that regenerate from their citat
 """
 
 import asyncio
+import functools
 import hashlib
 import os
 import re
@@ -26,6 +27,7 @@ from dissect.glossary.catalog import load_glossary
 from dissect.runner import IMAGE, run_isolated
 from dissect.transport import DockerCLI, Transport
 from dissect.virustotal import client as virustotal_client
+from dissect.virustotal.quota import Quota
 from dissect.web import view
 from dissect.web.guard import Busy, RateLimit, Settings, Slots, client_address
 
@@ -110,10 +112,17 @@ async def read_limited(request: Request, limit: int) -> bytes:
 def create_app(
     settings: Settings | None = None,
     transport: Callable[[], Transport] = DockerCLI,
-    submit: Callable[..., Any] = virustotal_client.submit,
-    follow: Callable[..., Any] = virustotal_client.follow,
+    submit: Callable[..., Any] | None = None,
+    follow: Callable[..., Any] | None = None,
 ) -> Starlette:
     settings = settings or Settings.from_env()
+    # one budget of VirusTotal requests for every visitor (design of the web, section 5)
+    quota = Quota(settings.vt_per_minute, settings.vt_per_day)
+    budgeted = quota.transport(virustotal_client.urllib_transport)
+    if submit is None:
+        submit = functools.partial(virustotal_client.submit, transport=budgeted)
+    if follow is None:
+        follow = functools.partial(virustotal_client.follow, transport=budgeted)
     limits = Limits()
     glossary = load_glossary()
     rate = RateLimit(settings.rate, settings.window)
