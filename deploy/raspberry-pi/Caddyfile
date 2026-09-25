@@ -1,0 +1,23 @@
+# Dissect detrás de Caddy.
+#
+# En la red local, Caddy sirve la web por HTTP en el puerto 80.
+# Cuando tengas un dominio que apunte a tu IP pública, y los puertos 80 y 443 del router
+# redirigidos a la Raspberry Pi, cambia ":80" por el dominio, por ejemplo:
+#
+#     dissect.tudominio.es {
+#
+# y ejecuta "sudo systemctl reload caddy". Caddy obtendrá y renovará solo el
+# certificado HTTPS (Let's Encrypt) y redirigirá HTTP a HTTPS.
+:80 {
+	# el máximo de Dissect es 20 MiB; un poco de margen para las cabeceras
+	request_body {
+		max_size 21MB
+	}
+	# Caddy añade la IP del visitante al final de X-Forwarded-For; el servicio usa esa
+	# (DISSECT_WEB_TRUST_PROXY=1) para los límites por IP.
+	reverse_proxy 127.0.0.1:8080
+	encode gzip
+	log {
+		output discard
+	}
+}
