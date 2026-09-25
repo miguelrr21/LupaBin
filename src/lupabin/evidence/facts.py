@@ -377,7 +377,7 @@ class CallArgumentEvidence(Model):
 
 class CodeFunctionData(Model):
     """An x64 `.pdata` RUNTIME_FUNCTION entry: one contiguous range of one function,
-    as the file declares it (Phase 5, design section 11)."""
+    as the file declares it."""
 
     begin: UInt
     end: UInt

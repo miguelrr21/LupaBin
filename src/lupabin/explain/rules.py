@@ -52,7 +52,7 @@ RUNTIME_LINKING = frozenset(
 )
 PERMISSIONS = {"read": "lectura", "write": "escritura", "execute": "ejecución"}
 EXPORT_NAMES_SHOWN = 50
-# Didactic context, not a detector (design section 6.2): on 2026-09-23, 475 of 139,057
+# Didactic context, not a detector: on 2026-09-23, 475 of 139,057
 # sections of at least 4 KiB (0.34 %) in 55,313 benign binaries from System32 and
 # Program Files reached 7.2 bits per byte. Smaller sections are not compared: with few
 # bytes the estimate approaches 8 merely because few values repeat.
@@ -529,7 +529,7 @@ RANGES_SHOWN = 20
 
 
 def _functions(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
-    """Every x64 .pdata range the report publishes, in report order (Phase 5.4)."""
+    """Every x64 .pdata range the report publishes, in report order."""
     group = tuple(fact for fact in report.evidence if isinstance(fact, CodeFunctionEvidence))
     if not group or tuple(fact.id for fact in cited) != tuple(fact.id for fact in group):
         return None
@@ -547,7 +547,7 @@ def _functions(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("code.function_range", "code.import_call")
 
 
-# Didactic context, not a detector (design section 12): on 2026-09-24, among 1,053
+# Didactic context, not a detector: on 2026-09-24, among 1,053
 # native benign binaries (System32 --stride 3, SysWOW64 --stride 5) with a complete
 # walk and at least 64 KiB of executable sections, 3 (0.28 %) had fewer than 20 walked
 # instructions per KiB: a resource DLL and two COM proxy stubs. Managed assemblies,
@@ -841,7 +841,7 @@ RULES: dict[str, Rule] = {
         ),
     )
 }
-# Phase 5: one rule per capability of the catalog (explain/capabilities.py).
+# One rule per capability of the catalog (explain/capabilities.py).
 RULES.update(
     {
         capability.rule_id: Rule(

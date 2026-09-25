@@ -14,7 +14,7 @@ The didactic report, the glossary and the web interface are in Spanish (the stru
 - **Explanations you can verify.** Every sentence is regenerated from the evidence it cites before it is shown; an altered sentence is dropped and counted.
 - **VirusTotal, kept apart.** Optional lookup by SHA-256, and upload if VirusTotal does not know the file, shown as an external source and never mixed with LupaBin's facts.
 
-LupaBin favours **the lowest error rate over coverage**. Every threshold and catalogue entry was measured on benign binaries before being adopted, including the variants that were rejected, and those measurements are written up in `docs/superpowers/specs/`.
+LupaBin favours **the lowest error rate over coverage**. Every threshold and catalogue entry was measured on benign binaries before being adopted, including the variants that were rejected, and those measurements are written up in [docs/metodo.md](docs/metodo.md) (in Spanish).
 
 ## Quick start
 

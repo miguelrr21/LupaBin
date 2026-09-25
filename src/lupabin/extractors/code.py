@@ -27,7 +27,7 @@ _ARCHITECTURES = {(32, 0x14C), (64, 0x8664)}
 
 class CodeExtractor:
     """Which imported functions the code calls, from where, and with which constant
-    arguments for the functions of the catalog (design sections 3.1-3.4)."""
+    arguments for the functions of the catalog."""
 
     source: Source = "code"
     version = "lupabin-code-v1"
@@ -136,7 +136,7 @@ def _functions(
     progress: Progress,
 ) -> bool:
     """Publish the x64 `.pdata` entry that holds each published call to a catalog
-    function, once (design section 11 of Phase 5). False if the collector refused one."""
+    function, once. False if the collector refused one."""
     ranges = FunctionRanges(layout, max_functions)
     for call in calls:
         if call.slot not in catalog or f"code:call:{call.rva}" not in collector.ids:

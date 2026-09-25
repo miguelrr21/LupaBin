@@ -8,7 +8,7 @@ from lupabin.evidence.primitives import Provenance, Transform, TransformName
 
 # Method parameters of base64-strict-v1 / hex-strict-v1. Changing them changes the
 # algorithm, not a tunable limit: every value below was set from measurements on
-# benign binaries (design section 8). Identifiers (fileType, SystemEventW) are valid
+# benign binaries (docs/metodo.md, «Decodificación»). Identifiers (fileType, SystemEventW) are valid
 # unpadded Base64 and never carry "=", so unpadded text needs more length; decimal
 # numbers (2147483647) are valid hex, so digit-only text is not treated as hex.
 BASE64_MIN_CHARS = 12

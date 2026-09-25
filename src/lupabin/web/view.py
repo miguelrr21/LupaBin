@@ -4,7 +4,7 @@ Only items that regenerate exactly from their citations are sent (engine.validat
 the same order and with the same wording as the terminal and Markdown views. Every
 string, including the text of the sample and what VirusTotal returns, is neutralised
 with render.safe.visible before it leaves the server; the page inserts text only as
-text (design of the web, section 6).
+text.
 """
 
 from typing import Any
