@@ -2,8 +2,8 @@ import struct
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence.models import Limits
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence.models import Limits
 from tests.fixtures.pe_builder import build_pe
 
 

@@ -1,0 +1,11 @@
+id = "pe.imports.ordinal"
+title = "Import por ordinal"
+revision = "1.0.0"
+lang = "es"
+summary = "Una función puede importarse por su número de orden (ordinal) dentro de la DLL en lugar de por su nombre. Entonces el PE no contiene el nombre de la función."
+body = "En la tabla de búsqueda de imports, un bit indica si la entrada es un ordinal o una referencia a un nombre. Con un ordinal, el cargador busca la función por ese número en la tabla de exports de la DLL.\n\nLupaBin publica el ordinal tal cual. No traduce ordinales a nombres, porque la correspondencia depende de la versión concreta de la DLL y sería una suposición."
+not_proven = "Importar por ordinal no demuestra un intento de ocultación: algunas bibliotecas del sistema se importan así de forma habitual."
+related = ["pe.imports", "pe.exports"]
+sources = [
+  { title = "PE Format: Import Lookup Table", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-lookup-table", verified_on = 2026-09-23 },
+]

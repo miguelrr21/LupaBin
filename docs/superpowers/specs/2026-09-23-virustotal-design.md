@@ -4,14 +4,14 @@ Estado: revisión 1 (2026-09-23). Petición del usuario: "mandar a VirusTotal el
 
 ## 1. Qué aporta y qué no
 
-VirusTotal añade dos cosas que Dissect no puede obtener por sí mismo sin ejecutar la muestra:
+VirusTotal añade dos cosas que LupaBin no puede obtener por sí mismo sin ejecutar la muestra:
 - **Veredictos de motores antivirus**: cuántos marcan el archivo y con qué etiqueta.
 - **Comportamiento observado en sus sandboxes**: procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK.
 
-Nada de eso es un hecho verificado por Dissect. Una etiqueta es la opinión de un motor. El comportamiento se observó al ejecutar el archivo en máquinas de VirusTotal, en un entorno concreto y en un momento concreto. Por eso los resultados:
+Nada de eso es un hecho verificado por LupaBin. Una etiqueta es la opinión de un motor. El comportamiento se observó al ejecutar el archivo en máquinas de VirusTotal, en un entorno concreto y en un momento concreto. Por eso los resultados:
 - van en un documento aparte (`VirusTotalReport`), nunca dentro del informe de hechos;
-- se muestran en una sección propia, "Fuente externa: VirusTotal (no verificada por Dissect)";
-- se presentan atribuidos ("N motores lo etiquetan…", "en los sandboxes de VirusTotal se observó…"), nunca como conclusiones de Dissect.
+- se muestran en una sección propia, "Fuente externa: VirusTotal (no verificada por LupaBin)";
+- se presentan atribuidos ("N motores lo etiquetan…", "en los sandboxes de VirusTotal se observó…"), nunca como conclusiones de LupaBin.
 
 "VirusTotal no conoce este archivo" no significa nada sobre su peligrosidad.
 
@@ -51,26 +51,26 @@ Nada de eso es un hecho verificado por Dissect. Una etiqueta es la opinión de u
 
 **Revisión 2 (2026-09-24), a petición del usuario: la consulta por hash es la opción por defecto.**
 - `analyze` y `explain` consultan VirusTotal sin opciones.
-- `--no-virustotal` lo desactiva para un análisis, y `DISSECT_VIRUSTOTAL=off` (también `0`, `no` o `false`) lo desactiva siempre.
+- `--no-virustotal` lo desactiva para un análisis, y `LUPABIN_VIRUSTOTAL=off` (también `0`, `no` o `false`) lo desactiva siempre.
 - Con `--json` no se consulta: ese JSON es el informe de hechos.
 - Sin clave no hay ninguna conexión: la sección explica cómo definirla o desactivar la consulta.
 - La subida sigue exigiendo `--upload-to-virustotal` (cambiado en la revisión 3).
 - Consecuencia para la privacidad: con una clave configurada, el SHA-256 de cada archivo analizado se envía a VirusTotal (el archivo no).
-- Las pruebas fijan `DISSECT_VIRUSTOTAL=off` en `tests/conftest.py`, así que nunca llegan a la red aunque haya una clave en el equipo.
+- Las pruebas fijan `LUPABIN_VIRUSTOTAL=off` en `tests/conftest.py`, así que nunca llegan a la red aunque haya una clave en el equipo.
 
 **Revisión 3 (2026-09-24), a petición del usuario: la subida también es automática.**
-- Si VirusTotal no conoce el archivo, `analyze` y `dissect virustotal ARCHIVO` lo suben y esperan su análisis hasta 3 minutos.
+- Si VirusTotal no conoce el archivo, `analyze` y `lupabin virustotal ARCHIVO` lo suben y esperan su análisis hasta 3 minutos.
 - Antes se muestra un aviso en la salida de errores: lo subido puede compartirse con los clientes de pago de VirusTotal, y la subida se evita con `--no-upload-to-virustotal`.
-- `DISSECT_VIRUSTOTAL_UPLOAD=off` la desactiva siempre, y `--no-virustotal` no consulta ni sube nada.
-- La sección externa dice que Dissect subió el archivo y por qué.
+- `LUPABIN_VIRUSTOTAL_UPLOAD=off` la desactiva siempre, y `--no-virustotal` no consulta ni sube nada.
+- La sección externa dice que LupaBin subió el archivo y por qué.
 - La subida sigue enviando el archivo con el nombre genérico `sample`, sin la ruta ni el nombre local.
 - `tests/conftest.py` desactiva también la subida.
 
-- `dissect analyze ARCHIVO`: el informe didáctico con una sección 5 de fuente externa (con `--virustotal` explícito si el valor por defecto está desactivado).
-- `dissect analyze ARCHIVO --virustotal --upload-to-virustotal`: lo mismo, subiendo el archivo si VirusTotal no lo conoce.
-- `dissect explain INFORME.json --virustotal`: consulta por el hash del informe, sin necesitar la muestra.
-- `dissect virustotal ARCHIVO` o `dissect virustotal --sha256 HASH`: solo la consulta. `--format json` emite el documento.
-- Un fallo de VirusTotal no invalida el análisis local: la sección externa dice por qué no hay datos, y el código de salida sigue siendo el del análisis. En `dissect virustotal`, un fallo sí termina con el código 1 y un error JSON.
+- `lupabin analyze ARCHIVO`: el informe didáctico con una sección 5 de fuente externa (con `--virustotal` explícito si el valor por defecto está desactivado).
+- `lupabin analyze ARCHIVO --virustotal --upload-to-virustotal`: lo mismo, subiendo el archivo si VirusTotal no lo conoce.
+- `lupabin explain INFORME.json --virustotal`: consulta por el hash del informe, sin necesitar la muestra.
+- `lupabin virustotal ARCHIVO` o `lupabin virustotal --sha256 HASH`: solo la consulta. `--format json` emite el documento.
+- Un fallo de VirusTotal no invalida el análisis local: la sección externa dice por qué no hay datos, y el código de salida sigue siendo el del análisis. En `lupabin virustotal`, un fallo sí termina con el código 1 y un error JSON.
 
 ## 6. Pruebas
 

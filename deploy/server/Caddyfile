@@ -1,20 +1,20 @@
-# Dissect detrás de Caddy.
+# LupaBin detrás de Caddy.
 #
 # Sin dominio, Caddy sirve la web por HTTP en el puerto 80 de la IP pública.
 # Cuando tengas un dominio (sirve uno gratuito de DuckDNS) que apunte a la IP del servidor, y 80 y 443
 # abiertos en el cortafuegos del proveedor, cambia ":80" por el dominio, por ejemplo:
 #
-#     dissect.tudominio.es {
+#     lupabin.tudominio.es {
 #
 # y ejecuta "sudo systemctl reload caddy". Caddy obtendrá y renovará solo el
 # certificado HTTPS (Let's Encrypt) y redirigirá HTTP a HTTPS.
 :80 {
-	# el máximo de Dissect es 20 MiB; un poco de margen para las cabeceras
+	# el máximo de LupaBin es 20 MiB; un poco de margen para las cabeceras
 	request_body {
 		max_size 21MB
 	}
 	# Caddy añade la IP del visitante al final de X-Forwarded-For; el servicio usa esa
-	# (DISSECT_WEB_TRUST_PROXY=1) para los límites por IP.
+	# (LUPABIN_WEB_TRUST_PROXY=1) para los límites por IP.
 	reverse_proxy 127.0.0.1:8080
 	encode gzip
 	log {

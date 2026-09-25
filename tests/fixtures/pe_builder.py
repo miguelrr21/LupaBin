@@ -92,7 +92,7 @@ def build_demo(*, bits=32, corrupt=False):
     data[0x670:0x677] = b"Symbol\0"
     message = b"https://training.invalid/sample\0"
     data[0x800 : 0x800 + len(message)] = message
-    wide = "DISSECT PRACTICE".encode("utf-16-le") + b"\0\0"
+    wide = "LUPABIN PRACTICE".encode("utf-16-le") + b"\0\0"
     data[0x900 : 0x900 + len(wide)] = wide
     return bytes(data[:-64] if corrupt else data)
 
@@ -105,14 +105,14 @@ def xor_stream(text, key, encoding="ascii"):
 
 
 # Training texts on the reserved .invalid domain; each XOR'd one contains a crib from
-# dissect-xor-cribs-v1 that can verify its key length. Keys use bytes >= 0x80 so the
+# lupabin-xor-cribs-v1 that can verify its key length. Keys use bytes >= 0x80 so the
 # ciphertext is never text. None of this comes from, or behaves like, malware.
 DECODE_DEMO = (
     ("base64", "https://training.invalid/decode/base64"),
-    ("hex", "cmd.exe /c echo dissect-hex"),
+    ("hex", "cmd.exe /c echo lupabin-hex"),
     ("xor", "https://training.invalid/decode/xor-1", b"\xa5", "ascii"),
-    ("xor", "User-Agent: DissectTraining/1.0", b"\x9e\xc3\x81\xf7", "ascii"),
-    ("xor", "kernel32.dll!DissectTraining", b"\xb7\xd2", "utf-16-le"),
+    ("xor", "User-Agent: LupaBinTraining/1.0", b"\x9e\xc3\x81\xf7", "ascii"),
+    ("xor", "kernel32.dll!LupaBinTraining", b"\xb7\xd2", "utf-16-le"),
     # "http://" is too short to verify a 4-byte key by itself: this one is only
     # recoverable because the User-Agent above established the same key
     ("xor", "http://training.invalid/decode/reuse", b"\x9e\xc3\x81\xf7", "ascii"),
@@ -206,11 +206,11 @@ def with_load_config(data, *, bits=32, guard=(), seh=(), flags=0x400, size=None,
 
 
 # Inert training call with constant arguments: RegOpenKeyExW(HKEY_CURRENT_USER,
-# L"Software\\Dissect\\Training", 0, KEY_READ, &key), set with the canonical forms of
+# L"Software\\LupaBin\\Training", 0, KEY_READ, &key), set with the canonical forms of
 # argument_forms.py. The subkey is a made-up training name; the string lies in the
 # read-only .idata section at ARGS_STRING_RVA. Never executed.
 ARGS_STRING_RVA = 0x1A00
-ARGS_SUBKEY = "Software\\Dissect\\Training"
+ARGS_SUBKEY = "Software\\LupaBin\\Training"
 KEY_READ = 0x20019
 HKCU32 = b"\x68\x01\x00\x00\x80"  # push 0x80000001
 HKCU64 = b"\x48\xc7\xc1\x01\x00\x00\x80"  # mov rcx, 0xffffffff80000001
@@ -264,7 +264,7 @@ def build_args_demo(
 
 # Inert training use of GetProcAddress: one call by name (a made-up training export,
 # in the read-only .idata) and one by ordinal 5, which is not a name. Never executed.
-RESOLVE_NAME = "DissectTrainingProc"
+RESOLVE_NAME = "LupaBinTrainingProc"
 
 
 def resolve_demo_bytes(bits=32):
@@ -314,7 +314,7 @@ def build_call_demo(function, *calls, dll=None):
     is written in the function's encoding to the read-only .idata (from ARGS_STRING_RVA)
     and its address is pushed. Other positions push eax, which is not a constant, so
     those arguments stay unknown. Inert training data: never executed."""
-    from dissect.evidence.api_catalog import FUNCTIONS
+    from lupabin.evidence.api_catalog import FUNCTIONS
 
     entry = FUNCTIONS[function]
     if dll is None:
@@ -342,7 +342,7 @@ def build_call_demo(function, *calls, dll=None):
 
 # Inert training call for the capabilities demo: RegSetKeyValueW(HKEY_CURRENT_USER,
 # the Run key, a made-up value name, REG_SZ, ...). Never executed.
-CAPABILITY_VALUE = "DissectTraining"
+CAPABILITY_VALUE = "LupaBinTraining"
 
 
 def build_capability_demo():
@@ -354,7 +354,7 @@ def build_capability_demo():
 # the Run key, 0, KEY_WRITE, &key), then RegSetValueExW(key, a made-up value name, 0,
 # REG_SZ, ...). The .pdata entry that declares the function is at RVA 0x1800, in the
 # read-only .idata. Never executed.
-SAME_FUNCTION_VALUE = "DissectTraining"
+SAME_FUNCTION_VALUE = "LupaBinTraining"
 PDATA_RVA = 0x1800
 
 
@@ -457,7 +457,7 @@ def main():
     else:
         data = build_demo(bits=args.bits, corrupt=args.scenario == "corrupt")
     if args.scenario == "yara-limited":
-        data += b"DISSECT PRACTICE\0" * 20
+        data += b"LUPABIN PRACTICE\0" * 20
     with args.output.open("xb") as stream:
         stream.write(data)
 

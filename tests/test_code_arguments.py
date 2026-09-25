@@ -7,12 +7,12 @@ import struct
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.errors import DissectError
-from dissect.evidence.code import verify_calls
-from dissect.evidence.models import Limits, Report
-from dissect.evidence.primitives import CodeLimits
-from dissect.runner import run_isolated
+from lupabin.analysis import analyze_bytes
+from lupabin.errors import LupaBinError
+from lupabin.evidence.code import verify_calls
+from lupabin.evidence.models import Limits, Report
+from lupabin.evidence.primitives import CodeLimits
+from lupabin.runner import run_isolated
 from tests.fixtures.pe_builder import (
     ARGS_STRING_RVA,
     ARGS_SUBKEY,
@@ -169,14 +169,14 @@ def test_complete_arguments_require_complete_calls():
 def test_host_rejects_argument_bytes_that_are_not_in_the_sample():
     sample = build_args_demo()
     data = payload()
-    forged = "Software\\Dissect\\Trainin!"
+    forged = "Software\\LupaBin\\Trainin!"
     string = argument(data, "lpSubKey")["data"]["string"]
     string.update(text=forged, raw_hex=(forged.encode("utf-16-le") + b"\0\0").hex())
     report = Report.model_validate_json(json.dumps(data))  # coherent by itself...
     with pytest.raises(ValueError, match="code evidence bytes differ from the sample"):
         verify_calls(report.evidence, sample)
     docker = FakeDocker(output=report.model_dump_json().encode())
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         asyncio.run(run_isolated(sample, Limits(), docker))
     assert caught.value.code == "invalid_worker_output"
 
@@ -396,9 +396,9 @@ def test_get_proc_address_names_are_published_and_ordinals_are_not(bits):
 # --- CreateServiceW: strings in registers and on the x64 stack ---------------------
 
 SERVICE_STRINGS = {
-    0x1A00: "DissectTraining",
-    0x1A80: "Dissect Training",
-    0x1B00: r"C:\Dissect\training.exe",
+    0x1A00: "LupaBinTraining",
+    0x1A80: "LupaBin Training",
+    0x1B00: r"C:\LupaBin\training.exe",
 }
 
 
@@ -452,8 +452,8 @@ def test_create_service_arguments_include_the_binary_path(bits):
         for name, fact in found.items()
     }
     assert shown == {
-        "lpServiceName": "DissectTraining",
-        "lpDisplayName": "Dissect Training",
+        "lpServiceName": "LupaBinTraining",
+        "lpDisplayName": "LupaBin Training",
         "dwDesiredAccess": 0xF01FF,
         "dwServiceType": 0x10,
         "dwStartType": 2,

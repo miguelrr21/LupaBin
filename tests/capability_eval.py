@@ -25,15 +25,15 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence.code import verify_calls
-from dissect.evidence.facts import ApiCallEvidence, CallArgumentEvidence, ImportEvidence
-from dissect.explain.capabilities import CAPABILITIES, RUN_KEYS, cases
-from dissect.explain.engine import explain
-from dissect.explain.text import name, number
-from dissect.extractors.code import CodeExtractor
-from dissect.extractors.pe import PEExtractor
-from dissect.glossary.catalog import load_glossary
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence.code import verify_calls
+from lupabin.evidence.facts import ApiCallEvidence, CallArgumentEvidence, ImportEvidence
+from lupabin.explain.capabilities import CAPABILITIES, RUN_KEYS, cases
+from lupabin.explain.engine import explain
+from lupabin.explain.text import name, number
+from lupabin.extractors.code import CodeExtractor
+from lupabin.extractors.pe import PEExtractor
+from lupabin.glossary.catalog import load_glossary
 
 MAX_INPUT = 20 * 1024 * 1024
 GLOSSARY = load_glossary()
@@ -48,7 +48,7 @@ def files(roots: list[Path], recursive: bool, ext: tuple[str, ...], stride: int)
 
 
 def _abstentions(report: Any) -> Counter[str]:
-    """Calls the design says Dissect abstains on, counted to measure the coverage cost."""
+    """Calls the design says LupaBin abstains on, counted to measure the coverage cost."""
     facts = {fact.id: fact for fact in report.evidence}
     arguments: dict[str, dict[str, CallArgumentEvidence]] = {}
     for fact in report.evidence:

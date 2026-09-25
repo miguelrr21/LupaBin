@@ -1,19 +1,19 @@
 [Unit]
-Description=Dissect web: static analysis of Windows executables (the sample is never run)
-Documentation=file:///opt/dissect/docs/deploy.md
+Description=LupaBin web: static analysis of Windows executables (the sample is never run)
+Documentation=file:///opt/lupabin/docs/deploy.md
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
 
 [Service]
 Type=simple
-User=dissect
-Group=dissect
+User=lupabin
+Group=lupabin
 SupplementaryGroups=docker
-EnvironmentFile=/etc/dissect/web.env
-Environment=HOME=/var/lib/dissect
-WorkingDirectory=/var/lib/dissect
-ExecStart=/opt/dissect/.venv/bin/dissect-web
+EnvironmentFile=/etc/lupabin/web.env
+Environment=HOME=/var/lib/lupabin
+WorkingDirectory=/var/lib/lupabin
+ExecStart=/opt/lupabin/.venv/bin/lupabin-web
 Restart=on-failure
 RestartSec=5
 
@@ -22,7 +22,7 @@ RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/dissect
+ReadWritePaths=/var/lib/lupabin
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectKernelTunables=yes

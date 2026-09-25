@@ -1,6 +1,6 @@
 # Fase 5: capacidades a partir de llamadas y argumentos
 
-Estado: revisión 2 (2026-09-24), implementada en las entregas 5.1, 5.2, 5.3 y 5.5 (sección 9). Petición del usuario: que Dissect diga "exactamente lo que hace" el programa. Con permiso para avanzar por secciones (5.0 a 5.7), confirmado por el usuario el 2026-09-24.
+Estado: revisión 2 (2026-09-24), implementada en las entregas 5.1, 5.2, 5.3 y 5.5 (sección 9). Petición del usuario: que LupaBin diga "exactamente lo que hace" el programa. Con permiso para avanzar por secciones (5.0 a 5.7), confirmado por el usuario el 2026-09-24.
 
 Revisión 2, aprobada por el usuario el 2026-09-24 tras revisar la revisión 1:
 - T1547.001 solo se asocia a una escritura real en la clave `Run` hecha con una sola llamada (`RegSetKeyValue`). Abrir la clave para escribir se describe sin técnica hasta la entrega 5.4.
@@ -24,9 +24,9 @@ Las capacidades son **reglas de explicación** del host, como las de la Fase 3. 
 
 Alternativa descartada: un tipo de hecho `capability` producido en el worker. Duplicaría en el contrato lo que ya se deriva de él, y obligaría a validar dos veces lo mismo.
 
-## 3. Catálogo `dissect-capabilities-v1`
+## 3. Catálogo `lupabin-capabilities-v1`
 
-Un módulo propio (`src/dissect/explain/capabilities.py`) define cada capacidad como datos:
+Un módulo propio (`src/lupabin/explain/capabilities.py`) define cada capacidad como datos:
 - identificador;
 - táctica, para agrupar en el resumen;
 - funciones y condición sobre los argumentos;
@@ -35,7 +35,7 @@ Un módulo propio (`src/dissect/explain/capabilities.py`) define cada capacidad 
 - cifra de prevalencia benigna medida;
 - límite.
 
-El catálogo lleva digest, fijado por un test. Además, declara la versión del catálogo de APIs de la que depende (`dissect-api-semantics-v4`). Un test falla si esa versión cambia sin revisar el catálogo de capacidades, porque una condición sobre un parámetro puede dejar de tener sentido.
+El catálogo lleva digest, fijado por un test. Además, declara la versión del catálogo de APIs de la que depende (`lupabin-api-semantics-v4`). Un test falla si esa versión cambia sin revisar el catálogo de capacidades, porque una condición sobre un parámetro puede dejar de tener sentido.
 
 Los nombres de las constantes (tipos de inicio de servicio, protecciones `PAGE_*`, derechos de acceso) salen de las cabeceras del Windows SDK 10.0.26100.0, como en la Fase 4. Las tablas de valores documentados que usó la medición del catálogo v4 (`coherence.py`) no están en el repositorio. La entrega 5.1 las añade como módulo propio, con pruebas, en lugar de copiarlas de la medición.
 
@@ -128,9 +128,9 @@ Solo esta entrega podrá asociar T1547.001 a abrir una clave `Run` y escribir en
 
 ### 9.1 Qué se implementó y qué cambió respecto a las secciones anteriores
 
-- **5.1.** `src/dissect/explain/capabilities.py` (catálogo `dissect-capabilities-v1`, fijado por digest) y `src/dissect/explain/winapi.py` (constantes copiadas de `winnt.h` y `WinBase.h` del SDK 10.0.26100.0; un test comprueba las máscaras compuestas). Cada capacidad declara qué parámetros del catálogo de APIs lee, y un test comprueba que existen en `dissect-api-semantics-v4`. Una capacidad es una regla `capability.<id>@1` que cita todas las llamadas del informe que cumplen su condición, cada una con todos sus argumentos publicados. El motor la regenera al validar, así que una cita de menos, un caso oculto o una frase alterada no se muestran.
+- **5.1.** `src/lupabin/explain/capabilities.py` (catálogo `lupabin-capabilities-v1`, fijado por digest) y `src/lupabin/explain/winapi.py` (constantes copiadas de `winnt.h` y `WinBase.h` del SDK 10.0.26100.0; un test comprueba las máscaras compuestas). Cada capacidad declara qué parámetros del catálogo de APIs lee, y un test comprueba que existen en `lupabin-api-semantics-v4`. Una capacidad es una regla `capability.<id>@1` que cita todas las llamadas del informe que cumplen su condición, cada una con todos sus argumentos publicados. El motor la regenera al validar, así que una cita de menos, un caso oculto o una frase alterada no se muestran.
 - **5.2.** Siete entradas de glosario (revisión 1.3.0): `capability.static`, `attack.technique` y una por técnica, con sus páginas de attack.mitre.org y de Microsoft Learn comprobadas el 2026-09-24. El caso con técnica la muestra entre paréntesis y el ítem enumera las técnicas. Diferencia con la sección 3: **`wscript` y `cscript` quedan sin técnica**, porque ejecutan VBScript (T1059.005) o JScript (T1059.007) y la llamada no dice cuál. El programa se identifica por el nombre de archivo, sin ruta ni `.exe`: el de `lpApplicationName`, el primer elemento de la línea de órdenes (entre comillas si las hay) o `lpFile` de `ShellExecute`. Una ruta con espacios sin comillas (`C:\Program Files\cmd.exe`) se parte donde la parte Windows y no da técnica.
-- **Protección con bits que Dissect no nombra.** Learn permite combinar `PAGE_TARGETS_INVALID`/`PAGE_TARGETS_NO_UPDATE` (0x40000000) con una protección ejecutable. Dissect solo acepta los modificadores `PAGE_GUARD`, `PAGE_NOCACHE` y `PAGE_WRITECOMBINE` y se abstiene con cualquier otro bit. Coste medido (sección 9.2): 13 llamadas en todo el corpus.
+- **Protección con bits que LupaBin no nombra.** Learn permite combinar `PAGE_TARGETS_INVALID`/`PAGE_TARGETS_NO_UPDATE` (0x40000000) con una protección ejecutable. LupaBin solo acepta los modificadores `PAGE_GUARD`, `PAGE_NOCACHE` y `PAGE_WRITECOMBINE` y se abstiene con cualquier otro bit. Coste medido (sección 9.2): 13 llamadas en todo el corpus.
 - **Redacción corregida al revisar los casos.** El destino de `ShellExecute` no siempre es un archivo o un programa: puede ser una URL (`https://aka.ms/msdtretire` en msdt.exe), un esquema (`ms-settings:fonts`) o un elemento del shell (`::{26EE0668-…}` en devmgr.dll). Ahora el caso dice «destino» y la capacidad, "pedir al shell de Windows que abra algo".
 - **5.5.** El informe abre con "Resumen: qué contiene el código", sin número para no renumerar las secciones 1 a 5. Agrupa las capacidades por táctica, con sus técnicas, y termina con los avisos: no se reconoció ninguna (y eso no demuestra nada), el código no se pudo recorrer, la densidad del recorrido es baja, las llamadas o los argumentos están incompletos, hay llamadas a `CreateProcessW` cuya línea de órdenes no se lee, y aún no se reconocen capacidades de varias llamadas.
 
@@ -158,22 +158,22 @@ Corpus: System32 (`--stride 3`, 1.363 PE), SysWOW64 (`--stride 5`, 521) y Progra
 
 **Abstenciones contadas** (coste en cobertura, no en error):
 - 190 llamadas a `CreateProcessW` sin nombre de aplicación: su línea de órdenes nunca se lee (sección 3), y el resumen lo avisa.
-- 13 protecciones ejecutables y escribibles con bits que Dissect no nombra (sección 9.1).
+- 13 protecciones ejecutables y escribibles con bits que LupaBin no nombra (sección 9.1).
 - 1 clave `Run` cuyo permiso no se recuperó.
 
 **Coste.** Calcular las 13 capacidades en shell32.dll (7.936 hechos) tarda 0,10 s. Generar y validar todas sus explicaciones tarda 14,41 s con capacidades y 14,46 s sin ellas, así que las capacidades no añaden coste medible. Los 14 s ya existían, y parecen deberse a reglas que recorren el informe entero por cada uno de sus ~2.860 ítems (sin comprobar); queda como mejora pendiente en la hoja de ruta.
 
 Cambiar una condición, una redacción o una cifra exige una nueva versión del catálogo y repetir esta medición.
 
-## 10. Entrega 5.6: más cobertura, catálogo `dissect-capabilities-v2` (2026-09-24)
+## 10. Entrega 5.6: más cobertura, catálogo `lupabin-capabilities-v2` (2026-09-24)
 
 Petición del usuario tras el merge del PR #8: seguir con la 5.4 (camino a) y la 5.6. Tres ampliaciones, cada una comprobada contra su fuente y medida antes de adoptarla con el mismo corpus y la misma revisión manual de la sección 9:
 
-1. **Modificador de Control Flow Guard.** Learn permite `PAGE_TARGETS_INVALID` (0x40000000) con `VirtualAlloc(Ex)` y `PAGE_TARGETS_NO_UPDATE` (el mismo valor) con `VirtualProtect(Ex)`, "only valid when the protection changes to an executable type". No cambian si la memoria es escribible, así que pasan a ser modificadores aceptados, con el nombre que corresponde a cada función. Hasta ahora Dissect se abstenía en 13 llamadas del corpus.
+1. **Modificador de Control Flow Guard.** Learn permite `PAGE_TARGETS_INVALID` (0x40000000) con `VirtualAlloc(Ex)` y `PAGE_TARGETS_NO_UPDATE` (el mismo valor) con `VirtualProtect(Ex)`, "only valid when the protection changes to an executable type". No cambian si la memoria es escribible, así que pasan a ser modificadores aceptados, con el nombre que corresponde a cada función. Hasta ahora LupaBin se abstenía en 13 llamadas del corpus.
 2. **`RunOnceEx`.** ATT&CK (T1547.001) cita `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunOnceEx`, con su ejemplo de una subclave `0001\Depend` que carga una DLL. Se acepta esa clave y cualquier subclave suya, solo bajo `HKEY_LOCAL_MACHINE` (también a través de `Wow6432Node`), que es donde la sitúa la fuente. Bajo una clave que no se pudo determinar no se acepta: no se sabría si es la de la máquina.
 3. **Escribir un valor en `Winlogon`** (`RegSetKeyValue`, capacidad nueva). T1547.004 (Winlogon Helper DLL) nombra los valores `Shell` y `Userinit` y la subclave `Notify`, en `HKLM\Software[\Wow6432Node\]\Microsoft\Windows NT\CurrentVersion\Winlogon` y en la de HKCU. La técnica solo se asocia si el nombre del valor es `Shell` o `Userinit` o la subclave es `Notify` o una suya; otros valores de `Winlogon` se describen sin técnica.
 
-Abrir `Winlogon` para escribir sigue sin técnica, por la misma razón que la clave `Run` (sección 4). Un cambio de condición exige una nueva versión del catálogo: `dissect-capabilities-v2`.
+Abrir `Winlogon` para escribir sigue sin técnica, por la misma razón que la clave `Run` (sección 4). Un cambio de condición exige una nueva versión del catálogo: `lupabin-capabilities-v2`.
 
 ### 10.1 Medición y adopción
 
@@ -182,7 +182,7 @@ Mismo corpus y herramienta que la sección 9.2 (3.087 PE). Resultado: 0 informes
 - **Ningún caso de v1 desaparece ni cambia**, salvo por la redacción.
 - `RunOnceEx` y la escritura de valores en `Winlogon` no aparecen en el corpus benigno: 0 binarios. Solo las ejercitan los fixtures sintéticos, con sus pruebas positivas y negativas.
 
-**Adoptado** como `dissect-capabilities-v2`. Glosario 1.4.0 con la entrada `attack.t1547_004`.
+**Adoptado** como `lupabin-capabilities-v2`. Glosario 1.4.0 con la entrada `attack.t1547_004`.
 
 ## 11. Entrega 5.4, camino a): abrir y escribir en la misma función (2026-09-24, implementada)
 
@@ -202,7 +202,7 @@ Las capacidades se derivan solo del informe, para que `validate` pueda regenerar
 
 - Hecho nuevo `code_function` (`observed`, fuente `code`, componente `api_calls`). Datos: `begin`, `end` y `unwind` (RVA), y los 12 bytes de la entrada; `location` es su desplazamiento en el archivo. El modelo comprueba que los bytes codifican esos tres valores y que `begin < end`. El host compara los bytes con la muestra, igual que con las llamadas.
 - Publicación: la entrada de `.pdata` que contiene cada llamada publicada a una función del catálogo de argumentos, sin repetir. Su número está acotado por el de esas llamadas.
-- El 0.5.0 se conserva en `docs/schemas/`, y la imagen pasa a `dissect-worker:0.6.0`.
+- El 0.5.0 se conserva en `docs/schemas/`, y la imagen pasa a `lupabin-worker:0.6.0`.
 - Una regla nueva, `code.functions@1`, explica todas las funciones publicadas en un solo ítem, porque todo hecho tiene que estar explicado.
 
 ### 11.3 Capacidades nuevas
@@ -218,11 +218,11 @@ Mismo corpus que la sección 9, más una **revisión por desensamblado de cada c
 ### 11.5 Implementación, medición y adopción (2026-09-25)
 
 - **Contrato 0.6.0.** `code_function` como en la sección 11.2. Si dos entradas de la tabla se solapan, el worker no publica ninguna: Learn documenta la tabla ordenada, y así cada búsqueda es una bisección y no una exploración de toda la tabla. Peor caso medido: 262.144 entradas (el límite de puntos de partida) se ordenan y comprueban en 0,45 s, y 4.096 búsquedas tardan 6,7 ms.
-- **Catálogo `dissect-capabilities-v3`**, con `run_key_open_and_set` y `winlogon_open_and_set`. Un caso es un rango: cita la entrada de `.pdata`, cada llamada que abre la clave para escribir y cada `RegSetValueEx` sin clave predefinida publicada, todas con sus argumentos. La regla `code.functions@1` explica todos los rangos publicados, y la entrada de glosario `code.function_range` cita las dos secciones de Learn. Glosario 1.5.0.
+- **Catálogo `lupabin-capabilities-v3`**, con `run_key_open_and_set` y `winlogon_open_and_set`. Un caso es un rango: cita la entrada de `.pdata`, cada llamada que abre la clave para escribir y cada `RegSetValueEx` sin clave predefinida publicada, todas con sus argumentos. La regla `code.functions@1` explica todos los rangos publicados, y la entrada de glosario `code.function_range` cita las dos secciones de Learn. Glosario 1.5.0.
 - **Medición.** Mismo corpus y herramienta que las secciones 9 y 10, con 4 procesos después de que el sistema detuviera una ejecución por falta de memoria.
   - System32 y SysWOW64: resultados idénticos, archivo por archivo, a los de la v2, más los rangos (23.210 publicados en System32 y 25 en los tres x64 de SysWOW64). 0 informes inválidos y 0 fallos de verificación.
   - Program Files había cambiado desde la medición anterior (1.207 PE en vez de 1.203), y `--stride 40` eligió otras muestras; las diferencias del resto de capacidades se deben solo a eso. En el corpus de referencia la pareja solo puede darse donde también se da "abrir `Run`/`Winlogon` para escribir", que en Program Files tenía 0 binarios, así que su cifra es exacta: **5 de 3.087 (0,16 %) para `Run` y 0 para `Winlogon`**.
 - **Revisión por desensamblado de los 5 casos** (inseng, ndfapi, netid, nettrace y setupapi, con 6 `RegSetValueEx` en total): en los 6, el `hKey` de la escritura es el identificador que la llamada que abre la clave guardó en su `phkResult` (por ejemplo, `lea rax, [rsp+0x30]` … `mov rcx, [rsp+0x30]`). **Ninguna frase es falsa y todas las escrituras usan la clave abierta**, así que se cumplen los dos criterios de la sección 11.4 y la técnica T1547.001 se adopta. La muestra es pequeña (es todo el corpus): la frase sigue diciendo que no se sabe si la escritura usa la clave abierta.
-- **Docker.** Imagen `dissect-worker:0.6.0`; las 11 pruebas `-m docker` pasan.
+- **Docker.** Imagen `lupabin-worker:0.6.0`; las 11 pruebas `-m docker` pasan.
 
 **Límites:** solo x64; un rango lo declara el archivo; la pareja no ordena las llamadas ni sigue el identificador (eso sería el camino b).

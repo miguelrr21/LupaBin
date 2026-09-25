@@ -1,4 +1,4 @@
-# Dissect
+# LupaBin
 
 Tutor de análisis estático de binarios, centrado en evidencias verificables.
 
@@ -24,15 +24,15 @@ Desde la raíz del repositorio, con una entrada local disponible:
 
 ```text
 uv sync --frozen
-docker build --load -f docker/Dockerfile -t dissect-worker:0.6.0 .
-uv run --frozen dissect analyze "ruta/al/archivo.exe"
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.6.0 .
+uv run --frozen lupabin analyze "ruta/al/archivo.exe"
 ```
 
 Por defecto se muestra el informe didáctico. `--json` emite el informe de hechos validado (para guardarlo o procesarlo) y `--markdown` el informe didáctico en Markdown. Un informe guardado se puede explicar sin repetir el análisis:
 
 ```text
-uv run --frozen dissect analyze "ruta/al/archivo.exe" --json > informe.json
-uv run --frozen dissect explain informe.json --sample "ruta/al/archivo.exe"
+uv run --frozen lupabin analyze "ruta/al/archivo.exe" --json > informe.json
+uv run --frozen lupabin explain informe.json --sample "ruta/al/archivo.exe"
 ```
 
 Con `--sample`, el host repite sus comprobaciones contra la muestra (hashes, cada decodificación y cada coincidencia YARA) y rechaza un informe que los bytes contradigan. Sin `--sample`, el informe explicado lleva un aviso visible: su estructura es válida, pero nada garantiza que proceda de la muestra. `--format json` emite el documento de explicaciones (contrato 0.1.0).
@@ -45,9 +45,9 @@ Para generar una entrada sintética en lugar de aportar un binario:
 
 ```text
 uv run python -m tests.fixtures.pe_builder --scenario demo --output samples/phase1a-complete.bin
-uv run --frozen dissect analyze samples/phase1a-complete.bin --json
+uv run --frozen lupabin analyze samples/phase1a-complete.bin --json
 uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/phase1a-partial.bin
-uv run --frozen dissect analyze samples/phase1a-partial.bin --json
+uv run --frozen lupabin analyze samples/phase1a-partial.bin --json
 ```
 
 El generador no sobrescribe archivos existentes. Consulta [la procedencia de los fixtures](samples/README.md). No ejecutes los archivos generados.
@@ -67,30 +67,30 @@ Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossa
 
 ## La web
 
-`dissect-web` sirve el mismo análisis aislado y el mismo informe didáctico en el navegador: se sube un archivo y la página muestra el resumen de capacidades, los hechos, las inferencias, la cobertura, VirusTotal y el glosario, con la descarga del informe en JSON y en Markdown. No guarda ni la muestra ni el informe, y aplica límites de tamaño y de análisis por IP. Todo texto de la muestra se neutraliza en el servidor y la página lo inserta solo como texto.
+`lupabin-web` sirve el mismo análisis aislado y el mismo informe didáctico en el navegador: se sube un archivo y la página muestra el resumen de capacidades, los hechos, las inferencias, la cobertura, VirusTotal y el glosario, con la descarga del informe en JSON y en Markdown. No guarda ni la muestra ni el informe, y aplica límites de tamaño y de análisis por IP. Todo texto de la muestra se neutraliza en el servidor y la página lo inserta solo como texto.
 
 Para probarla en tu equipo (con Docker y la imagen construida):
 
 ```text
 uv sync --extra web
-uv run dissect-web
+uv run lupabin-web
 ```
 
 y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker. Diseño: [web](docs/superpowers/specs/2026-09-25-web-design.md).
 
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
-Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), Dissect añade por defecto los resultados de VirusTotal como **fuente externa, no verificada por Dissect**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
+Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), LupaBin añade por defecto los resultados de VirusTotal como **fuente externa, no verificada por LupaBin**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
 
 ```text
-uv run --frozen dissect analyze "ruta/al/archivo.exe"
-uv run --frozen dissect analyze "ruta/al/archivo.exe" --no-virustotal
-uv run --frozen dissect virustotal --sha256 <sha256> --format json
+uv run --frozen lupabin analyze "ruta/al/archivo.exe"
+uv run --frozen lupabin analyze "ruta/al/archivo.exe" --no-virustotal
+uv run --frozen lupabin virustotal --sha256 <sha256> --format json
 ```
 
-- `analyze` y `explain` consultan VirusTotal sin opciones (decisión del usuario del 2026-09-24). No lo hacen con `--no-virustotal`, con la variable `DISSECT_VIRUSTOTAL=off` ni con `--json`, que emite el informe de hechos; el documento de VirusTotal se obtiene con `dissect virustotal --format json`. Sin clave, la sección explica cómo configurarla y no se conecta a nada; sin red, dice por qué no hay datos. En los dos casos el análisis local no cambia.
+- `analyze` y `explain` consultan VirusTotal sin opciones (decisión del usuario del 2026-09-24). No lo hacen con `--no-virustotal`, con la variable `LUPABIN_VIRUSTOTAL=off` ni con `--json`, que emite el informe de hechos; el documento de VirusTotal se obtiene con `lupabin virustotal --format json`. Sin clave, la sección explica cómo configurarla y no se conecta a nada; sin red, dice por qué no hay datos. En los dos casos el análisis local no cambia.
 
-- Primero se consulta solo el SHA-256. Si VirusTotal no conoce el archivo, **Dissect lo sube automáticamente** (revisión 3 del diseño, a petición del usuario), con el nombre genérico `sample`, y espera su análisis hasta 3 minutos. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: para archivos internos o confidenciales usa `--no-upload-to-virustotal`, o `DISSECT_VIRUSTOTAL_UPLOAD=off` para no subir nunca.
+- Primero se consulta solo el SHA-256. Si VirusTotal no conoce el archivo, **LupaBin lo sube automáticamente** (revisión 3 del diseño, a petición del usuario), con el nombre genérico `sample`, y espera su análisis hasta 3 minutos. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: para archivos internos o confidenciales usa `--no-upload-to-virustotal`, o `LUPABIN_VIRUSTOTAL_UPLOAD=off` para no subir nunca.
 - Todo ocurre en el host: el worker sigue sin red. Una etiqueta es la opinión de un motor, y el comportamiento se observó en los sandboxes de VirusTotal, no en tu equipo. "VirusTotal no conoce este archivo" no dice nada sobre su peligrosidad.
 - La API pública admite 500 consultas al día y 4 por minuto, y no puede usarse en productos o servicios comerciales.
 
@@ -118,11 +118,11 @@ Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, s
 
 La CLI 0.6.0 exige el esquema 0.6.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 a 0.5.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
 
-Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' dissect-worker:0.6.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
+Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' lupabin-worker:0.6.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
 
 ## Qué aporta YARA
 
-El catálogo propio incluye cuatro reglas: texto del stub DOS, presencia conjunta de tres nombres de APIs, marcadores `RSDS`/`.pdb` y el marcador sintético `DISSECT PRACTICE`. Ninguna identifica una familia ni prueba ejecución, imports, inyección o actividad de red.
+El catálogo propio incluye cuatro reglas: texto del stub DOS, presencia conjunta de tres nombres de APIs, marcadores `RSDS`/`.pdb` y el marcador sintético `LUPABIN PRACTICE`. Ninguna identifica una familia ni prueba ejecución, imports, inyección o actividad de red.
 
 Cada `yara_match` contiene regla, namespace, revisión, hashes de fuente/conjunto, versiones observadas e instancias con offsets y bytes originales. Su `location` global es nula porque una regla puede depender de varios intervalos; consulta `data.instances`. `yara_context` identifica el catálogo incluso cuando no hay coincidencias.
 
@@ -132,7 +132,7 @@ Para probar representación limitada con datos sintéticos:
 
 ```text
 uv run python -m tests.fixtures.pe_builder --scenario yara-limited --output samples/yara-limited.bin
-uv run --frozen dissect analyze samples/yara-limited.bin --json
+uv run --frozen lupabin analyze samples/yara-limited.bin --json
 ```
 
 El fixture contiene veinte apariciones ASCII del marcador. Con los límites predeterminados el informe debe conservar dieciséis e indicar cuatro omitidas, con salida 3. `--scenario demo` ofrece un positivo y `--scenario basic` un caso sin coincidencias de este catálogo. No ejecutes ninguno como programa.
@@ -155,7 +155,7 @@ El host no confía en el worker: vuelve a derivar cada decodificación desde los
 
 ```text
 uv run python -m tests.fixtures.pe_builder --scenario decode-demo --output samples/decode-demo.bin
-uv run --frozen dissect analyze samples/decode-demo.bin --json
+uv run --frozen lupabin analyze samples/decode-demo.bin --json
 ```
 
 El fixture contiene un Base64, un hexadecimal y cuatro textos cifrados con XOR (clave de 1 byte, de 4 bytes, una cadena UTF-16LE y una URL que reutiliza la clave de 4 bytes) sobre el dominio reservado `.invalid`. El informe debe mostrar seis `decoded_string` y estado completo; la URL cita en `provenance` la decodificación que estableció su clave.
@@ -189,18 +189,18 @@ uv run --frozen ruff format --check .
 uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
-uv run --frozen python -m dissect.evidence.schema --check
-uv run --frozen python -m dissect.explain.schema --check
+uv run --frozen python -m lupabin.evidence.schema --check
+uv run --frozen python -m lupabin.explain.schema --check
 uv build
 uv run --frozen python -m tests.check_yara_distribution
 docker compose config --quiet
-docker build --load -f docker/Dockerfile -t dissect-worker:0.6.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.6.0 .
 uv run --frozen pytest -m docker
 ```
 
 Las pruebas Docker fallan si se solicitan sin motor o imagen; no se omiten silenciosamente. La suite ordinaria excluye explícitamente ese marcador. `docker compose build worker` es una alternativa de build; el servicio Compose de esta entrega es un worker de consola, no una web. `docker compose up` todavía no ofrece la experiencia web del MVP final.
 
-Para actualizar los esquemas tras cambios aprobados en los modelos: `uv run python -m dissect.evidence.schema` y `uv run python -m dissect.explain.schema`. No editar manualmente el JSON generado. `uv run python -m tests.check_glossary_sources` comprueba con red que las fuentes del glosario y sus anclas siguen existiendo; no forma parte de la CI.
+Para actualizar los esquemas tras cambios aprobados en los modelos: `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. No editar manualmente el JSON generado. `uv run python -m tests.check_glossary_sources` comprueba con red que las fuentes del glosario y sus anclas siguen existiendo; no forma parte de la CI.
 
 Para repetir las mediciones de falsos positivos, cobertura y tiempo de la decodificación sobre un directorio de binarios benignos propio (solo se leen como bytes; no forma parte de la CI):
 

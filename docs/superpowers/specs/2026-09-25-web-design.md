@@ -1,4 +1,4 @@
-# Interfaz web de Dissect
+# Interfaz web de LupaBin
 
 Estado: revisión 1 (2026-09-25), implementada. Petición del usuario: "una web sin *slop* de IA, con una gama de colores azules al estilo de GTI y VirusTotal, preparada para desplegarla y usable por cualquier persona". El usuario decidió:
 - Despliegue en su Raspberry Pi, primero en la red local; el dominio y HTTPS, más adelante.
@@ -8,19 +8,19 @@ Estado: revisión 1 (2026-09-25), implementada. Petición del usuario: "una web 
 
 ## 1. Qué es y qué no es
 
-La web es otra forma de usar `dissect analyze`: sube un archivo, lo analiza en el mismo worker aislado y muestra el mismo informe didáctico. No añade análisis ni conclusiones, y no ejecuta la muestra. Todo lo que muestra sale de un `Report` validado y de una `Explanation` que se regenera y valida antes de enviarse; VirusTotal aparece aparte, como fuente externa.
+La web es otra forma de usar `lupabin analyze`: sube un archivo, lo analiza en el mismo worker aislado y muestra el mismo informe didáctico. No añade análisis ni conclusiones, y no ejecuta la muestra. Todo lo que muestra sale de un `Report` validado y de una `Explanation` que se regenera y valida antes de enviarse; VirusTotal aparece aparte, como fuente externa.
 
 ## 2. Arquitectura
 
 ```text
-navegador ──HTTP(S)──> Caddy (proxy, HTTPS con dominio) ──> dissect-web (host, 127.0.0.1:8080)
+navegador ──HTTP(S)──> Caddy (proxy, HTTPS con dominio) ──> lupabin-web (host, 127.0.0.1:8080)
                                                                 │  run_isolated(): un contenedor
                                                                 │  nuevo por análisis, sin red,
                                                                 ▼  solo lectura, con límites
-                                                   dissect-worker:0.6.0 (Docker)
+                                                   lupabin-worker:0.6.0 (Docker)
 ```
 
-- **`dissect-web` corre en el host, no en un contenedor**, igual que la CLI. Usa `run_isolated` y el transporte de la CLI de Docker sin cambios, así que cada análisis sigue en un contenedor nuevo, sin red, de solo lectura, sin privilegios y con límites de memoria, CPU, procesos y tiempo. Descartado: ejecutar la web en un contenedor con el socket de Docker montado. Añadiría la CLI de Docker a la imagen y daría el mismo control sobre Docker, con más piezas.
+- **`lupabin-web` corre en el host, no en un contenedor**, igual que la CLI. Usa `run_isolated` y el transporte de la CLI de Docker sin cambios, así que cada análisis sigue en un contenedor nuevo, sin red, de solo lectura, sin privilegios y con límites de memoria, CPU, procesos y tiempo. Descartado: ejecutar la web en un contenedor con el socket de Docker montado. Añadiría la CLI de Docker a la imagen y daría el mismo control sobre Docker, con más piezas.
 - **Límite de confianza, dicho sin rodeos:** el usuario del servicio pertenece al grupo `docker`, que en la práctica equivale a root en esa máquina. La web no analiza la muestra (solo lee sus bytes, calcula hashes y los pasa al worker por stdin), pero un fallo en ella tendría ese alcance. Mitigaciones: el servicio escucha solo en `127.0.0.1`, systemd lo aísla (`NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`…) y las dependencias web son dos (Starlette y uvicorn), en un extra opcional que la imagen del worker no instala.
 - **Sin estado:** las muestras solo están en memoria durante su análisis. No se guardan ni la muestra ni el informe; el navegador ofrece descargar el JSON y el Markdown desde la propia respuesta. uvicorn no escribe registro de accesos.
 
@@ -37,15 +37,15 @@ navegador ──HTTP(S)──> Caddy (proxy, HTTPS con dominio) ──> dissect-
 | Límite | Por defecto | Variable |
 | --- | --- | --- |
 | Tamaño de archivo | 20 MiB (el de `Limits`) | — |
-| Análisis por IP | 6 cada 10 minutos | `DISSECT_WEB_RATE` (`6/600`) |
-| Análisis a la vez | 1 (un worker usa hasta 512 MiB y 1 CPU; una Raspberry Pi tiene 4–8 GB) | `DISSECT_WEB_CONCURRENCY` |
-| Espera en cola | 60 s; después, 503 "ocupado" | `DISSECT_WEB_QUEUE_SECONDS` |
+| Análisis por IP | 6 cada 10 minutos | `LUPABIN_WEB_RATE` (`6/600`) |
+| Análisis a la vez | 1 (un worker usa hasta 512 MiB y 1 CPU; una Raspberry Pi tiene 4–8 GB) | `LUPABIN_WEB_CONCURRENCY` |
+| Espera en cola | 60 s; después, 503 "ocupado" | `LUPABIN_WEB_QUEUE_SECONDS` |
 
-La IP es la de la conexión, salvo con `DISSECT_WEB_TRUST_PROXY=1`: entonces se usa la última entrada de `X-Forwarded-For`, la que añade Caddy. Nunca la primera, porque esa la puede inventar el cliente.
+La IP es la de la conexión, salvo con `LUPABIN_WEB_TRUST_PROXY=1`: entonces se usa la última entrada de `X-Forwarded-For`, la que añade Caddy. Nunca la primera, porque esa la puede inventar el cliente.
 
 ## 5. VirusTotal
 
-Como en la CLI (decisión del usuario): si hay clave (`VT_API_KEY`), se consulta por SHA-256 y, si VirusTotal no conoce el archivo, se sube. La página lo dice antes de enviar, junto al botón: el contenido subido puede compartirse con los clientes de pago de VirusTotal. Dos casillas, marcadas por defecto, permiten no consultar o no subir para ese análisis. `DISSECT_VIRUSTOTAL=off` y `DISSECT_VIRUSTOTAL_UPLOAD=off` lo desactivan para todo el servidor, y entonces las casillas no aparecen. La cuota de la clave es del dueño del servidor (la pública: 4 por minuto y 500 al día); agotarla se comunica como tal.
+Como en la CLI (decisión del usuario): si hay clave (`VT_API_KEY`), se consulta por SHA-256 y, si VirusTotal no conoce el archivo, se sube. La página lo dice antes de enviar, junto al botón: el contenido subido puede compartirse con los clientes de pago de VirusTotal. Dos casillas, marcadas por defecto, permiten no consultar o no subir para ese análisis. `LUPABIN_VIRUSTOTAL=off` y `LUPABIN_VIRUSTOTAL_UPLOAD=off` lo desactivan para todo el servidor, y entonces las casillas no aparecen. La cuota de la clave es del dueño del servidor (la pública: 4 por minuto y 500 al día); agotarla se comunica como tal.
 
 **Revisión 2 (2026-09-25), tras probarla el usuario:** con la subida marcada, la web esperaba hasta 3 minutos el análisis de VirusTotal antes de mostrar nada, y parecía colgada.
 
@@ -95,7 +95,7 @@ La guía `docs/deploy.md` cubre el alta en los dos proveedores, un dominio gratu
 - si se agota el día (en UTC), rechaza la petición antes de llegar a VirusTotal;
 - la web explica que la cuota es compartida, y un seguimiento que encuentra la cuota ocupada sigue intentándolo.
 
-`DISSECT_VT_PER_MINUTE` y `DISSECT_VT_PER_DAY` la adaptan a una clave con más cuota.
+`LUPABIN_VT_PER_MINUTE` y `LUPABIN_VT_PER_DAY` la adaptan a una clave con más cuota.
 
 ## 9. Verificación (2026-09-25)
 
@@ -108,7 +108,7 @@ La guía `docs/deploy.md` cubre el alta en los dos proveedores, un dominio gratu
   - errores de Docker y del worker con su mensaje revisado;
   - VirusTotal solo cuando se pide y la subida solo si el servidor la permite;
   - límite por IP y ventana deslizante, IP detrás de un proxy de confianza, cola llena y `/api/health`.
-- **Prueba real en local** con el worker `dissect-worker:0.6.0` y la consulta a VirusTotal activa, sin subida:
+- **Prueba real en local** con el worker `lupabin-worker:0.6.0` y la consulta a VirusTotal activa, sin subida:
   - la muestra de demostración, en 2,8 s;
   - `setupapi.dll` (4,6 MiB), en 7,4 s, con una respuesta de 8,4 MB y VirusTotal 0/74.
 - **Revisión en Chrome.** Encontró y corrigió:

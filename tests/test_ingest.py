@@ -2,9 +2,9 @@ import hashlib
 
 import pytest
 
-from dissect.errors import DissectError
-from dissect.evidence.models import Limits
-from dissect.ingest.reader import read_sample
+from lupabin.errors import LupaBinError
+from lupabin.evidence.models import Limits
+from lupabin.ingest.reader import read_sample
 
 
 def test_hashes_match_exact_bytes(tmp_path):
@@ -23,7 +23,7 @@ def test_hashes_match_exact_bytes(tmp_path):
 def test_empty_or_oversized_is_rejected(tmp_path, payload):
     path = tmp_path / "private-name"
     path.write_bytes(payload)
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         read_sample(path, Limits(input_bytes=4))
     assert "private-name" not in str(caught.value)
 
@@ -35,13 +35,13 @@ def test_limit_is_inclusive(tmp_path):
 
 
 def test_directory_rejected(tmp_path):
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         read_sample(tmp_path, Limits())
     assert caught.value.code == "input_not_file"
 
 
 def test_missing_file_rejected(tmp_path):
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         read_sample(tmp_path / "missing-private-name", Limits())
     assert caught.value.code == "input_not_found"
     assert "missing-private-name" not in str(caught.value)
@@ -50,7 +50,7 @@ def test_missing_file_rejected(tmp_path):
 def test_empty_file_has_its_own_reason(tmp_path):
     path = tmp_path / "empty"
     path.write_bytes(b"")
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         read_sample(path, Limits())
     assert caught.value.code == "input_empty"
 
@@ -73,7 +73,7 @@ def test_size_changed_after_open_is_not_trusted(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(os, "fstat", changed)
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         read_sample(path, Limits())
     assert caught.value.code == "input_changed"
 
@@ -92,6 +92,6 @@ def test_stale_stat_cannot_bypass_read_limit(tmp_path, monkeypatch):
             st_mode=actual.st_mode, st_size=1, st_mtime_ns=actual.st_mtime_ns
         ),
     )
-    with pytest.raises(DissectError) as caught:
+    with pytest.raises(LupaBinError) as caught:
         read_sample(path, Limits(input_bytes=4))
     assert caught.value.code == "input_limit"

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>LupaBin · análisis estático de ejecutables</title>
+<meta name="description" content="Analiza un ejecutable de Windows sin ejecutarlo: qué contiene, qué llama y qué no se puede afirmar.">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="/" aria-label="LupaBin, inicio">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h7a9 9 0 0 1 0 18H4z" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M8 8h3a4 4 0 0 1 0 8H8z" fill="currentColor"/></svg>
+      <span class="brand-name">LupaBin</span>
+    </a>
+    <p class="topbar-note">Análisis estático de ejecutables de Windows · la muestra nunca se ejecuta</p>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <section class="panel" id="upload" aria-labelledby="upload-title">
+    <div class="panel-head">
+      <h1 id="upload-title">Analizar un archivo</h1>
+      <p class="muted">Ejecutables PE de Windows (.exe, .dll, .sys…), hasta <span id="max-size">20 MiB</span>.</p>
+    </div>
+    <form id="form" novalidate>
+      <label class="drop" id="drop" for="file">
+        <input type="file" id="file" name="file" class="visually-hidden">
+        <span class="drop-main" id="drop-text">Arrastra un archivo aquí o <span class="link-like">elige uno</span></span>
+        <span class="drop-file" id="drop-file" hidden></span>
+      </label>
+
+      <fieldset class="options" id="vt-options" hidden>
+        <legend>VirusTotal</legend>
+        <label class="check"><input type="checkbox" id="vt" checked> <span id="vt-label">Analizar también en VirusTotal</span></label>
+        <p class="notice" id="upload-notice">Si VirusTotal no conoce el archivo, se sube para que lo analice, y el resultado aparece en cuanto termine. Lo subido puede compartirse con sus clientes de pago: no subas documentos ni programas internos o confidenciales.</p>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit" class="button primary" id="submit" disabled>Analizar</button>
+        <span class="muted small" id="limits-note"></span>
+      </div>
+    </form>
+    <ul class="facts">
+      <li><strong>No se ejecuta.</strong> El archivo se abre en un contenedor aislado, sin red ni privilegios, que se destruye al terminar.</li>
+      <li><strong>No se guarda.</strong> Ni el archivo ni el informe quedan en el servidor; puedes descargarlos al final.</li>
+      <li><strong>Cada frase cita su evidencia</strong> y dice lo que no demuestra.</li>
+    </ul>
+  </section>
+
+  <section class="panel" id="progress" hidden aria-live="polite">
+    <div class="progress-bar" aria-hidden="true"><span></span></div>
+    <p id="progress-text">Enviando el archivo…</p>
+    <p class="muted small" id="progress-time"></p>
+  </section>
+
+  <section class="panel error" id="error" hidden role="alert">
+    <h2>No se pudo analizar</h2>
+    <p id="error-text"></p>
+    <button type="button" class="button" id="error-back">Volver</button>
+  </section>
+
+  <section id="result" hidden>
+    <div class="panel result-head">
+      <div class="result-title">
+        <h2 id="result-name"></h2>
+        <span class="badge" id="result-status"></span>
+        <span class="score" id="vt-score" hidden></span>
+      </div>
+      <div class="vt-status" id="vt-status" role="status" aria-live="polite" hidden>
+        <span class="vt-dot" id="vt-dot" aria-hidden="true"></span>
+        <span id="vt-status-text"></span>
+        <button type="button" class="link-button" id="vt-status-open">Ver detalle</button>
+      </div>
+      <dl class="hashes" id="hashes"></dl>
+      <div class="actions">
+        <button type="button" class="button" id="download-json">Descargar informe (JSON)</button>
+        <button type="button" class="button" id="download-md">Descargar informe (Markdown)</button>
+        <button type="button" class="button primary" id="again">Analizar otro archivo</button>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Secciones del informe">
+      <button role="tab" id="tab-summary" aria-controls="pane-summary" aria-selected="true">Resumen</button>
+      <button role="tab" id="tab-observed" aria-controls="pane-observed" aria-selected="false" tabindex="-1">Hechos <span class="count" id="count-observed"></span></button>
+      <button role="tab" id="tab-inferred" aria-controls="pane-inferred" aria-selected="false" tabindex="-1">Inferencias <span class="count" id="count-inferred"></span></button>
+      <button role="tab" id="tab-coverage" aria-controls="pane-coverage" aria-selected="false" tabindex="-1">Cobertura</button>
+      <button role="tab" id="tab-vt" aria-controls="pane-vt" aria-selected="false" tabindex="-1" hidden>VirusTotal</button>
+      <button role="tab" id="tab-glossary" aria-controls="pane-glossary" aria-selected="false" tabindex="-1">Glosario</button>
+    </div>
+
+    <div class="panel pane" role="tabpanel" id="pane-summary" aria-labelledby="tab-summary">
+      <h3>Qué contiene el código</h3>
+      <p class="muted">Capacidades reconocidas a partir de las llamadas del código y de sus argumentos constantes. Que el código las contenga no demuestra que el programa las use, ni con qué intención; el detalle y el límite de cada una están en Inferencias.</p>
+      <div id="summary"></div>
+      <h4>Lo que limita este resumen</h4>
+      <ul class="warnings" id="warnings"></ul>
+    </div>
+    <div class="panel pane" role="tabpanel" id="pane-observed" aria-labelledby="tab-observed" hidden>
+      <p class="muted">Lecturas directas de los bytes del archivo.</p>
+      <ol class="items" id="observed"></ol>
+    </div>
+    <div class="panel pane" role="tabpanel" id="pane-inferred" aria-labelledby="tab-inferred" hidden>
+      <p class="muted">Resultados de aplicar un método a los bytes (una decodificación, una regla del recorrido del código), no lecturas directas.</p>
+      <ol class="items" id="inferred"></ol>
+    </div>
+    <div class="panel pane" role="tabpanel" id="pane-coverage" aria-labelledby="tab-coverage" hidden>
+      <p class="muted">Qué partes se pudieron analizar y hasta dónde. Un resultado parcial dice lo que encontró, no que no haya nada más.</p>
+      <ul class="notes" id="notes"></ul>
+      <p class="muted small" id="omitted"></p>
+    </div>
+    <div class="panel pane" role="tabpanel" id="pane-vt" aria-labelledby="tab-vt" hidden>
+      <div id="vt-report"></div>
+    </div>
+    <div class="panel pane" role="tabpanel" id="pane-glossary" aria-labelledby="tab-glossary" hidden>
+      <div id="glossary"></div>
+    </div>
+    <p class="absence" id="absence"></p>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <p>LupaBin es un tutor de análisis estático: describe lo que contiene un archivo y explica cada término con fuentes. No es un antivirus ni da veredictos. Los datos de VirusTotal son de terceros y se muestran aparte.</p>
+  </div>
+</footer>
+</body>
+</html>

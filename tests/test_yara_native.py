@@ -1,21 +1,21 @@
 import pytest
 
-from dissect.evidence.primitives import YaraLimits
-from dissect.rules.catalog import Catalog, load_catalog
-from dissect.rules.native import scan
+from lupabin.evidence.primitives import YaraLimits
+from lupabin.rules.catalog import Catalog, load_catalog
+from lupabin.rules.native import scan
 
 
 @pytest.mark.parametrize(
     "payload,rule",
     [
-        (b"This program cannot be run in DOS mode", "dissect_dos_stub_text"),
+        (b"This program cannot be run in DOS mode", "lupabin_dos_stub_text"),
         (
             b"VirtualAllocEx WriteProcessMemory CreateRemoteThread",
-            "dissect_process_memory_api_names",
+            "lupabin_process_memory_api_names",
         ),
-        (b"RSDS example.pdb", "dissect_debug_marker_pair"),
-        (b"DISSECT PRACTICE", "dissect_training_marker"),
-        ("DISSECT PRACTICE".encode("utf-16-le"), "dissect_training_marker"),
+        (b"RSDS example.pdb", "lupabin_debug_marker_pair"),
+        (b"LUPABIN PRACTICE", "lupabin_training_marker"),
+        ("LUPABIN PRACTICE".encode("utf-16-le"), "lupabin_training_marker"),
     ],
 )
 def test_real_native_matches_have_exact_bytes(payload, rule):
@@ -33,7 +33,7 @@ def test_real_native_matches_have_exact_bytes(payload, rule):
         assert instance.complete
 
 
-@pytest.mark.parametrize("payload", [b"benign", b"RSDS", b"example.pdb", b"DISSECT PRACTIC"])
+@pytest.mark.parametrize("payload", [b"benign", b"RSDS", b"example.pdb", b"LUPABIN PRACTIC"])
 def test_zero_matches_are_complete_not_failed(payload):
     result = scan(payload)
     assert result.scan_ok
@@ -53,7 +53,7 @@ def test_api_combination_requires_all_names(missing):
 def test_interrupted_scans_discard_matches(monkeypatch, mode, reason):
     import yara
 
-    import dissect.rules.native as native
+    import lupabin.rules.native as native
 
     class Rules:
         def __init__(self, original):
@@ -80,7 +80,7 @@ def test_interrupted_scans_discard_matches(monkeypatch, mode, reason):
             return Rules(yara.compile(**kwargs))
 
     monkeypatch.setattr(native, "import_module", lambda name: Backend())
-    result = native.scan(b"DISSECT PRACTICE")
+    result = native.scan(b"LUPABIN PRACTICE")
     assert result.rules_ok and not result.scan_ok
     assert result.reason == reason
     assert result.matches == ()
@@ -88,7 +88,7 @@ def test_interrupted_scans_discard_matches(monkeypatch, mode, reason):
 
 
 def test_capture_and_occurrence_limits_are_explicit():
-    result = scan(b"DISSECT PRACTICE\0" * 20, YaraLimits(instances=2, capture_bytes=4))
+    result = scan(b"LUPABIN PRACTICE\0" * 20, YaraLimits(instances=2, capture_bytes=4))
     match = result.matches[0]
     assert result.scan_ok
     assert match.instances_status == "partial"
@@ -105,11 +105,11 @@ def test_capture_and_occurrence_limits_are_explicit():
         ('include "outside.yar"', "yara_compile_error"),
         ("rule invalid { condition: }", "yara_compile_error"),
         (
-            'import "console" rule dissect_training_marker { condition: console.log("untrusted") }',
+            'import "console" rule lupabin_training_marker { condition: console.log("untrusted") }',
             "yara_policy_violation",
         ),
         (
-            'import "math" rule dissect_training_marker '
+            'import "math" rule lupabin_training_marker '
             "{ condition: math.entropy(0, filesize) >= 0 }",
             "yara_policy_violation",
         ),
@@ -118,8 +118,8 @@ def test_capture_and_occurrence_limits_are_explicit():
 def test_unapproved_rule_features_are_rejected(source, reason, capsys):
     catalog = load_catalog()
     sources = dict(catalog.sources)
-    sources["dissect_training_marker"] = source
-    result = scan(b"DISSECT PRACTICE", catalog=Catalog(catalog.info, sources))
+    sources["lupabin_training_marker"] = source
+    result = scan(b"LUPABIN PRACTICE", catalog=Catalog(catalog.info, sources))
     assert not result.scan_ok
     assert result.matches == ()
     assert result.reason == reason
