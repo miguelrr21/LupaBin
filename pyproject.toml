@@ -3,7 +3,7 @@ requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "dissect-tutor"
+name = "lupabin"
 version = "0.6.0"
 description = "Evidence-first static analysis tutor; samples are never executed."
 requires-python = ">=3.12,<3.13"
@@ -17,8 +17,8 @@ dependencies = [
 ]
 
 [project.scripts]
-dissect = "dissect.cli:app"
-dissect-web = "dissect.web.app:main"
+lupabin = "lupabin.cli:app"
+lupabin-web = "lupabin.web.app:main"
 
 [project.optional-dependencies]
 web = [
@@ -27,7 +27,7 @@ web = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dissect"]
+packages = ["src/lupabin"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "docs/evidence-schema.json", "docs/explanation-schema.json", "pyproject.toml", "LICENSE", "README.md"]

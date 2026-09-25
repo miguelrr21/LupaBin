@@ -4,7 +4,7 @@
       "additionalProperties": false,
       "properties": {
         "catalog_id": {
-          "const": "dissect_glossary",
+          "const": "lupabin_glossary",
           "title": "Catalog Id",
           "type": "string"
         },

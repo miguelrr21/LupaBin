@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence.models import Limits, Report
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence.models import Limits, Report
 from tests.fixtures.pe_builder import build_demo, build_pe
 
 
@@ -29,7 +29,7 @@ def test_default_pipeline_has_five_sources_and_yara_evidence():
     match = next(f for f in report.evidence if f.kind == "yara_match")
     assert match.location is None
     assert match.provenance.evidence_ids == ()
-    assert match.data.rule_id == "dissect_training_marker"
+    assert match.data.rule_id == "lupabin_training_marker"
     assert match.data.instances[0].offset == 2304
     assert report.yara_context.catalog.ruleset_sha256 == match.data.ruleset_sha256
 
@@ -43,12 +43,12 @@ def test_no_match_is_success_not_security_verdict():
 
 
 def test_native_failure_keeps_previous_extractors(monkeypatch):
-    from dissect.rules.process import YaraProcessError
+    from lupabin.rules.process import YaraProcessError
 
     async def failed(*args, **kwargs):
         raise YaraProcessError("yara_timeout")
 
-    monkeypatch.setattr("dissect.extractors.yara.scan_child", failed)
+    monkeypatch.setattr("lupabin.extractors.yara.scan_child", failed)
     report = analyze_bytes(build_demo())
     assert report.analysis.status == "partial"
     assert {"pe_header", "string", "import"} <= {f.kind for f in report.evidence}
@@ -59,7 +59,7 @@ def test_native_failure_keeps_previous_extractors(monkeypatch):
 
 
 def test_unknown_type_can_have_rule_matches_without_claiming_pe_support():
-    report = analyze_bytes(b"DISSECT PRACTICE")
+    report = analyze_bytes(b"LUPABIN PRACTICE")
     assert report.sample.type == "unknown"
     assert report.analysis.status == "partial"
     assert any(f.kind == "yara_match" for f in report.evidence)
@@ -67,7 +67,7 @@ def test_unknown_type_can_have_rule_matches_without_claiming_pe_support():
 
 def test_limited_representation_is_partial():
     limits = Limits.model_validate_json('{"yara":{"instances":1}}')
-    report = analyze_bytes(build_pe() + b"DISSECT PRACTICE\0" * 20, limits)
+    report = analyze_bytes(build_pe() + b"LUPABIN PRACTICE\0" * 20, limits)
     match = next(f for f in report.evidence if f.kind == "yara_match")
     assert match.data.omitted_instances == 19
     assert report.analysis.status == "partial"

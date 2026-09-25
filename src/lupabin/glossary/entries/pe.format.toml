@@ -1,0 +1,11 @@
+id = "pe.format"
+title = "Formato PE (Portable Executable)"
+revision = "1.0.0"
+lang = "es"
+summary = "PE es el formato de los ejecutables y bibliotecas de Windows (.exe, .dll, .sys): una cabecera que describe cómo cargar el archivo, seguida de secciones con código y datos."
+body = "Un archivo PE empieza con un pequeño programa MS-DOS (el stub), que al ejecutarse en MS-DOS imprime el mensaje «This program cannot be run in DOS mode». Detrás van la firma PE, la cabecera COFF, la cabecera opcional y la tabla de secciones.\n\nEl nombre «Portable» indica que el formato no depende de una arquitectura concreta: el mismo esquema sirve para x86, x64 y ARM.\n\nLupaBin lee estas estructuras como datos. Nunca carga ni ejecuta el archivo."
+not_proven = "Que un archivo tenga formato PE válido no dice nada sobre lo que hace el programa."
+related = ["pe.header", "pe.section"]
+sources = [
+  { title = "PE Format", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format", verified_on = 2026-09-23 },
+]

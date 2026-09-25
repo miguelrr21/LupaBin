@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from dissect.virustotal.client import (
+from lupabin.virustotal.client import (
     MAX_RESPONSE,
     HttpRequest,
     HttpResponse,
@@ -10,7 +10,7 @@ from dissect.virustotal.client import (
     consult,
     urllib_transport,
 )
-from dissect.virustotal.models import MAX_ITEMS, VirusTotalReport
+from lupabin.virustotal.models import MAX_ITEMS, VirusTotalReport
 
 SHA = "a" * 64
 KEY = {"VT_API_KEY": "test-key-not-real"}
@@ -133,10 +133,10 @@ def test_explicit_upload_sends_a_generic_name_and_waits_for_the_analysis():
         SHA, b"MZtraining", upload=True, transport=fake, sleep=sleeps.append, environ=KEY
     )
     assert report.status == "found" and report.uploaded
-    from dissect.render.external import to_text_lines
+    from lupabin.render.external import to_text_lines
 
     shown = " ".join(to_text_lines(report, lambda text, indent, first=None: [text]))
-    assert "Dissect subió el archivo a VirusTotal porque no lo conocía" in shown
+    assert "LupaBin subió el archivo a VirusTotal porque no lo conocía" in shown
     post = next(r for r in fake.requests if r.method == "POST")
     assert b'filename="sample"' in post.body and b"MZtraining" in post.body
     assert post.headers["content-type"].startswith("multipart/form-data; boundary=")
@@ -154,7 +154,7 @@ def test_upload_that_does_not_finish_in_time_is_reported_as_queued():
 
 
 def test_submit_uploads_an_unknown_file_and_returns_the_analysis_to_follow():
-    from dissect.virustotal.client import follow, submit
+    from lupabin.virustotal.client import follow, submit
 
     routes = lookup_routes(file=(404, {}))
     routes[("POST", "/files")] = [(200, {"data": {"id": "abc=="}})]
@@ -264,9 +264,9 @@ def test_real_transport_refuses_paths_outside_the_api_and_oversized_answers(monk
 
 from typer.testing import CliRunner  # noqa: E402
 
-from dissect.analysis import analyze_bytes  # noqa: E402
-from dissect.cli import app  # noqa: E402
-from dissect.virustotal import client as vt_client  # noqa: E402
+from lupabin.analysis import analyze_bytes  # noqa: E402
+from lupabin.cli import app  # noqa: E402
+from lupabin.virustotal import client as vt_client  # noqa: E402
 from tests.fixtures.pe_builder import build_pe  # noqa: E402
 
 runner = CliRunner()
@@ -285,9 +285,9 @@ def patch(monkeypatch, file=(200, FILE), behaviour=(200, BEHAVIOUR), environ=KEY
         calls.append((sha256, upload))
         return real(sha256, data, upload=upload, transport=Fake(routes), environ=environ)
 
-    monkeypatch.setattr("dissect.cli.virustotal_client.consult", fake)
+    monkeypatch.setattr("lupabin.cli.virustotal_client.consult", fake)
     monkeypatch.setattr(
-        "dissect.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
+        "lupabin.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
     )
     return calls
 
@@ -305,7 +305,7 @@ def test_analyze_adds_an_attributed_external_section(tmp_path, monkeypatch):
     for flag in ([], ["--markdown"]):
         result = runner.invoke(app, ["analyze", str(sample(tmp_path)), "--virustotal", *flag])
         assert result.exit_code == 0
-        assert "Fuente externa: VirusTotal (no verificada por Dissect)" in result.stdout
+        assert "Fuente externa: VirusTotal (no verificada por LupaBin)" in result.stdout
         assert "\x1b" not in result.stdout and "test-key-not-real" not in result.stdout
         assert "2 de 63 lo marcan como malicioso" in result.stdout
     assert all(upload is False for _, upload in calls)
@@ -313,17 +313,17 @@ def test_analyze_adds_an_attributed_external_section(tmp_path, monkeypatch):
 
 def user_defaults(monkeypatch):
     """The user's defaults, not the tests' ones: consult and upload."""
-    monkeypatch.delenv("DISSECT_VIRUSTOTAL")
-    monkeypatch.delenv("DISSECT_VIRUSTOTAL_UPLOAD")
+    monkeypatch.delenv("LUPABIN_VIRUSTOTAL")
+    monkeypatch.delenv("LUPABIN_VIRUSTOTAL_UPLOAD")
 
 
 def test_analyze_consults_and_uploads_by_default(tmp_path, monkeypatch):
     user_defaults(monkeypatch)
-    monkeypatch.setattr("dissect.cli.virustotal_client.api_key", lambda environ=None: "key")
+    monkeypatch.setattr("lupabin.cli.virustotal_client.api_key", lambda environ=None: "key")
     calls = patch(monkeypatch)
     result = runner.invoke(app, ["analyze", str(sample(tmp_path))])
     assert result.exit_code == 0 and len(calls) == 1
-    assert "Fuente externa: VirusTotal (no verificada por Dissect)" in result.stdout
+    assert "Fuente externa: VirusTotal (no verificada por LupaBin)" in result.stdout
     assert calls[0][1] is True  # uploaded only if VirusTotal does not know the file
     assert "se sube y se espera su análisis" in result.stderr
 
@@ -335,7 +335,7 @@ def test_analyze_consults_and_uploads_by_default(tmp_path, monkeypatch):
 def test_the_default_upload_can_be_turned_off(tmp_path, monkeypatch, arguments, environ):
     user_defaults(monkeypatch)
     if environ is not None:
-        monkeypatch.setenv("DISSECT_VIRUSTOTAL_UPLOAD", environ)
+        monkeypatch.setenv("LUPABIN_VIRUSTOTAL_UPLOAD", environ)
     calls = patch(monkeypatch)
     result = runner.invoke(app, ["analyze", str(sample(tmp_path)), *arguments])
     assert result.exit_code == 0 and calls[0][1] is False
@@ -355,16 +355,16 @@ def test_uploading_needs_the_consultation(tmp_path, monkeypatch):
     ("arguments", "environ"),
     [
         (["--no-virustotal"], None),  # turned off for one analysis
-        ([], "off"),  # turned off by DISSECT_VIRUSTOTAL
+        ([], "off"),  # turned off by LUPABIN_VIRUSTOTAL
         (["--json"], None),  # the fact report is not mixed with an external source
     ],
 )
 def test_the_default_consultation_can_be_turned_off(tmp_path, monkeypatch, arguments, environ):
-    monkeypatch.delenv("DISSECT_VIRUSTOTAL_UPLOAD")
+    monkeypatch.delenv("LUPABIN_VIRUSTOTAL_UPLOAD")
     if environ is None:
-        monkeypatch.delenv("DISSECT_VIRUSTOTAL")
+        monkeypatch.delenv("LUPABIN_VIRUSTOTAL")
     else:
-        monkeypatch.setenv("DISSECT_VIRUSTOTAL", environ)
+        monkeypatch.setenv("LUPABIN_VIRUSTOTAL", environ)
     calls = patch(monkeypatch)
     result = runner.invoke(app, ["analyze", str(sample(tmp_path)), *arguments])
     assert result.exit_code == 0 and calls == []
@@ -373,7 +373,7 @@ def test_the_default_consultation_can_be_turned_off(tmp_path, monkeypatch, argum
 def test_without_a_key_the_default_consultation_explains_and_the_analysis_stands(
     tmp_path, monkeypatch
 ):
-    monkeypatch.delenv("DISSECT_VIRUSTOTAL")
+    monkeypatch.delenv("LUPABIN_VIRUSTOTAL")
     calls = patch(monkeypatch, environ={})  # no VT_API_KEY and no .env
     result = runner.invoke(app, ["analyze", str(sample(tmp_path))])
     assert result.exit_code == 0 and len(calls) == 1

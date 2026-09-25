@@ -1,1 +1,0 @@
-rule dissect_process_memory_api_names { strings: $allocate = "VirtualAllocEx" ascii $write = "WriteProcessMemory" ascii $thread = "CreateRemoteThread" ascii condition: all of them }

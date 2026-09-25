@@ -31,8 +31,8 @@ jobs:
       - run: uv run --frozen ruff check .
       - run: uv run --frozen mypy src
       - run: uv run --frozen pytest -m "not docker"
-      - run: uv run --frozen python -m dissect.evidence.schema --check
-      - run: uv run --frozen python -m dissect.explain.schema --check
+      - run: uv run --frozen python -m lupabin.evidence.schema --check
+      - run: uv run --frozen python -m lupabin.explain.schema --check
       - run: uv build
       - run: uv run --frozen python -m tests.check_yara_distribution
 
@@ -50,5 +50,5 @@ jobs:
           version: "0.8.22"
       - run: uv sync --frozen
       - run: docker compose config --quiet
-      - run: docker build --load -f docker/Dockerfile -t dissect-worker:0.6.0 .
+      - run: docker build --load -f docker/Dockerfile -t lupabin-worker:0.6.0 .
       - run: uv run --frozen pytest -m docker

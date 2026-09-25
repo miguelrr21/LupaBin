@@ -91,60 +91,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dissect-tutor"
-version = "0.6.0"
-source = { editable = "." }
-dependencies = [
-    { name = "capstone" },
-    { name = "pefile" },
-    { name = "pydantic" },
-    { name = "typer" },
-    { name = "yara-python" },
-]
-
-[package.optional-dependencies]
-web = [
-    { name = "starlette" },
-    { name = "uvicorn" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "jsonschema" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "starlette" },
-    { name = "uvicorn" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "capstone", specifier = "==5.0.9" },
-    { name = "pefile", specifier = "==2024.8.26" },
-    { name = "pydantic", specifier = "==2.11.7" },
-    { name = "starlette", marker = "extra == 'web'", specifier = "==1.6.0" },
-    { name = "typer", specifier = "==0.16.1" },
-    { name = "uvicorn", marker = "extra == 'web'", specifier = "==0.52.4" },
-    { name = "yara-python", specifier = "==4.5.4" },
-]
-provides-extras = ["web"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "httpx", specifier = "==0.28.1" },
-    { name = "jsonschema", specifier = "==4.25.1" },
-    { name = "mypy", specifier = "==1.17.1" },
-    { name = "pre-commit", specifier = "==4.3.0" },
-    { name = "pytest", specifier = "==8.4.1" },
-    { name = "ruff", specifier = "==0.12.12" },
-    { name = "starlette", specifier = "==1.6.0" },
-    { name = "uvicorn", specifier = "==0.52.4" },
-]
-
-[[package]]
 name = "distlib"
 version = "0.4.3"
 source = { registry = "https://pypi.org/simple" }
@@ -251,6 +197,60 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/19/74/a633ee74eb36c44aa6d1095e7cc5569bebf04342ee146178e2d36600708b/jsonschema_specifications-2025.9.1.tar.gz", hash = "sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d", size = 32855, upload-time = "2025-09-08T01:34:59.186Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl", hash = "sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe", size = 18437, upload-time = "2025-09-08T01:34:57.871Z" },
+]
+
+[[package]]
+name = "lupabin"
+version = "0.6.0"
+source = { editable = "." }
+dependencies = [
+    { name = "capstone" },
+    { name = "pefile" },
+    { name = "pydantic" },
+    { name = "typer" },
+    { name = "yara-python" },
+]
+
+[package.optional-dependencies]
+web = [
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "mypy" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "capstone", specifier = "==5.0.9" },
+    { name = "pefile", specifier = "==2024.8.26" },
+    { name = "pydantic", specifier = "==2.11.7" },
+    { name = "starlette", marker = "extra == 'web'", specifier = "==1.6.0" },
+    { name = "typer", specifier = "==0.16.1" },
+    { name = "uvicorn", marker = "extra == 'web'", specifier = "==0.52.4" },
+    { name = "yara-python", specifier = "==4.5.4" },
+]
+provides-extras = ["web"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "jsonschema", specifier = "==4.25.1" },
+    { name = "mypy", specifier = "==1.17.1" },
+    { name = "pre-commit", specifier = "==4.3.0" },
+    { name = "pytest", specifier = "==8.4.1" },
+    { name = "ruff", specifier = "==0.12.12" },
+    { name = "starlette", specifier = "==1.6.0" },
+    { name = "uvicorn", specifier = "==0.52.4" },
 ]
 
 [[package]]

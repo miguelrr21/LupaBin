@@ -2,9 +2,9 @@ import struct
 
 import pytest
 
-from dissect.evidence import call_forms
-from dissect.extractors.code_calls import CallFinder
-from dissect.extractors.code_disasm import Region, walk
+from lupabin.evidence import call_forms
+from lupabin.extractors.code_calls import CallFinder
+from lupabin.extractors.code_disasm import Region, walk
 
 BASE32 = 0x400000
 IAT = 0x2000

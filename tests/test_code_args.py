@@ -3,9 +3,9 @@ import struct
 import pytest
 from capstone import CS_ARCH_X86, CS_MODE_64, Cs
 
-from dissect.extractors import code_args
-from dissect.extractors.code_args import ArgumentFinder, Budget
-from dissect.extractors.code_disasm import Region, Targets
+from lupabin.extractors import code_args
+from lupabin.extractors.code_args import ArgumentFinder, Budget
+from lupabin.extractors.code_disasm import Region, Targets
 
 BASE32 = 0x400000
 CALL32 = b"\xff\x15" + struct.pack("<I", BASE32 + 0x2000)

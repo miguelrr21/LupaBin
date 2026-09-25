@@ -1,8 +1,8 @@
 import io
 import json
 
-from dissect.evidence.models import Limits, Report
-from dissect.worker import process
+from lupabin.evidence.models import Limits, Report
+from lupabin.worker import process
 from tests.fixtures.pe_builder import build_pe
 
 

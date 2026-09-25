@@ -3,9 +3,9 @@ import struct
 
 from typer.testing import CliRunner
 
-from dissect.analysis import analyze_bytes
-from dissect.cli import app
-from dissect.errors import DissectError
+from lupabin.analysis import analyze_bytes
+from lupabin.cli import app
+from lupabin.errors import LupaBinError
 from tests.fixtures.pe_builder import build_decode_demo, build_pe
 
 runner = CliRunner()
@@ -21,7 +21,7 @@ def test_cli_json_is_machine_readable(tmp_path, monkeypatch):
     path = tmp_path / "sample"
     path.write_bytes(build_pe())
     monkeypatch.setattr(
-        "dissect.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
+        "lupabin.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
     )
     result = runner.invoke(app, ["analyze", str(path), "--json"])
     assert result.exit_code == 0
@@ -34,9 +34,9 @@ def test_no_fallback_when_docker_unavailable(tmp_path, monkeypatch):
     path.write_bytes(build_pe())
 
     def unavailable(data, limits):
-        raise DissectError("docker_unavailable")
+        raise LupaBinError("docker_unavailable")
 
-    monkeypatch.setattr("dissect.cli.analyze_isolated", unavailable)
+    monkeypatch.setattr("lupabin.cli.analyze_isolated", unavailable)
     result = runner.invoke(app, ["analyze", str(path), "--json"])
     assert result.exit_code == 1
     assert result.stdout == ""
@@ -50,7 +50,7 @@ def test_partial_analysis_has_distinct_exit_code(tmp_path, monkeypatch):
     path = tmp_path / "sample"
     path.write_bytes(data)
     monkeypatch.setattr(
-        "dissect.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
+        "lupabin.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
     )
     result = runner.invoke(app, ["analyze", str(path), "--json"])
     assert result.exit_code == 3
@@ -59,7 +59,7 @@ def test_partial_analysis_has_distinct_exit_code(tmp_path, monkeypatch):
 
 def fake_isolation(monkeypatch):
     monkeypatch.setattr(
-        "dissect.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
+        "lupabin.cli.analyze_isolated", lambda data, limits: analyze_bytes(data, limits)
     )
 
 
@@ -79,10 +79,10 @@ def test_default_output_is_the_didactic_report(tmp_path, monkeypatch):
     path.write_bytes(build_decode_demo())
     result = runner.invoke(app, ["analyze", str(path)])
     assert result.exit_code == 0
-    assert result.stdout.startswith("DISSECT · informe didáctico")
+    assert result.stdout.startswith("LUPABIN · informe didáctico")
     assert "worker aislado" in result.stdout
     markdown = runner.invoke(app, ["analyze", str(path), "--markdown"])
-    assert markdown.stdout.startswith("# Dissect: informe didáctico")
+    assert markdown.stdout.startswith("# LupaBin: informe didáctico")
     both = runner.invoke(app, ["analyze", str(path), "--json", "--markdown"])
     assert both.exit_code == 2
 

@@ -1,0 +1,12 @@
+id = "decode.hex"
+title = "Hexadecimal (Base16)"
+revision = "1.0.0"
+lang = "es"
+summary = "La codificación hexadecimal representa cada byte con dos caracteres de 0–9 y a–f. «48656c6c6f» es «Hello»."
+body = "RFC 4648 la define como Base16. LupaBin exige una longitud par de al menos 8 caracteres, rechaza las cadenas formadas solo por dígitos decimales (un número como 2147483647 también es hexadecimal válido) y exige que el resultado sea texto imprimible y variado."
+not_proven = "Que un texto decodifique limpiamente no demuestra que el programa lo decodifique ni que lo use."
+related = ["evidence.confidence", "decode.base64"]
+sources = [
+  { title = "RFC 4648: The Base16, Base32, and Base64 Data Encodings", publisher = "IETF / RFC Editor", url = "https://www.rfc-editor.org/rfc/rfc4648", verified_on = 2026-09-23 },
+  { title = "Fase 2, 3.2 Hexadecimal estricto", publisher = "Proyecto LupaBin", document = "docs/superpowers/specs/2026-09-22-static-decoding-design.md#32-hexadecimal-estricto-hex-strict-v1", verified_on = 2026-09-23 },
+]

@@ -1,0 +1,15 @@
+id = "code.call_argument"
+title = "Argumento constante de una llamada"
+revision = "1.0.0"
+lang = "es"
+summary = "Un valor fijo que el código prepara justo antes de llamar a una función importada: una clave predefinida del registro, un número o la dirección de una cadena que está en el propio archivo."
+body = "En x64, los cuatro primeros argumentos enteros o punteros van en los registros `RCX`, `RDX`, `R8` y `R9`, en ese orden, y esos registros se pierden en cada llamada. En x86, las funciones de la API de Win32 usan `__stdcall`: los argumentos se apilan de derecha a izquierda, así que el último `push` antes de la llamada es el primer argumento.\n\nLupaBin recorre hacia delante el tramo de código que termina en la llamada, sin ejecutarlo. Solo acepta un valor si una instrucción de forma fija (`lea` relativo a `rip`, `mov` con un inmediato, `xor` de un registro consigo mismo o `push` de un inmediato) lo pone en su sitio y nada lo cambia después. Si otro camino puede entrar en medio del tramo, empieza de nuevo desde ahí. Además, el valor tiene que ser del tipo que la documentación de la función da al parámetro: por ejemplo, una de las claves predefinidas que lista para `hKey`.\n\nSolo se interpretan las funciones y los parámetros de un catálogo revisado contra Microsoft Learn. Una cadena solo se muestra si está en una sección del archivo que no se puede escribir, porque el programa podría cambiar una escribible antes de la llamada."
+not_proven = "Es una inferencia: no demuestra que la llamada se ejecute, ni que otro camino que el recorrido no ve no llegue a ella con otros valores, ni cuál es la clave que se abre de verdad (una clave predefinida puede redirigirse con RegOverridePredefKey). Que un argumento no aparezca no significa que no tenga valor."
+related = ["code.import_call", "api.family.registry"]
+sources = [
+  { title = "x64 calling convention: Parameter passing", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#parameter-passing", verified_on = 2026-09-24 },
+  { title = "x64 calling convention: Caller/callee saved registers", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#callercallee-saved-registers", verified_on = 2026-09-24 },
+  { title = "__stdcall", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/cpp/stdcall", verified_on = 2026-09-24 },
+  { title = "Predefined Keys", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys", verified_on = 2026-09-24 },
+  { title = "RegOpenKeyExW function (winreg.h)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw", verified_on = 2026-09-24 },
+]

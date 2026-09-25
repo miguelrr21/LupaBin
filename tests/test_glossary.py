@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from dissect.glossary.catalog import GlossaryError, load_glossary, write_manifest
+from lupabin.glossary.catalog import GlossaryError, load_glossary, write_manifest
 
-ROOT = Path(__file__).parents[1] / "src/dissect/glossary/entries"
+ROOT = Path(__file__).parents[1] / "src/lupabin/glossary/entries"
 ENTRY = """id = "{id}"
 title = "Título"
 revision = "1.0.0"

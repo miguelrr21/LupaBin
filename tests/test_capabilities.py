@@ -2,18 +2,18 @@
 
 import pytest
 
-from dissect.analysis import analyze_bytes
-from dissect.evidence import api_catalog
-from dissect.evidence.facts import CallArgumentData
-from dissect.evidence.models import Limits
-from dissect.evidence.primitives import CodeLimits
-from dissect.explain import capabilities, winapi
-from dissect.explain.engine import check_item, explain, validate
-from dissect.explain.rules import RULES
-from dissect.glossary.catalog import load_glossary
-from dissect.render import document
-from dissect.render.document import to_markdown, to_text
-from dissect.render.safe import code_span
+from lupabin.analysis import analyze_bytes
+from lupabin.evidence import api_catalog
+from lupabin.evidence.facts import CallArgumentData
+from lupabin.evidence.models import Limits
+from lupabin.evidence.primitives import CodeLimits
+from lupabin.explain import capabilities, winapi
+from lupabin.explain.engine import check_item, explain, validate
+from lupabin.explain.rules import RULES
+from lupabin.glossary.catalog import load_glossary
+from lupabin.render import document
+from lupabin.render.document import to_markdown, to_text
+from lupabin.render.safe import code_span
 from tests.fixtures.pe_builder import build_call_demo, build_code_pe
 from tests.test_code_arguments import create_service
 
@@ -90,10 +90,10 @@ POSITIVE = [
     ),
     (
         "RegSetKeyValueW",
-        {0: HKCU, 1: RUN, 2: "DissectTraining"},
+        {0: HKCU, 1: RUN, 2: "LupaBinTraining"},
         "run_key_value",
         "RegSetKeyValueW: «HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run»"
-        ", valor «DissectTraining» (T1547.001)",
+        ", valor «LupaBinTraining» (T1547.001)",
     ),
     (
         "RegSetKeyValueA",
@@ -132,15 +132,15 @@ POSITIVE = [
     ),
     (
         "WinExec",
-        {0: "cmd.exe /c echo dissect", 1: 0},
+        {0: "cmd.exe /c echo lupabin", 1: 0},
         "command_execution",
-        "WinExec: orden «cmd.exe /c echo dissect» (T1059.003)",
+        "WinExec: orden «cmd.exe /c echo lupabin» (T1059.003)",
     ),
     (
         "CreateProcessA",
-        {1: "notepad.exe C:\\Dissect\\training.txt"},
+        {1: "notepad.exe C:\\LupaBin\\training.txt"},
         "command_execution",
-        "CreateProcessA: línea de órdenes «notepad.exe C:\\Dissect\\training.txt»",
+        "CreateProcessA: línea de órdenes «notepad.exe C:\\LupaBin\\training.txt»",
     ),
     (
         "CreateProcessW",
@@ -156,10 +156,10 @@ POSITIVE = [
     ),
     (
         "URLDownloadToFileW",
-        {1: "http://training.invalid/file.txt", 2: r"C:\Dissect\file.txt"},
+        {1: "http://training.invalid/file.txt", 2: r"C:\LupaBin\file.txt"},
         "download_to_file",
         "URLDownloadToFileW: URL «http://training.invalid/file.txt», archivo "
-        "«C:\\Dissect\\file.txt» (T1105)",
+        "«C:\\LupaBin\\file.txt» (T1105)",
     ),
     (
         "InternetConnectW",
@@ -181,9 +181,9 @@ POSITIVE = [
     ),
     (
         "InternetOpenW",
-        {0: "DissectTraining/1.0", 1: 0},
+        {0: "LupaBinTraining/1.0", 1: 0},
         "user_agent",
-        "InternetOpenW: agente «DissectTraining/1.0»",
+        "InternetOpenW: agente «LupaBinTraining/1.0»",
     ),
     (
         "VirtualAlloc",
@@ -213,21 +213,21 @@ POSITIVE = [
     ),
     (
         "MoveFileExW",
-        {0: r"C:\Dissect\old.txt", 2: winapi.MOVEFILE_DELAY_UNTIL_REBOOT},
+        {0: r"C:\LupaBin\old.txt", 2: winapi.MOVEFILE_DELAY_UNTIL_REBOOT},
         "move_on_reboot",
-        "MoveFileExW: origen «C:\\Dissect\\old.txt», dwFlags = 0x4",
+        "MoveFileExW: origen «C:\\LupaBin\\old.txt», dwFlags = 0x4",
     ),
     (
         "CreateMutexW",
-        {2: "DissectTraining"},
+        {2: "LupaBinTraining"},
         "named_mutex",
-        "CreateMutexW: nombre «DissectTraining»",
+        "CreateMutexW: nombre «LupaBinTraining»",
     ),
     (
         "OpenMutexW",
-        {0: 0x1F0001, 2: "DissectTraining"},
+        {0: 0x1F0001, 2: "LupaBinTraining"},
         "named_mutex",
-        "OpenMutexW: nombre «DissectTraining»",
+        "OpenMutexW: nombre «LupaBinTraining»",
     ),
     (
         "BCryptOpenAlgorithmProvider",
@@ -263,7 +263,7 @@ def test_service_creation_names_the_service_binary_and_start(bits):
     rule, cases = only_case(create_service(bits))
     assert rule == "capability.service_create@1"
     assert cases[0].split(" ", 1)[1] == (
-        "CreateServiceW: servicio «DissectTraining», binario «C:\\Dissect\\training.exe», "
+        "CreateServiceW: servicio «LupaBinTraining», binario «C:\\LupaBin\\training.exe», "
         "inicio SERVICE_AUTO_START, tipo SERVICE_WIN32_OWN_PROCESS (T1543.003)"
     )
 
@@ -280,7 +280,7 @@ def test_the_fixture_generator_writes_the_capability_demo(tmp_path, monkeypatch)
     assert path.read_bytes() == pe_builder.build_capability_demo()
     rule, cases = only_case(path.read_bytes())
     assert rule == "capability.run_key_value@1" and cases[0].endswith(
-        "valor «DissectTraining» (T1547.001)"
+        "valor «LupaBinTraining» (T1547.001)"
     )
 
 
@@ -333,8 +333,8 @@ def test_an_interpreter_is_associated_with_its_technique(function, call, techniq
 @pytest.mark.parametrize(
     "command",
     [
-        r"C:\Windows\System32\rundll32.exe dissect.dll,Training",  # T1218.011 is its abuse
-        "regsvr32 /s dissect.dll",
+        r"C:\Windows\System32\rundll32.exe lupabin.dll,Training",  # T1218.011 is its abuse
+        "regsvr32 /s lupabin.dll",
         "mshta training.hta",
         "wscript training.js",  # VBScript or JScript: the call does not say which
         "cscript //nologo training.vbs",
@@ -386,22 +386,22 @@ NEGATIVE = [
     # not a Run key
     ("RegSetKeyValueW", {0: HKCR, 1: RUN}),
     ("RegSetKeyValueW", {0: HKLM, 1: r"Microsoft\Windows\CurrentVersion\Run"}),
-    ("RegSetKeyValueW", {0: HKCU, 1: RUN + "Dissect"}),
+    ("RegSetKeyValueW", {0: HKCU, 1: RUN + "LupaBin"}),
     ("RegSetKeyValueW", {1: RUN + "ner"}),
     ("RegSetKeyValueW", {0: HKU, 1: RUN}),  # no user below HKEY_USERS
-    # executable but not writable, unsupported, or with a bit Dissect does not name
+    # executable but not writable, unsupported, or with a bit LupaBin does not name
     ("VirtualAlloc", {3: winapi.PAGE_EXECUTE_READ}),
     ("VirtualAlloc", {3: winapi.PAGE_EXECUTE_WRITECOPY}),
     ("VirtualAlloc", {3: 0x04}),
-    ("VirtualProtect", {2: 0x20000040}),  # a bit Dissect does not name
+    ("VirtualProtect", {2: 0x20000040}),  # a bit LupaBin does not name
     ("VirtualProtect", {2: winapi.PAGE_EXECUTE_READWRITE | winapi.PAGE_EXECUTE}),
     ("VirtualProtect", {}),
     # rights that do not modify memory, or MAXIMUM_ALLOWED
     ("OpenProcess", {0: 0x10}),
     ("OpenProcess", {0: winapi.MAXIMUM_ALLOWED}),
     # the flag or the value the condition needs is absent or unknown
-    ("MoveFileExW", {0: r"C:\Dissect\old.txt", 2: 1}),
-    ("MoveFileExW", {0: r"C:\Dissect\old.txt"}),
+    ("MoveFileExW", {0: r"C:\LupaBin\old.txt", 2: 1}),
+    ("MoveFileExW", {0: r"C:\LupaBin\old.txt"}),
     ("CreateServiceW", {3: 0xF01FF, 5: 2}),
     ("WinExec", {1: 0}),
     ("ShellExecuteW", {1: "open"}),
@@ -423,7 +423,7 @@ def test_a_call_that_does_not_meet_the_condition_is_not_a_capability(function, c
 
 
 def two_mutexes():
-    return build_call_demo("CreateMutexW", {2: "DissectOne"}, {}, {2: "DissectTwo"})
+    return build_call_demo("CreateMutexW", {2: "LupaBinOne"}, {}, {2: "LupaBinTwo"})
 
 
 def test_an_item_cites_every_case_with_all_its_arguments_in_report_order():
@@ -451,7 +451,7 @@ def test_hiding_a_case_or_altering_the_statement_does_not_validate():
 
 
 def test_long_lists_of_cases_are_cut_and_say_how_many_more():
-    names = [{2: f"Dissect{n:02}"} for n in range(capabilities.CASES_SHOWN + 3)]
+    names = [{2: f"LupaBin{n:02}"} for n in range(capabilities.CASES_SHOWN + 3)]
     _, _, items = found(build_call_demo("CreateMutexW", *names))
     cases = items["capability.named_mutex@1"].slots["cases"]
     assert len(cases) == capabilities.CASES_SHOWN + 1
@@ -514,12 +514,12 @@ def test_the_summary_says_when_the_code_could_not_be_walked():
 
 def test_the_summary_warns_about_create_process_w_command_lines():
     part = summary_of(rendered(build_call_demo("CreateProcessW", {})))
-    assert "CreateProcessW, cuya línea de órdenes Dissect no lee" in part
+    assert "CreateProcessW, cuya línea de órdenes LupaBin no lee" in part
 
 
 def test_the_summary_warns_when_the_arguments_are_partial():
     limits = Limits(code=CodeLimits(argument_instructions=1))
-    part = summary_of(rendered(build_call_demo("CreateMutexW", {2: "Dissect"}), limits=limits))
+    part = summary_of(rendered(build_call_demo("CreateMutexW", {2: "LupaBin"}), limits=limits))
     assert "quedaron incompletos" in part
 
 
@@ -535,7 +535,7 @@ def test_the_summary_repeats_the_low_walk_density_note():
 def test_every_capability_states_its_measured_benign_prevalence():
     assert set(capabilities.BENIGN) == {c.id for c in capabilities.CAPABILITIES}
     assert all(0 <= n <= capabilities.BENIGN_FILES for n in capabilities.BENIGN.values())
-    _, _, items = found(build_call_demo("CreateMutexW", {2: "Dissect"}))
+    _, _, items = found(build_call_demo("CreateMutexW", {2: "LupaBin"}))
     statement = items["capability.named_mutex@1"].statement
     assert statement.endswith(
         "En binarios benignos medidos, 105 de 3.087 (3,40 %) contienen algún caso."
@@ -589,7 +589,7 @@ def test_run_once_ex_and_its_subkeys_below_the_machine_key_are_run_keys(subkey):
         {0: HKCU, 1: RUN_ONCE_EX + r"\0001"},  # the source places it in HKLM only
         {1: RUN_ONCE_EX + r"\0001"},  # an unknown root could be HKCU
         {0: HKLM, 1: RUN_ONCE_EX + "tra"},
-        {0: HKLM, 1: RUN + r"\Dissect"},  # subkeys of Run are not Run
+        {0: HKLM, 1: RUN + r"\LupaBin"},  # subkeys of Run are not Run
     ],
 )
 def test_other_keys_near_run_once_ex_are_not_run_keys(call):
@@ -602,7 +602,7 @@ def test_other_keys_near_run_once_ex_are_not_run_keys(call):
     [
         ({0: HKLM, 1: WINLOGON, 2: "Userinit"}, True),
         ({0: HKCU, 1: WINLOGON, 2: "shell"}, True),
-        ({0: HKLM, 1: WINLOGON + r"\Notify\Dissect", 2: "DllName"}, True),
+        ({0: HKLM, 1: WINLOGON + r"\Notify\LupaBin", 2: "DllName"}, True),
         ({1: WINLOGON + r"\Notify"}, True),  # unknown root: the end of the subkey
         ({0: HKLM, 1: WINLOGON, 2: "AutoAdminLogon"}, False),
         ({0: HKLM, 1: WINLOGON}, False),  # the value name is unknown

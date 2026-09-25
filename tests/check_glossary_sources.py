@@ -13,7 +13,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from dissect.glossary.catalog import load_glossary
+from lupabin.glossary.catalog import load_glossary
 
 TIMEOUT = 20
 MAX_PAGE = 8 * 1024 * 1024
@@ -22,7 +22,7 @@ MAX_PAGE = 8 * 1024 * 1024
 def fetch(url: str) -> tuple[str, str]:
     if not url.startswith("https://"):  # the entry model already requires it
         return "error: not https", ""
-    agent = {"User-Agent": "dissect-glossary-check/1"}
+    agent = {"User-Agent": "lupabin-glossary-check/1"}
     request = urllib.request.Request(url, headers=agent)  # noqa: S310
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310

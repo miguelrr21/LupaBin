@@ -1,6 +1,6 @@
 # Código de conducta
 
-Dissect es un proyecto educativo. Participa con respeto, paciencia y disposición a corregir errores.
+LupaBin es un proyecto educativo. Participa con respeto, paciencia y disposición a corregir errores.
 
 - Critica ideas y código, no a las personas.
 - Distingue hechos comprobados de hipótesis; corregir una afirmación es parte del aprendizaje.
