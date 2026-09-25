@@ -1,7 +1,5 @@
 # Hoja de ruta y trabajo pendiente
 
-> **Nombre:** el proyecto se llamaba **Dissect** hasta el 2026-09-25 y ahora es **LupaBin** (paquete y comando `lupabin`, imagen `lupabin-worker`, variables `LUPABIN_*` y catálogos `lupabin-…`). Los esquemas históricos de `docs/schemas/` conservan los identificadores con los que se publicaron.
-
 Actualizado: 2026-09-25 (Fase 5 completa: entregas 5.1 a 5.7).
 
 ## Objetivo que guía todo lo siguiente

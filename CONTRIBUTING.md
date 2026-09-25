@@ -1,5 +1,9 @@
 # Contribuir a LupaBin
 
+## Autoría, licencia y revisión
+
+LupaBin es un proyecto de **Miguel Ángel Rodríguez Romero**, que revisa cada aportación y decide si entra. El código se distribuye con la licencia Apache 2.0 (`LICENSE`), que obliga a conservar `NOTICE` y a nombrar al autor. El nombre y el logo están reservados (`TRADEMARKS.md`). Para que una contribución pueda aceptarse, hay que aceptar el acuerdo de contribución ([CLA.md](CLA.md)) marcando su casilla en el pull request.
+
 ## Principio principal
 
 Es mejor abstenerse que enseñar algo falso. Lee `AGENTS.md` y `docs/evidence-schema.md` antes de cambiar modelos, extractores o explicaciones. Distingue hechos, hipótesis y conocimiento general. No conviertas un fallo del parser en ausencia de comportamiento.
