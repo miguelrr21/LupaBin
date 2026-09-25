@@ -156,12 +156,17 @@ def create_app(
             return failure("image_unavailable", 503)
         return JSONResponse({"status": "ok", "image": IMAGE})
 
-    async def analyze(request: Request) -> Response:
-        client = client_address(
+    def visitor(request: Request) -> str:
+        return client_address(
             request.client.host if request.client else None,
             request.headers.get("x-forwarded-for"),
             settings.trust_proxy,
+            request.headers.get("cf-connecting-ip"),
+            settings.cloudflare,
         )
+
+    async def analyze(request: Request) -> Response:
+        client = visitor(request)
         if not rate.allow(client):
             minutes = round(settings.window / 60)
             return failure(
@@ -198,11 +203,7 @@ def create_app(
     def vt_refused(request: Request, limit: RateLimit) -> Response | None:
         if not settings.virustotal:
             return failure("virustotal_off", 404, "Este servidor no consulta VirusTotal.")
-        client = client_address(
-            request.client.host if request.client else None,
-            request.headers.get("x-forwarded-for"),
-            settings.trust_proxy,
-        )
+        client = visitor(request)
         if not limit.allow(client):
             return failure(
                 "rate_limited",
