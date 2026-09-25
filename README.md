@@ -1,6 +1,6 @@
 # LupaBin
 
-Tutor de análisis estático de binarios, centrado en evidencias verificables.
+Tutor de análisis estático de binarios, centrado en evidencias verificables. Creado por [Miguel Ángel Rodríguez Romero](https://github.com/miguelrr21). *English overview: [README.en.md](README.en.md).*
 
 **Si no hay evidencia suficiente, no se afirma.** Una importación no demuestra ejecución ni intención maliciosa; un resultado vacío no significa que el archivo sea seguro.
 
@@ -212,4 +212,4 @@ uv run python -m tests.decode_eval timing
 
 ## Contribuir y licencia
 
-Lee [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) y el [código de conducta](CODE_OF_CONDUCT.md). Solo se admiten fixtures sintéticos e inofensivos. El proyecto se distribuye bajo [Apache-2.0](LICENSE); las dependencias conservan sus licencias.
+Lee [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) y el [código de conducta](CODE_OF_CONDUCT.md). Solo se admiten fixtures sintéticos e inofensivos. LupaBin es obra de Miguel Ángel Rodríguez Romero y se distribuye con la licencia [Apache-2.0](LICENSE): puedes usarlo, modificarlo, hacer fork y comercializarlo, siempre que conserves el archivo [NOTICE](NOTICE) y nombres al autor (*"Basado en LupaBin, de Miguel Ángel Rodríguez Romero"*). El nombre y el logo están reservados ([TRADEMARKS.md](TRADEMARKS.md)), y las contribuciones requieren aceptar el [acuerdo de contribución](CLA.md). Las dependencias conservan sus licencias.

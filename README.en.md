@@ -1,5 +1,7 @@
 # LupaBin
 
+*By [Miguel Ángel Rodríguez Romero](https://github.com/miguelrr21).*
+
 **A static-analysis tutor for Windows executables.** LupaBin reads a PE file without ever running it, says what its bytes contain, and explains every statement: which evidence it cites, what it does *not* prove, and where to read more. It is not an antivirus and gives no verdicts.
 
 The didactic report, the glossary and the web interface are in Spanish (the structure supports other languages; translations are welcome). This page is an English overview; the full documentation is in [README.md](README.md).
@@ -45,4 +47,4 @@ Samples are never executed or emulated. Parsers run in a container with no netwo
 
 ## Contributing and licence
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) (in Spanish; issues and pull requests in English are welcome). Licensed under the [Apache License 2.0](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md) (in Spanish; issues and pull requests in English are welcome). Created by Miguel Ángel Rodríguez Romero and licensed under the [Apache License 2.0](LICENSE): you may use, modify, fork and sell it, as long as you keep the [NOTICE](NOTICE) file and credit the author ("Based on LupaBin, by Miguel Ángel Rodríguez Romero"). The LupaBin name and logo are reserved ([TRADEMARKS.md](TRADEMARKS.md)); contributions require accepting the [CLA](CLA.md).

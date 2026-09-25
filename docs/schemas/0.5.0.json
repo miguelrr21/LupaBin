@@ -281,8 +281,8 @@
       "additionalProperties": false,
       "properties": {
         "catalog": {
-          "const": "dissect-api-semantics-v4",
-          "default": "dissect-api-semantics-v4",
+          "const": "lupabin-api-semantics-v4",
+          "default": "lupabin-api-semantics-v4",
           "title": "Catalog",
           "type": "string"
         },
@@ -2161,7 +2161,7 @@
       "additionalProperties": false,
       "properties": {
         "catalog": {
-          "const": "dissect-xor-cribs-v3",
+          "const": "lupabin-xor-cribs-v3",
           "title": "Catalog",
           "type": "string"
         },
