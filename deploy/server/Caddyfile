@@ -1,8 +1,8 @@
 # Dissect detrás de Caddy.
 #
-# En la red local, Caddy sirve la web por HTTP en el puerto 80.
-# Cuando tengas un dominio que apunte a tu IP pública, y los puertos 80 y 443 del router
-# redirigidos a la Raspberry Pi, cambia ":80" por el dominio, por ejemplo:
+# Sin dominio, Caddy sirve la web por HTTP en el puerto 80 de la IP pública.
+# Cuando tengas un dominio (sirve uno gratuito de DuckDNS) que apunte a la IP del servidor, y 80 y 443
+# abiertos en el cortafuegos del proveedor, cambia ":80" por el dominio, por ejemplo:
 #
 #     dissect.tudominio.es {
 #
