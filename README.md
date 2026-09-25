@@ -65,6 +65,19 @@ El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, ti
 
 Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md) y [Fase 5](docs/superpowers/specs/2026-09-24-capabilities-design.md).
 
+## La web
+
+`dissect-web` sirve el mismo análisis aislado y el mismo informe didáctico en el navegador: se sube un archivo y la página muestra el resumen de capacidades, los hechos, las inferencias, la cobertura, VirusTotal y el glosario, con la descarga del informe en JSON y en Markdown. No guarda ni la muestra ni el informe, y aplica límites de tamaño y de análisis por IP. Todo texto de la muestra se neutraliza en el servidor y la página lo inserta solo como texto.
+
+Para probarla en tu equipo (con Docker y la imagen construida):
+
+```text
+uv sync --extra web
+uv run dissect-web
+```
+
+y abre `http://127.0.0.1:8080`. Para desplegarla en una Raspberry Pi, con HTTPS cuando tengas dominio, sigue [la guía](docs/deploy-raspberry-pi.md). Diseño: [web](docs/superpowers/specs/2026-09-25-web-design.md).
+
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
 Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), Dissect añade por defecto los resultados de VirusTotal como **fuente externa, no verificada por Dissect**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
