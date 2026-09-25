@@ -61,8 +61,10 @@ CREATE_PROCESS_W = (
     "estar en memoria escribible): lo que ejecuta esa llamada no aparece aquí."
 )
 ONE_CALL = (
-    "Solo se reconocen capacidades de una sola llamada: las que encadenan llamadas, como "
-    "abrir una clave y escribir en ella después, no aparecen."
+    "Casi todas las capacidades son de una sola llamada. Las que encadenan llamadas solo se "
+    "reconocen en x64 y en un caso (abrir una clave Run o Winlogon y llamar a RegSetValueEx "
+    "en el mismo rango de función de .pdata), sin seguir el identificador entre ellas: "
+    "el resto no aparece."
 )
 
 

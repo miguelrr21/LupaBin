@@ -197,3 +197,24 @@ def to_markdown_lines(report: VirusTotalReport) -> list[str]:
     if report.status in ("found", "queued"):
         lines += ["", f"Ficha: <{report.permalink}>"]
     return lines
+
+
+def structured(report: VirusTotalReport) -> dict[str, object]:
+    """The same content as the text and Markdown sections, as data for the web page.
+    Strings are not neutralised here: the web view neutralises every string it sends."""
+    return {
+        "title": TITLE.split(": ", 1)[1],
+        "disclaimer": DISCLAIMER,
+        "status": report.status,
+        "note": _status_line(report),
+        "stats": dict(report.stats),
+        "rows": [{"label": label, "value": value} for label, value in _facts(report)],
+        "behaviour": [
+            {"label": label, "values": values}
+            for name, label in BEHAVIOUR_LABELS
+            if (values := _items(report.behaviour, name))
+        ],
+        "omitted": report.behaviour.omitted,
+        "uploaded": report.uploaded,
+        "permalink": report.permalink if report.status in ("found", "queued") else None,
+    }
