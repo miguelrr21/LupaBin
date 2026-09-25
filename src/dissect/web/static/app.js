@@ -370,6 +370,18 @@ function virusTotalFailed(result, message) {
 
 function applyVirusTotal(result, vt) {
   if (result !== lastResult) return; // the user moved on to another file
+  const following = result.vt && result.vt.state === "following";
+  if (following && vt.status === "unavailable" && vt.problem === "quota_exceeded") {
+    // the server's shared quota is busy: keep following, it frees up within a minute
+    clearTimeout(vtTimer);
+    vtTimer = setTimeout(() => follow(result, result.data.virustotal.sha256, result.vt.analysis), VT_FOLLOW_MS);
+    if (Date.now() - result.vt.since > VT_FOLLOW_LIMIT_MS) {
+      stopFollowing();
+      result.vt = { state: "late" };
+      refreshVirusTotal();
+    }
+    return;
+  }
   result.data.virustotal = vt;
   if (vt.status === "queued" && vt.analysis) {
     if (!result.vt || result.vt.state !== "following") {
