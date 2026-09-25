@@ -1,12 +1,12 @@
 {
  "format_version": "1",
  "catalog_id": "lupabin_glossary",
- "revision": "1.6.0",
+ "revision": "1.7.0",
  "entries": [
   {
    "id": "analysis.coverage",
    "filename": "analysis.coverage.toml",
-   "sha256": "412717850f72fd74491658cbfe143b15f8aadadf994150083339fdf5f73bc50e"
+   "sha256": "6fd968e9e54d0877da7c9413237f3b38e7a544c01320c8fb4021662fdee2f2e8"
   },
   {
    "id": "api.family.crypto",
@@ -86,12 +86,12 @@
   {
    "id": "attack.technique",
    "filename": "attack.technique.toml",
-   "sha256": "821d41499fa05065928018f000a4623c8c4170b4342ae2ec5b65da9ca59a7394"
+   "sha256": "6a5d73dc4139d64a26f9d266d2d518436b6010539be618be65f652c5ab7d274c"
   },
   {
    "id": "capability.static",
    "filename": "capability.static.toml",
-   "sha256": "d3ed4fd55da5b5c7fbab3fcfe30d794b149d67c81cb407d7e7c15a0f7600fdb9"
+   "sha256": "6edb1592afb6f7db56c8f5e65c033c0f2b357f7bdb88f3098383fc0334e6f2b7"
   },
   {
    "id": "code.call_argument",
@@ -111,37 +111,37 @@
   {
    "id": "decode.base64",
    "filename": "decode.base64.toml",
-   "sha256": "914955d2b7903bc159f4989fef880775a19410a155067e5f6847b5e20f913ca3"
+   "sha256": "c382848206dd9c37054391381c3f068efda89566814eba837a46fee0f931aaf2"
   },
   {
    "id": "decode.crib",
    "filename": "decode.crib.toml",
-   "sha256": "afb36e18c34ad3856e04f9525f30714c4fde2871b16dbe96e6ae9c66c170eb8f"
+   "sha256": "84c9397ad18b21bedaa7c8be46e25f6f4f47ab5586a320eeebb1fc4f8f441973"
   },
   {
    "id": "decode.hex",
    "filename": "decode.hex.toml",
-   "sha256": "cca250a33653315aeedf9d0cf6f3a07d7c50dce26ed9009978414fc2730e1e1b"
+   "sha256": "7a41d7773b57d7baf44cfea452fdc46ed92d919a764687fbe0b2b36623037640"
   },
   {
    "id": "decode.key_reuse",
    "filename": "decode.key_reuse.toml",
-   "sha256": "5843f03de934dd9f47ad772d8ea5e9e9d1fde2f0b6aea503b183159630ac1bce"
+   "sha256": "3451116394adbeb534158b5a6260792367ab037115fe3a69ab627cb0682a715f"
   },
   {
    "id": "decode.xor",
    "filename": "decode.xor.toml",
-   "sha256": "e5a67a6e02b345438cc9def10717e1ae0bcf5775dcf6995701bf44c4fd8aa5a7"
+   "sha256": "c19ab920d412d42ef04e456586078b678435b43acfc17d850a469d7307d31aa2"
   },
   {
    "id": "entropy.shannon",
    "filename": "entropy.shannon.toml",
-   "sha256": "71fad0d1ef210b81d12a7f1bda294295e40725ff26f298eac62f2cd1341b09e6"
+   "sha256": "7ad2a30ebcc6d5a5709279e5f11a2b2f0dff95c30e8066a7eeadcec71147078f"
   },
   {
    "id": "evidence.confidence",
    "filename": "evidence.confidence.toml",
-   "sha256": "2236213470de378ce43ae88dbcfab2894ff8176441cfa659dc5d1642a9b564ee"
+   "sha256": "6ce606908076762b65e004995484ed6dc4146776952555d58df23b03a6af33d4"
   },
   {
    "id": "hash.md5",
@@ -156,32 +156,32 @@
   {
    "id": "pe.anomaly",
    "filename": "pe.anomaly.toml",
-   "sha256": "e85092b9d6477b99ded9ee037e3333b729ac9ae3c5434f94da9c56aba93652c7"
+   "sha256": "474aebfed1e82c7b90f1611b54050311aebdc1bee01ee9ae882284e350acc18e"
   },
   {
    "id": "pe.anomaly.entry_point_outside_image",
    "filename": "pe.anomaly.entry_point_outside_image.toml",
-   "sha256": "8c6b303a33b356dd0f5e8d9bc9d65777cf8c555b2e301bc751acb671a55c870d"
+   "sha256": "d361b04032c8f3390c6b08e083e44bc6afdb4f3d9ca8e76f3ccbb3b0aa5542e3"
   },
   {
    "id": "pe.anomaly.section_exceeds_image",
    "filename": "pe.anomaly.section_exceeds_image.toml",
-   "sha256": "291c0bdad89b41c9b2435d9f57f9b6d1f07b31124fb1d8cc5c9ec52386b5167a"
+   "sha256": "60ba4b701ea6eb90358a40f4915c48fd8481f645d1f187b1383c4c0527e3b0be"
   },
   {
    "id": "pe.anomaly.section_raw_out_of_bounds",
    "filename": "pe.anomaly.section_raw_out_of_bounds.toml",
-   "sha256": "ea74afab5ea41350376ceb781cb228f3e631d6f47420ee679976d0fd23a44d5f"
+   "sha256": "a95bd5a0346aa24d52ca1dd7d14960a7f224f558cabfe6e657e109618959965e"
   },
   {
    "id": "pe.anomaly.section_raw_overlap",
    "filename": "pe.anomaly.section_raw_overlap.toml",
-   "sha256": "1db7d7e44502d2fdae1384d871661b4411b1ebdca9643cd6baf2548f2891682e"
+   "sha256": "2deb0eaa00b1dc2f21cfa91f24457012cb7f262fc1aea62ff13ea3eb3258aeda"
   },
   {
    "id": "pe.anomaly.section_virtual_overlap",
    "filename": "pe.anomaly.section_virtual_overlap.toml",
-   "sha256": "02e45ab24105cff478eadcf19f03fcb279a5d0977a6fcf5ec97569ac65471732"
+   "sha256": "d8671a35a343fa8b942c1cfd17daa62bae4d623871cc0eebba50dd96acc65863"
   },
   {
    "id": "pe.exports",
@@ -236,7 +236,7 @@
   {
    "id": "strings.literal",
    "filename": "strings.literal.toml",
-   "sha256": "6a225300b924cd39bbfc98cf88d55918c8e0acd04e54302cbf11b644df89512c"
+   "sha256": "c4b0fa4fc848922ddae2d0f96b46b9ad5c5ce4cb3d19f9851456ac4254ccf9ce"
   },
   {
    "id": "yara.match",

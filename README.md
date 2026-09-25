@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables. C
 
 ## Estado y alcance
 
-Contrato de hechos 0.6.0 (Fases 1A, 1B, 2, 4 y 5.4): ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Fase 3: un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. Fase 5: un resumen de lo que contiene el código (capacidades como crear un servicio, escribir en una clave `Run` o pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos. VirusTotal se consulta por defecto como fuente externa (ver más abajo). No ejecuta ni emula la muestra. No incluye todavía web, LLM, capa, FLOSS ni desempaquetado.
+Contrato de hechos 0.6.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. Un resumen de lo que contiene el código (capacidades como crear un servicio, escribir en una clave `Run` o pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos. VirusTotal se consulta por defecto como fuente externa (ver más abajo), y hay una web con el mismo análisis. No ejecuta ni emula la muestra. No incluye LLM, capa, FLOSS ni desempaquetado.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -35,19 +35,17 @@ uv run --frozen lupabin analyze "ruta/al/archivo.exe" --json > informe.json
 uv run --frozen lupabin explain informe.json --sample "ruta/al/archivo.exe"
 ```
 
-Con `--sample`, el host repite sus comprobaciones contra la muestra (hashes, cada decodificación y cada coincidencia YARA) y rechaza un informe que los bytes contradigan. Sin `--sample`, el informe explicado lleva un aviso visible: su estructura es válida, pero nada garantiza que proceda de la muestra. `--format json` emite el documento de explicaciones (contrato 0.1.0).
+Con `--sample`, el host repite sus comprobaciones contra la muestra (hashes, cada decodificación, coincidencia YARA, llamada, argumento y rango de función) y rechaza un informe que los bytes contradigan. Sin `--sample`, el informe explicado lleva un aviso visible: su estructura es válida, pero nada garantiza que proceda de la muestra. `--format json` emite el documento de explicaciones (contrato 0.1.0).
 
 El parser se ejecuta en un contenedor sin red, sin capacidades adicionales, con usuario no root y raíz de solo lectura. La CLI no ejecuta el parser en el host si Docker falla. La imagen se resuelve a su ID local antes del análisis. No se montan archivos ni el socket Docker en el worker; la muestra se transmite como bytes por stdin.
-
-En el entorno Windows de desarrollo preparado para este repositorio, si uv no está en el PATH se puede sustituir `uv` por `.\.bootstrap\Scripts\uv.exe`. La instalación local `.bootstrap` no forma parte del repositorio distribuido.
 
 Para generar una entrada sintética en lugar de aportar un binario:
 
 ```text
-uv run python -m tests.fixtures.pe_builder --scenario demo --output samples/phase1a-complete.bin
-uv run --frozen lupabin analyze samples/phase1a-complete.bin --json
-uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/phase1a-partial.bin
-uv run --frozen lupabin analyze samples/phase1a-partial.bin --json
+uv run python -m tests.fixtures.pe_builder --scenario demo --output samples/demo.bin
+uv run --frozen lupabin analyze samples/demo.bin --json
+uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/partial.bin
+uv run --frozen lupabin analyze samples/partial.bin --json
 ```
 
 El generador no sobrescribe archivos existentes. Consulta [la procedencia de los fixtures](samples/README.md). No ejecutes los archivos generados.
@@ -61,9 +59,9 @@ El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, ti
 - Las cifras de contexto están medidas. Una entropía de 7,2 o más solo la alcanza el 0,34 % de las secciones de 4 KiB o más en 55.313 binarios benignos. Los imports se agrupan en nueve familias curadas con su prevalencia benigna: por ejemplo, el 32,2 % de los binarios benignos importa alguna función de comprobación de depuradores.
 - Todo texto que procede de la muestra (nombres, cadenas, textos decodificados) se neutraliza antes de mostrarse: los caracteres de control, de escape de terminal y bidi se convierten en escapes visibles, y en Markdown van en bloques de código inertes.
 
-- Las capacidades (Fase 5) juntan una llamada y sus argumentos constantes en una frase como «el código contiene 1 llamada de este tipo: crear un servicio de Windows», con los casos (`servicio «X», binario «Y», inicio SERVICE_AUTO_START`). Dicen lo que el código contiene, no que el programa lo haga, y dan su frecuencia en 3.087 binarios benignos: por ejemplo, el 2,24 % contiene memoria ejecutable y escribible. Si no sabe algo (la raíz de una clave, el proceso de destino), lo dice.
+- Las capacidades juntan una llamada y sus argumentos constantes en una frase como «el código contiene 1 llamada de este tipo: crear un servicio de Windows», con los casos (`servicio «X», binario «Y», inicio SERVICE_AUTO_START`). Dicen lo que el código contiene, no que el programa lo haga, y dan su frecuencia en 3.087 binarios benignos: por ejemplo, el 2,33 % contiene memoria ejecutable y escribible. Si no sabe algo (la raíz de una clave, el proceso de destino), lo dice.
 
-Diseño y mediciones: [Fase 3](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md) y [Fase 5](docs/superpowers/specs/2026-09-24-capabilities-design.md).
+Método y mediciones: [cómo trabaja LupaBin](docs/metodo.md).
 
 ## La web
 
@@ -76,7 +74,7 @@ uv sync --extra web
 uv run lupabin-web
 ```
 
-y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker. Diseño: [web](docs/superpowers/specs/2026-09-25-web-design.md).
+y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker.
 
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
@@ -88,21 +86,21 @@ uv run --frozen lupabin analyze "ruta/al/archivo.exe" --no-virustotal
 uv run --frozen lupabin virustotal --sha256 <sha256> --format json
 ```
 
-- `analyze` y `explain` consultan VirusTotal sin opciones (decisión del usuario del 2026-09-24). No lo hacen con `--no-virustotal`, con la variable `LUPABIN_VIRUSTOTAL=off` ni con `--json`, que emite el informe de hechos; el documento de VirusTotal se obtiene con `lupabin virustotal --format json`. Sin clave, la sección explica cómo configurarla y no se conecta a nada; sin red, dice por qué no hay datos. En los dos casos el análisis local no cambia.
+- `analyze` y `explain` consultan VirusTotal sin opciones. No lo hacen con `--no-virustotal`, con la variable `LUPABIN_VIRUSTOTAL=off` ni con `--json`, que emite el informe de hechos; el documento de VirusTotal se obtiene con `lupabin virustotal --format json`. Sin clave, la sección explica cómo configurarla y no se conecta a nada; sin red, dice por qué no hay datos. En los dos casos el análisis local no cambia.
 
-- Primero se consulta solo el SHA-256. Si VirusTotal no conoce el archivo, **LupaBin lo sube automáticamente** (revisión 3 del diseño, a petición del usuario), con el nombre genérico `sample`, y espera su análisis hasta 3 minutos. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: para archivos internos o confidenciales usa `--no-upload-to-virustotal`, o `LUPABIN_VIRUSTOTAL_UPLOAD=off` para no subir nunca.
+- Primero se consulta solo el SHA-256. Si VirusTotal no conoce el archivo, **LupaBin lo sube automáticamente**, con el nombre genérico `sample`, y espera su análisis hasta 3 minutos. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: para archivos internos o confidenciales usa `--no-upload-to-virustotal`, o `LUPABIN_VIRUSTOTAL_UPLOAD=off` para no subir nunca.
 - Todo ocurre en el host: el worker sigue sin red. Una etiqueta es la opinión de un motor, y el comportamiento se observó en los sandboxes de VirusTotal, no en tu equipo. "VirusTotal no conoce este archivo" no dice nada sobre su peligrosidad.
 - La API pública admite 500 consultas al día y 4 por minuto, y no puede usarse en productos o servicios comerciales.
 
-Diseño: [integración con VirusTotal](docs/superpowers/specs/2026-09-23-virustotal-design.md).
+Más detalle: [VirusTotal](docs/metodo.md#virustotal).
 
 ## Salida y abstención
 
 La salida `--json` es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
 
-- `completed`: los cuatro extractores completaron su cobertura declarada; no es un veredicto de seguridad.
+- `completed`: las cinco fuentes (`pe`, `strings`, `yara`, `decode` y `code`) completaron su cobertura declarada; no es un veredicto de seguridad.
 - `partial`: una parte se revisó, pero existen componentes bloqueados, errores u omisiones. Puede no haber hallazgos.
-- `failed`: los cuatro extractores quedaron bloqueados, o la infraestructura no pudo producir un informe validado.
+- `failed`: las cinco fuentes quedaron bloqueadas, o la infraestructura no pudo producir un informe validado.
 
 La cobertura está en `extractor_runs[].components`, con contadores y estados `complete`, `partial` o `blocked`. `extractor_errors` describe fallos; `limitations` describe cuotas, truncamientos explícitos y warnings. Cero resultados con cobertura completa no equivale a un error ni demuestra seguridad.
 
@@ -144,7 +142,7 @@ Cada `decoded_string` dice exactamente esto: "estos bytes, transformados con est
 - **Base64 y hexadecimal** (`component: decode_strings`): sobre las cadenas ya extraídas, con validación estricta (Base64 canónico de al menos 12 caracteres si lleva relleno `=` o 16 si no; hexadecimal que no sea solo dígitos decimales, porque un número como `2147483647` también es hexadecimal válido; el texto resultante debe ser imprimible y tener al menos 4 caracteres distintos). Citan en `provenance` la cadena que contiene los bytes codificados.
 - **XOR de clave repetida de 1 a 8 bytes** (`component: decode_xor`): sobre los bytes crudos, anclado en un catálogo versionado de cadenas de referencia (`anchor`, p. ej. `http://`, `kernel32.dll`, `\Registry\Machine\`; 62 en la versión 3). La clave no se elige entre candidatas: se deriva de los bytes y se publica en `transform.key_hex`, alineada con el inicio de `location`. Cualquiera puede comprobarla: `texto[i] = bytes[inicio + i] XOR clave[i mod longitud]`. Si una cadena usa una clave ya verificada en otro punto de la muestra (lo habitual en tablas de cadenas cifradas), también se descifra aunque su ancla sea corta, y cita en `provenance` la decodificación que estableció la clave.
 
-Límites honestos del método, medidos sobre más de 30.000 archivos benignos de Windows y programas instalados (0 decodificaciones espurias; todas las encontradas eran ofuscación real y se revisaron a mano) y documentados en [el diseño de la Fase 2](docs/superpowers/specs/2026-09-22-static-decoding-design.md):
+Límites honestos del método, medidos sobre más de 30.000 archivos benignos de Windows y programas instalados (0 decodificaciones espurias; todas las encontradas eran ofuscación real y se revisaron a mano) y documentados en [el método](docs/metodo.md#decodificación):
 
 - Un texto cifrado que **no contenga ninguna cadena del catálogo no se encuentra**.
 - Si la clave deja el texto cifrado todavía legible (claves pequeñas, típicamente `< 0x20`), **no se publica**: sin puntuar plausibilidad es indistinguible de texto normal. Esos bytes siguen visibles como `string`.
@@ -167,18 +165,17 @@ CLI -> lectura acotada + hashes -> Docker sin red
     -> PE (cabeceras, secciones, entropía, imports, exports, anomalías)
     -> cadenas literales independientes -> hijo YARA con catálogo propio
     -> decodificación: Base64/hex sobre cadenas, XOR anclado sobre bytes
+    -> código x86/x64: llamadas a imports, argumentos constantes y rangos de .pdata
     -> presupuesto y modelos Pydantic
-    -> validación de respuesta y reverificación de decodificaciones en el host -> JSON
+    -> validación de respuesta y reverificación de bytes en el host -> JSON
     -> explicaciones deterministas (host) + glosario con fuentes
     -> validación por regeneración -> texto / Markdown con texto de la muestra neutralizado
 ```
 
-- [Contrato y diseño](docs/evidence-schema.md).
+- [Contrato de evidencias](docs/evidence-schema.md).
+- [Cómo trabaja LupaBin: método y límites medidos](docs/metodo.md).
 - [JSON Schema generado](docs/evidence-schema.json) y [el de las explicaciones](docs/explanation-schema.json).
-- [Diseño de la Fase 3: explicaciones y glosario](docs/superpowers/specs/2026-09-23-didactic-glossary-design.md).
-- [Diseño de la Fase 5: capacidades](docs/superpowers/specs/2026-09-24-capabilities-design.md).
-- [Decisión sobre bytes originales](docs/decisions/001-original-import-bytes.md).
-- [Reglas de veracidad](AGENTS.md).
+- [Despliegue de la web](docs/deploy.md).
 
 El JSON Schema valida la forma; Pydantic añade invariantes entre campos, referencias y estados. Una cita existente no demuestra por sí sola la veracidad de una afirmación.
 
@@ -198,11 +195,11 @@ docker build --load -f docker/Dockerfile -t lupabin-worker:0.6.0 .
 uv run --frozen pytest -m docker
 ```
 
-Las pruebas Docker fallan si se solicitan sin motor o imagen; no se omiten silenciosamente. La suite ordinaria excluye explícitamente ese marcador. `docker compose build worker` es una alternativa de build; el servicio Compose de esta entrega es un worker de consola, no una web. `docker compose up` todavía no ofrece la experiencia web del MVP final.
+Las pruebas Docker fallan si se solicitan sin motor o imagen; no se omiten silenciosamente. La suite ordinaria excluye explícitamente ese marcador. `docker compose build worker` es una alternativa de build; el servicio Compose es el worker de consola. La web se sirve con `lupabin-web` (ver más arriba).
 
-Para actualizar los esquemas tras cambios aprobados en los modelos: `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. No editar manualmente el JSON generado. `uv run python -m tests.check_glossary_sources` comprueba con red que las fuentes del glosario y sus anclas siguen existiendo; no forma parte de la CI.
+Para actualizar los esquemas tras cambiar los modelos: `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. No editar manualmente el JSON generado. `uv run python -m tests.check_glossary_sources` comprueba con red que las fuentes del glosario y sus anclas siguen existiendo; no forma parte de la CI.
 
-Para repetir las mediciones de falsos positivos, cobertura y tiempo de la decodificación sobre un directorio de binarios benignos propio (solo se leen como bytes; no forma parte de la CI):
+Para repetir las mediciones sobre un directorio de binarios benignos propio (solo se leen como bytes; no forma parte de la CI; ver [el método](docs/metodo.md#repetir-las-mediciones)):
 
 ```text
 uv run python -m tests.decode_eval false-positives <directorio>
