@@ -74,7 +74,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.9.0"] = "0.9.0"
+    version: Literal["0.10.0"] = "0.10.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -146,7 +146,7 @@ def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | 
 
 
 class Report(Model):
-    schema_version: Literal["0.9.0"] = "0.9.0"
+    schema_version: Literal["0.10.0"] = "0.10.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
