@@ -228,7 +228,9 @@ def test_another_entry_after_the_setters_leaves_every_argument_unknown():
     code = args_demo_bytes(64, before=b"\x90")
     data = with_load_config(build_args_demo(bits=64, code=code), bits=64, guard=(0x2017,))
     report = analyze_bytes(data)
-    assert [f.kind for f in report.evidence if f.source == "code"] == ["api_call"]
+    # the pushed string is still a text the code uses; no argument is claimed
+    assert [f.kind for f in report.evidence if f.component == "call_arguments"] == []
+    assert [f.kind for f in report.evidence if f.kind == "api_call"] == ["api_call"]
     # the same bytes without that entry
     assert len(by_name(build_args_demo(bits=64, code=code))) == 3
 
