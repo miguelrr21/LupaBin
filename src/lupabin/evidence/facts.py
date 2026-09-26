@@ -3,6 +3,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
+from lupabin.evidence import toolchain
 from lupabin.evidence.primitives import (
     Component,
     EvidenceId,
@@ -469,6 +470,40 @@ class AnomalyEvidence(Fact):
     data: AnomalyData
 
 
+class ToolchainData(Model):
+    """Bytes of the catalog's exact form of a marker that a compiler, linker or
+    packager leaves in the file (evidence/toolchain.py)."""
+
+    catalog: Literal["lupabin-toolchains-v1"] = "lupabin-toolchains-v1"
+    marker: toolchain.Marker
+    raw_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2})+$", max_length=8192)]
+    # what the bytes say: the GCC ident, the Go version, the CLR runtime version or the
+    # Python library of a PyInstaller archive
+    text: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+
+    @model_validator(mode="after")
+    def exact_form(self) -> Self:
+        if toolchain.marker_text(self.marker, bytes.fromhex(self.raw_hex)) != self.text:
+            raise ValueError("marker text disagrees with its bytes")
+        return self
+
+
+class ToolchainEvidence(Fact):
+    kind: Literal["toolchain_marker"] = "toolchain_marker"
+    data: ToolchainData
+
+    @model_validator(mode="after")
+    def locates_its_bytes(self) -> Self:
+        where = self.location
+        if where.offset is None or where.length != len(self.data.raw_hex) // 2:
+            raise ValueError("a marker locates exactly its bytes")
+        if not toolchain.location_ok(self.data.marker, where):
+            raise ValueError("only the Go and CLR headers claim a place in the image")
+        if self.provenance.evidence_ids:
+            raise ValueError("a marker cites nothing but its own bytes")
+        return self
+
+
 class YaraEvidence(Model):
     id: EvidenceId
     source: Literal["yara"] = "yara"
@@ -496,6 +531,7 @@ Evidence = Annotated[
     | ExportEvidence
     | StringEvidence
     | AnomalyEvidence
+    | ToolchainEvidence
     | YaraEvidence
     | DecodedStringEvidence
     | ApiCallEvidence
@@ -512,6 +548,7 @@ Payload = (
     | ExportData
     | StringData
     | AnomalyData
+    | ToolchainData
     | YaraMatchData
     | DecodedStringData
     | ApiCallData

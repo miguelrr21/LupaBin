@@ -4,13 +4,14 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, Field, model_validator
 
+from lupabin.evidence import toolchain
 from lupabin.evidence.code import (
     validate_argument,
     validate_call,
     validate_function,
     validate_link,
 )
-from lupabin.evidence.facts import ApiCallEvidence
+from lupabin.evidence.facts import ApiCallEvidence, ToolchainEvidence
 from lupabin.evidence.facts import Evidence as Evidence
 from lupabin.evidence.facts import ImportData as ImportData
 from lupabin.evidence.primitives import (
@@ -26,6 +27,7 @@ from lupabin.evidence.primitives import Limits as Limits
 from lupabin.evidence.primitives import Location as Location
 from lupabin.evidence.primitives import Name as Name
 from lupabin.evidence.relations import validate_anomaly
+from lupabin.evidence.toolchain_checks import validate_markers
 from lupabin.evidence.yara import YaraContext, YaraReason, validate_matches
 
 Coverage = Literal["complete", "partial", "blocked"]
@@ -48,6 +50,7 @@ ErrorCode = (
         "string_length_limit",
         "entropy_limit",
         "anomaly_limit",
+        "toolchain_limit",
         "evidence_budget",
         "dependency_omitted",
         "output_limit",
@@ -109,7 +112,7 @@ class Run(Model):
     source: Source
     version: Annotated[str, Field(min_length=1, max_length=64)]
     status: Status
-    components: Annotated[tuple[ComponentRun, ...], Field(max_length=7)]
+    components: Annotated[tuple[ComponentRun, ...], Field(max_length=8)]
     evidence_count: NonNegative
 
     @model_validator(mode="after")
@@ -169,6 +172,7 @@ class Report(Model):
             "export": limits.exports,
             "string": limits.strings,
             "header_anomaly": limits.anomalies,
+            "toolchain_marker": toolchain.QUOTA,
             "yara_match": limits.yara.matches,
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
@@ -385,6 +389,7 @@ class Report(Model):
                 "entropy": "entropy",
                 "export": "exports",
                 "header_anomaly": "anomalies",
+                "toolchain_marker": "toolchain",
             }.get(fact.kind)
             if fact.kind == "import":
                 expected_component = "imports_" + fact.data.table
@@ -443,6 +448,9 @@ class Report(Model):
             degrees[fact.id] = len(refs)
             for ref in refs:
                 children[ref].append(fact.id)
+        validate_markers(
+            tuple(fact for fact in self.evidence if isinstance(fact, ToolchainEvidence)), sections
+        )
         ready = deque(key for key, degree in degrees.items() if degree == 0)
         visited = 0
         while ready:

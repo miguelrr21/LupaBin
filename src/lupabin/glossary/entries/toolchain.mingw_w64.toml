@@ -1,0 +1,12 @@
+id = "toolchain.mingw_w64"
+title = "Código de arranque de MinGW-w64"
+revision = "1.0.0"
+lang = "es"
+summary = "MinGW-w64 es un conjunto de cabeceras y bibliotecas para compilar programas de Windows con GCC; añade a cada programa un código de arranque propio, que contiene el mensaje «Mingw-w64 runtime failure:»."
+body = "El código de arranque se ejecuta antes que el programa del autor. Entre otras cosas, aplica las «pseudo-relocations»: ajustes de direcciones que el enlazador no pudo resolver al compilar.\n\nPara aplicarlas, ese código cambia temporalmente los permisos de memoria de las secciones con VirtualQuery y VirtualProtect, y si algo falla escribe el mensaje «Mingw-w64 runtime failure:». Por eso un programa compilado con MinGW-w64 suele importar y llamar a VirtualProtect aunque su autor nunca lo haga."
+not_proven = "Indica que el archivo incluye el código de arranque de MinGW-w64, no qué hace el resto del programa. Que el arranque use VirtualProtect no descarta que el autor también lo use."
+related = ["toolchain.marker", "toolchain.gcc_ident", "code.import_call"]
+sources = [
+  { title = "mingw-w64-crt/crt/pseudo-reloc.c", publisher = "Proyecto MinGW-w64", url = "https://github.com/mingw-w64/mingw-w64/blob/master/mingw-w64-crt/crt/pseudo-reloc.c", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: marcas de compilador", publisher = "Proyecto LupaBin", document = "docs/metodo.md#marcas-de-compilador", verified_on = 2026-09-26 },
+]

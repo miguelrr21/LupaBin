@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from lupabin.errors import LupaBinError
 from lupabin.evidence.code import verify_calls
 from lupabin.evidence.models import Limits, Report
+from lupabin.evidence.toolchain_checks import verify_markers
 from lupabin.evidence.yara import validate_matches
 from lupabin.extractors.decode import verify_decodings
 from lupabin.ingest.reader import from_bytes
@@ -128,6 +129,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         try:
             verify_decodings(report.evidence, blob.data)
             verify_calls(report.evidence, blob.data)
+            verify_markers(report.evidence, blob.data)
         except ValueError:
             raise LupaBinError("invalid_worker_output") from None
         context = report.yara_context

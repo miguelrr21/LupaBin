@@ -571,6 +571,63 @@ def build_code_demo(*, bits=32, **imports):
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)
 
 
+GCC_IDENT = b"GCC: (GNU) 13-win32\0"
+GO_VERSION = b"go1.26.5"
+PYTHON_LIBRARY = b"python311.dll"
+
+
+def rich_header(prefix, pairs, *, key=None):
+    """A Rich header for a file whose bytes before it are `prefix`; its key is the
+    linker's checksum unless `key` is given."""
+    from lupabin.evidence.toolchain import rich_checksum
+
+    if key is None:
+        key = rich_checksum(prefix, pairs)
+    values = [int.from_bytes(b"DanS", "little"), 0, 0, 0]
+    for compid, count in pairs:
+        values += [compid, count]
+    raw = b"".join(struct.pack("<I", value ^ key) for value in values)
+    return raw + b"Rich" + struct.pack("<I", key)
+
+
+def go_header(*, inline=True, flags=None, version=GO_VERSION):
+    raw = b"\xff Go buildinf:" + bytes([8, (2 if inline else 0) if flags is None else flags])
+    if not inline:
+        return raw
+    return raw + bytes(16) + bytes([len(version)]) + version
+
+
+def pyinstaller_cookie(archive, *, toc=16, toc_length=32, library=PYTHON_LIBRARY):
+    return struct.pack(
+        "!8sIIii64s", b"MEI\x0c\x0b\x0a\x0b\x0e", archive, toc, toc_length, 311, library
+    )
+
+
+def build_toolchain_demo(*, bits=32, go_inline=True, rich_key=None, idents=(GCC_IDENT,)):
+    """build_demo plus one of each toolchain marker, where each tool puts it: a Rich header
+    between the DOS header and the PE header, GCC idents (the first one twice) and the
+    MinGW-w64 message in .rdata, a Go header 16-byte aligned in .rdata, a CLR header its
+    data directory points to, and a PyInstaller archive appended after the sections."""
+    data = bytearray(build_demo(bits=bits))
+    pairs = ((0x01045D10, 3), (0x00FF7809, 1))
+    rich = rich_header(bytes(data[:0x40]), pairs, key=rich_key)
+    data[0x40 : 0x40 + len(rich)] = rich
+    at = 0xA00
+    for ident in (*idents, idents[0]):
+        data[at : at + len(ident)] = ident
+        at += (len(ident) + 15) // 16 * 16
+    message = b"Mingw-w64 runtime failure:\n\0"
+    data[0xB80 : 0xB80 + len(message)] = message
+    go = go_header(inline=go_inline)
+    data[0xC00 : 0xC00 + len(go)] = go  # RVA 0x2600
+    directory = 0x98 + (96 if bits == 32 else 112) + 8 * 14
+    struct.pack_into("<II", data, directory, 0x2800, 72)  # file offset 0xE00
+    struct.pack_into("<IHH", data, 0xE00, 72, 2, 5)
+    payload = bytes(range(64))
+    archive = payload + pyinstaller_cookie(len(payload) + 88)
+    return bytes(data) + archive
+
+
 def main():
     import argparse
     from pathlib import Path
@@ -589,6 +646,7 @@ def main():
             "code-demo",
             "args-demo",
             "capability-demo",
+            "toolchain-demo",
         ),
         default="basic",
     )
@@ -601,6 +659,8 @@ def main():
         data = build_capability_demo()
     elif args.scenario == "args-demo":
         data = build_args_demo(bits=args.bits)
+    elif args.scenario == "toolchain-demo":
+        data = build_toolchain_demo(bits=args.bits)
     elif args.scenario == "decode-demo":
         data = build_decode_demo(bits=args.bits)
     elif args.scenario in ("basic", "yara-limited"):

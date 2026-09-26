@@ -1,0 +1,11 @@
+id = "toolchain.marker"
+title = "Marca de compilador"
+revision = "1.0.0"
+lang = "es"
+summary = "Una marca de compilador es una secuencia de bytes que un compilador, un enlazador o un empaquetador deja en los archivos que produce, con una forma exacta y conocida."
+body = "Cada herramienta deja rastros propios: el enlazador de Microsoft escribe una cabecera Rich, GCC añade un texto de identificación, Go guarda una cabecera con su versión, .NET declara una cabecera CLR y PyInstaller añade un archivo al final del ejecutable.\n\nSaber con qué se hizo un programa ayuda a leer el resto del informe: parte del código y de las funciones importadas no la escribe el autor, sino que la añade la herramienta a todos los programas que produce.\n\nLupaBin solo publica una marca cuando sus bytes tienen exactamente la forma de su catálogo y están donde la herramienta los pone; si una comprobación falla, no la publica. Un archivo puede tener marcas de varias herramientas a la vez, por ejemplo un cargador enlazado con Visual Studio que lleva empaquetado un programa Python."
+not_proven = "Una marca puede copiarse, quitarse o fabricarse. No dice quién hizo el programa ni qué hace; y que no aparezca ninguna no significa nada."
+related = ["pe.format"]
+sources = [
+  { title = "Cómo trabaja LupaBin: marcas de compilador", publisher = "Proyecto LupaBin", document = "docs/metodo.md#marcas-de-compilador", verified_on = 2026-09-26 },
+]

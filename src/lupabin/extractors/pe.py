@@ -8,6 +8,7 @@ from lupabin.extractors.pe_exports import read_exports
 from lupabin.extractors.pe_imports import read_imports
 from lupabin.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
 from lupabin.extractors.pe_sections import read_sections
+from lupabin.extractors.pe_toolchain import read_toolchain
 
 
 class PEExtractor:
@@ -45,4 +46,5 @@ class PEExtractor:
         else:
             progress.issue("exports", "unsafe_mapping", blocked=True)
         read_checks(layout, collector, progress)
+        read_toolchain(layout, collector, progress)
         return Extraction("PE32" if layout.bits == 32 else "PE32+", progress)

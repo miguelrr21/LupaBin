@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "lupabin_glossary",
- "revision": "1.9.0",
+ "revision": "1.10.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -242,6 +242,41 @@
    "id": "strings.literal",
    "filename": "strings.literal.toml",
    "sha256": "c4b0fa4fc848922ddae2d0f96b46b9ad5c5ce4cb3d19f9851456ac4254ccf9ce"
+  },
+  {
+   "id": "toolchain.clr_header",
+   "filename": "toolchain.clr_header.toml",
+   "sha256": "fa352a2a7efe2c3a9257288d800e260f7d0d8f8fd120aa939acd00bdc54918bd"
+  },
+  {
+   "id": "toolchain.gcc_ident",
+   "filename": "toolchain.gcc_ident.toml",
+   "sha256": "33e87ff587552268cec9bc68a9a24a66f1cf793b280ec72df5dfa1f0c5cbf3f8"
+  },
+  {
+   "id": "toolchain.go_buildinfo",
+   "filename": "toolchain.go_buildinfo.toml",
+   "sha256": "b559bcb3f3333d254fa8f0b9cbdbbc78c10b8e85f7a94e2a336fcffb794bc7ae"
+  },
+  {
+   "id": "toolchain.marker",
+   "filename": "toolchain.marker.toml",
+   "sha256": "b57a103b5c226abea9364ff181f5bfc0430d6401908ef364b916aaba948ab314"
+  },
+  {
+   "id": "toolchain.mingw_w64",
+   "filename": "toolchain.mingw_w64.toml",
+   "sha256": "1cf01575ce13f6fdd6e722715a8102cffeda34656b7d3851ccf19cba796da849"
+  },
+  {
+   "id": "toolchain.pyinstaller",
+   "filename": "toolchain.pyinstaller.toml",
+   "sha256": "096264a05504f60f763430799c8eb90eb00ce89d14f0d876d97460c8190312fd"
+  },
+  {
+   "id": "toolchain.rich_header",
+   "filename": "toolchain.rich_header.toml",
+   "sha256": "72e2db84839603b5d29a96e981cca2ac34d84d80d74f64c1fcae080a1d43b515"
   },
   {
    "id": "yara.match",

@@ -1,0 +1,13 @@
+id = "toolchain.clr_header"
+title = "Cabecera CLR (.NET)"
+revision = "1.0.0"
+lang = "es"
+summary = "Un ensamblado .NET declara en su cabecera PE el directorio «CLR Runtime Header», que apunta a una cabecera CLI de 72 bytes: es lo que distingue un programa .NET de uno nativo."
+body = "El código de un ensamblado .NET está en un lenguaje intermedio (IL, o CIL), junto con metadatos que describen sus tipos y métodos. El runtime de .NET lo traduce a código de la máquina al ejecutarlo.\n\nLa cabecera CLI empieza por su tamaño (72 bytes) y por la versión de su formato, y dice dónde están los metadatos y el punto de entrada. Está definida en el estándar ECMA-335.\n\nEl análisis de código de LupaBin recorre instrucciones x86 y x64, no IL. En un ensamblado .NET solo ve, como mucho, un pequeño código nativo de arranque."
+not_proven = "Que un archivo sea .NET no dice nada de lo que hace. Y como LupaBin no analiza IL, la ausencia de llamadas o capacidades en su informe no dice nada del programa."
+related = ["toolchain.marker", "pe.header"]
+sources = [
+  { title = "PE Format: Optional Header Data Directories (Image Only)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-data-directories-image-only", verified_on = 2026-09-26 },
+  { title = "ECMA-335: Common Language Infrastructure (CLI)", publisher = "Ecma International", url = "https://www.ecma-international.org/publications-and-standards/standards/ecma-335/", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: marcas de compilador", publisher = "Proyecto LupaBin", document = "docs/metodo.md#marcas-de-compilador", verified_on = 2026-09-26 },
+]
