@@ -419,6 +419,51 @@ class CodeFunctionEvidence(Model):
         return self
 
 
+class FrameSlot(Model):
+    """A local variable: a displacement from the frame register."""
+
+    frame: Literal["ebp", "rsp", "rbp"]
+    displacement: Annotated[int, Field(ge=-(1 << 31), lt=1 << 31)]
+
+
+class LocalLinkData(Model):
+    """A call's parameter receives the address of a local variable (`phkResult`), and a
+    later call passes that variable's value (`hKey`): the value the first call leaves
+    there, if nothing in between changes it (the walk's rule)."""
+
+    method: Literal["frame-slot-v1"] = "frame-slot-v1"
+    slot: FrameSlot
+    writer_position: Annotated[int, Field(ge=0, le=15)]
+    writer_name: Annotated[str, Field(min_length=1, max_length=64)]
+    reader_position: Annotated[int, Field(ge=0, le=15)]
+    reader_name: Annotated[str, Field(min_length=1, max_length=64)]
+    raw_hex: InstructionHex  # the instruction that passes the value to the reader
+    address: Instruction  # the lea that takes the variable's address for the writer
+    passes: Instruction  # the push or stack store that passes that address
+
+
+class LocalLinkEvidence(Model):
+    id: EvidenceId
+    source: Literal["code"] = "code"
+    component: Literal["call_arguments"] = "call_arguments"
+    kind: Literal["local_link"] = "local_link"
+    location: Location  # the instruction that passes the value to the reader
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: LocalLinkData
+
+    @model_validator(mode="after")
+    def locates_its_instruction(self) -> Self:
+        where = self.location
+        if where.offset is None or where.rva is None or where.length is None:
+            raise ValueError("a link must locate the instruction that passes the value")
+        if where.length != len(self.data.raw_hex) // 2:
+            raise ValueError("link location disagrees with its bytes")
+        if len(self.provenance.evidence_ids) != 2:
+            raise ValueError("a link cites the call that writes and the call that reads")
+        return self
+
+
 class AnomalyEvidence(Fact):
     kind: Literal["header_anomaly"] = "header_anomaly"
     data: AnomalyData
@@ -455,7 +500,8 @@ Evidence = Annotated[
     | DecodedStringEvidence
     | ApiCallEvidence
     | CallArgumentEvidence
-    | CodeFunctionEvidence,
+    | CodeFunctionEvidence
+    | LocalLinkEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -471,4 +517,5 @@ Payload = (
     | ApiCallData
     | CallArgumentData
     | CodeFunctionData
+    | LocalLinkData
 )

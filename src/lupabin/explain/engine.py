@@ -13,6 +13,7 @@ from lupabin.evidence.facts import (
     ExportEvidence,
     HeaderEvidence,
     ImportEvidence,
+    LocalLinkEvidence,
     SectionEvidence,
     StringEvidence,
     YaraEvidence,
@@ -120,6 +121,9 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
             values.setdefault(fact.provenance.evidence_ids[0], []).append(fact)
     for call_id, group in values.items():
         yield "code.arguments@1", (facts[call_id], *group)
+    for fact in evidence:
+        if isinstance(fact, LocalLinkEvidence):
+            yield "code.local_link@1", (fact, *(facts[r] for r in fact.provenance.evidence_ids))
     functions = tuple(fact for fact in evidence if isinstance(fact, CodeFunctionEvidence))
     if functions:
         yield "code.functions@1", functions

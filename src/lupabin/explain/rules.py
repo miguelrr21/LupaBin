@@ -21,6 +21,7 @@ from lupabin.evidence.facts import (
     ExportEvidence,
     HeaderEvidence,
     ImportEvidence,
+    LocalLinkEvidence,
     SectionEvidence,
     StringEvidence,
     YaraEvidence,
@@ -29,7 +30,7 @@ from lupabin.evidence.models import Report
 from lupabin.explain.capabilities import CAPABILITIES, derive
 from lupabin.explain.families import FAMILIES, PREVALENCE, family_of
 from lupabin.explain.models import SlotValue
-from lupabin.explain.text import hexadecimal, name, number, section_name
+from lupabin.explain.text import frame_slot, hexadecimal, name, number, section_name
 
 Slots = dict[str, SlotValue]
 Derived = tuple[Slots, tuple[str, ...]]  # slots and glossary entry ids
@@ -530,6 +531,34 @@ def _arguments(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("code.call_argument", "code.import_call", "evidence.confidence")
 
 
+def _local_link(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """One link, with the call that writes the variable and the call that reads it."""
+    if len(cited) != 3:
+        return None
+    link, writer, reader = cited
+    if not isinstance(link, LocalLinkEvidence):
+        return None
+    if (writer.id, reader.id) != tuple(link.provenance.evidence_ids):
+        return None
+    if not isinstance(writer, ApiCallEvidence) or not isinstance(reader, ApiCallEvidence):
+        return None
+    facts = groups(report).facts
+    writes = facts.get(writer.provenance.evidence_ids[0])
+    reads = facts.get(reader.provenance.evidence_ids[0])
+    if not isinstance(writes, ImportEvidence) or not isinstance(reads, ImportEvidence):
+        return None
+    slots: Slots = {
+        "reader": _import_label(reads),
+        "reader_site": hexadecimal(reader.location.rva or 0),
+        "reader_parameter": link.data.reader_name,
+        "slot": frame_slot(link),
+        "writer": _import_label(writes),
+        "writer_site": hexadecimal(writer.location.rva or 0),
+        "writer_parameter": link.data.writer_name,
+    }
+    return slots, ("code.local_link", "code.call_argument", "evidence.confidence")
+
+
 RANGES_SHOWN = 20
 
 
@@ -745,6 +774,17 @@ RULES: dict[str, Rule] = {
             "mismo tramo: no demuestra que la llamada se ejecute, ni descarta que un camino "
             "que el recorrido no ve llegue a ella con otros valores.",
             _arguments,
+        ),
+        Rule(
+            "code.local_link@1",
+            "La llamada a «{reader}» de {reader_site} recibe como {reader_parameter} el valor "
+            "de la variable local {slot}, donde la llamada a «{writer}» de {writer_site} deja "
+            "el identificador que devuelve ({writer_parameter}).",
+            "Es una inferencia a partir de las instrucciones entre las dos llamadas: ninguna "
+            "cambia esa variable y no hay otro camino hasta la segunda. No demuestra que las "
+            "llamadas se ejecuten ni que la primera tenga éxito; si falla, la variable no "
+            "guarda una clave abierta.",
+            _local_link,
         ),
         Rule(
             "code.functions@1",
