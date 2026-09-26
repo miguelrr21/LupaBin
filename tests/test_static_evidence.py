@@ -13,7 +13,7 @@ def facts(report, kind):
 
 def test_header_and_section_values_are_original():
     report = analyze_bytes(build_pe())
-    assert report.schema_version == "0.9.0"
+    assert report.schema_version == "0.10.0"
     header = facts(report, "pe_header")[0]
     assert header.data.timestamp_raw == 0
     assert header.data.machine == 0x14C

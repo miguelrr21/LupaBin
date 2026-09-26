@@ -50,5 +50,5 @@ jobs:
           version: "0.8.22"
       - run: uv sync --frozen
       - run: docker compose config --quiet
-      - run: docker build --load -f docker/Dockerfile -t lupabin-worker:0.9.0 .
+      - run: docker build --load -f docker/Dockerfile -t lupabin-worker:0.10.0 .
       - run: uv run --frozen pytest -m docker
