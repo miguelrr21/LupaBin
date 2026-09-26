@@ -308,9 +308,11 @@ def test_the_walk_stops_at_its_deadline_and_says_so():
         "disassembly": "partial",
         "api_calls": "partial",
         "call_arguments": "partial",
+        "main_function": "partial",
     }
     assert {(reason.component, reason.code) for reason in progress.limitations} == {
         ("disassembly", "code_time_limit"),
         ("api_calls", "code_time_limit"),
         ("call_arguments", "dependency_omitted"),
+        ("main_function", "dependency_omitted"),
     }

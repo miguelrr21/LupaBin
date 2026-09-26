@@ -1,7 +1,7 @@
 import bisect
 from collections.abc import Callable
 
-from lupabin.evidence import argument_forms, local_forms
+from lupabin.evidence import argument_forms, local_forms, main_forms
 from lupabin.evidence.api_catalog import Encoding, Function, Parameter, hkey_name, lookup
 from lupabin.evidence.collector import Collector, Progress
 from lupabin.evidence.facts import (
@@ -9,11 +9,13 @@ from lupabin.evidence.facts import (
     ArgumentString,
     CallArgumentData,
     CodeFunctionData,
+    CodeReachData,
     ExportEvidence,
     FrameSlot,
     ImportEvidence,
     Instruction,
     LocalLinkData,
+    MainCallData,
 )
 from lupabin.evidence.models import ErrorCode
 from lupabin.evidence.primitives import Component, Source
@@ -23,6 +25,7 @@ from lupabin.extractors.code_calls import Call, CallFinder
 from lupabin.extractors.code_disasm import Region, Targets, walk
 from lupabin.extractors.code_entries import FunctionRanges, entries, regions
 from lupabin.extractors.code_links import Passed, SlotFinder
+from lupabin.extractors.code_main import MainFinder
 from lupabin.extractors.code_switch import SwitchTables
 from lupabin.extractors.pe_layout import InvalidPE, InvalidTable, Layout, parse_layout
 
@@ -71,6 +74,13 @@ class CodeExtractor:
         deadline = collector.started + seconds
         functions = FunctionRanges(layout, limits.entries) if layout.bits == 64 else None
         switches = SwitchTables(layout, code, functions)
+        main_finder = MainFinder(code, layout.bits, layout.header.image_base)
+
+        def visit(
+            data: bytearray, offset: int, rva: int, size: int, previous: int, start: int
+        ) -> None:
+            finder.visit(data, offset, rva, size, previous, start)
+            main_finder.visit(data, offset, rva, size, previous, start)
 
         def jumped(
             data: bytearray,
@@ -89,7 +99,7 @@ class CodeExtractor:
             starts,
             layout.bits,
             limits.instructions,
-            finder.visit,
+            visit,
             limits.call_sites,
             deadline,
             jumped,
@@ -144,7 +154,182 @@ class CodeExtractor:
         _arguments(
             layout, code, result.targets, catalog, finder.calls(), collector, progress, deadline
         )
+        _main(
+            layout,
+            code,
+            result.targets,
+            finder.calls(),
+            slots,
+            main_finder,
+            switches,
+            collector,
+            progress,
+            deadline,
+        )
         return Extraction("unknown", progress)
+
+
+def _main(
+    layout: Layout,
+    code: list[Region],
+    targets: Targets,
+    calls: list[Call],
+    slots: dict[int, str],
+    main_finder: MainFinder,
+    switches: SwitchTables,
+    collector: Collector,
+    progress: Progress,
+    deadline: float,
+) -> None:
+    """Publishes the call that enters `main` (code_main.py) and which published calls
+    the walk reaches from `main` and only from the startup."""
+    if progress.states["disassembly"] != "complete":
+        # code the walk missed could hold a second candidate: nothing is claimed
+        progress.issue("main_function", "dependency_omitted", limit=True)
+        return
+    names = {
+        fact.data.iat_rva: (bytes.fromhex(fact.data.dll.raw_hex).lower(), fact.data.function)
+        for fact in collector.facts
+        if isinstance(fact, ImportEvidence) and fact.data.function is not None
+    }
+    anchors = [
+        call
+        for call in calls
+        if call.via != "tail"
+        and f"code:call:{call.rva}" in collector.ids
+        and (named := names.get(call.slot)) is not None
+        and named[0] == main_forms.DLL
+        and bytes.fromhex(named[1].raw_hex) in main_forms.GETMAINARGS
+    ]
+    progress.examined["main_function"] = len(anchors)
+    budget = Budget(collector.limits.code.argument_instructions, deadline)
+    arguments = ArgumentFinder(code, targets, layout.bits, budget)
+    passed_by_anchor = []
+    for call in anchors:
+        found = arguments.constants(call.start, call.rva)
+        if found is None:
+            break
+        passed: dict[int, tuple[int, tuple[int, int]]] = {}
+        for position in range(main_forms.ARGUMENTS):
+            known = found.get(position)
+            if known is None:
+                break
+            span = known.setter
+            raw = bytes.fromhex(_bytes(layout, span))
+            parsed = main_forms.setter(raw, span[0], layout.bits, layout.header.image_base)
+            if parsed is None or (layout.bits == 64 and parsed[0] != position):
+                break
+            passed[position] = (parsed[1], span)
+        if len(passed) == main_forms.ARGUMENTS:
+            passed_by_anchor.append((call, passed))
+    main = (
+        None
+        if budget.exhausted or budget.timed_out
+        else main_finder.find(passed_by_anchor, targets, budget)
+    )
+    if budget.exhausted or budget.timed_out:
+        reason: ErrorCode = "argument_instruction_limit" if budget.exhausted else "code_time_limit"
+        progress.issue("main_function", reason, limit=True)
+        return
+    if main is None:
+        progress.complete("main_function")  # none, or more than one: nothing is claimed
+        return
+    try:
+        data = MainCallData(
+            raw_hex=_bytes(layout, (main.rva, main.size)),
+            target=main.target,
+            setters=tuple(_instruction(layout, span) for span in main.setters),  # type: ignore[arg-type]
+            loads=tuple(_instruction(layout, span) for span in main.loads),  # type: ignore[arg-type]
+        )
+        location = layout.location(main.rva, main.size)
+    except InvalidTable:
+        progress.complete("main_function")
+        return
+    if not collector.add(
+        "code:main",
+        progress,
+        "main_function",
+        data,
+        location,
+        refs=(f"code:call:{main.anchor.rva}",),
+    ):
+        return
+    if progress.states["api_calls"] != "complete":
+        # a reach lists published calls: with some left out, its counts would mislead
+        progress.issue("main_function", "dependency_omitted", limit=True)
+        return
+    limits = collector.limits.code
+    reached: dict[str, set[int]] = {}
+    for root, starts, avoid in (
+        ("main", [main.target], frozenset()),
+        (
+            "startup",
+            entries(layout, [], limits.entries, frozenset({"tls"}))[0],
+            frozenset({main.target}),
+        ),
+    ):
+        finder = CallFinder(
+            _reader(code), layout.bits, layout.header.image_base, slots, limits.calls
+        )
+
+        def jumped(
+            data: bytearray,
+            offset: int,
+            rva: int,
+            size: int,
+            previous: int,
+            start: int,
+            history: list[int],
+            finder: CallFinder = finder,
+        ) -> list[int]:
+            finder.jumped(data, offset, rva, size, previous, start, history)
+            return switches.jumped(data, offset, rva, size, previous, start, history)
+
+        result = walk(
+            code,
+            starts,
+            layout.bits,
+            limits.instructions,
+            finder.visit,
+            limits.call_sites,
+            deadline,
+            jumped,
+            avoid,
+        )
+        stopped: ErrorCode | None = (
+            "code_instruction_limit"
+            if result.limit
+            else "code_time_limit"
+            if result.time_limit
+            else "call_site_limit"
+            if result.call_limit
+            else "api_call_limit"
+            if finder.dropped
+            else None
+        )
+        if stopped is not None:
+            progress.issue("main_function", stopped, limit=True)
+            return
+        reached[root] = {call.rva for call in finder.calls()}
+    for root, chosen in (
+        ("main", reached["main"]),
+        ("startup", reached["startup"] - reached["main"]),
+    ):
+        ids = tuple(
+            collector.ids[f"code:call:{call.rva}"]
+            for call in calls
+            if call.rva in chosen and f"code:call:{call.rva}" in collector.ids
+        )
+        if not collector.add(
+            f"code:reach:{root}",
+            progress,
+            "main_function",
+            CodeReachData(root=root, calls=ids),  # type: ignore[arg-type]
+            None,
+            refs=("code:main",),
+        ):
+            return
+    progress.complete("main_function")
 
 
 def _functions(

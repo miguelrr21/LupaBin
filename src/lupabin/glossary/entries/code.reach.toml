@@ -1,0 +1,13 @@
+id = "code.reach"
+title = "Alcance desde main y desde el arranque"
+revision = "1.0.0"
+lang = "es"
+summary = "Qué llamadas a funciones importadas alcanza el recorrido estático desde main, y cuáles solo desde el código de arranque, siguiendo llamadas y saltos cuyo destino es una constante."
+body = "LupaBin recorre el código dos veces más cuando encuentra main. Primero, desde main: todo lo que alcanza forma parte del programa, aunque no lo haya escrito el autor (las bibliotecas que enlaza, como la que implementa printf, o las comprobaciones que añade el compilador). Después, desde el punto de entrada y las funciones TLS sin entrar en main: lo que solo alcanza ese recorrido es código de arranque del compilador, que se ejecuta antes o después de main.\n\nEsto ayuda a leer el resto del informe. Por ejemplo, el arranque de MinGW-w64 llama a VirtualProtect para aplicar sus pseudo-relocations: que esa llamada aparezca como del arranque explica por qué un programa sencillo la contiene.\n\nLas llamadas que no aparecen en ninguno de los dos grupos solo se alcanzan por otros caminos, como las funciones que declara la tabla .pdata en x64."
+not_proven = "El recorrido no sigue llamadas indirectas ni ejecuta nada: una llamada que no aparece como alcanzable desde main puede alcanzarse de otra forma, y una que aparece puede no ejecutarse nunca."
+related = ["code.main_function", "code.import_call", "code.function_range"]
+sources = [
+  { title = "CRT Initialization", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-initialization", verified_on = 2026-09-26 },
+  { title = "mingw-w64-crt/crt/pseudo-reloc.c", publisher = "Proyecto MinGW-w64", url = "https://github.com/mingw-w64/mingw-w64/blob/master/mingw-w64-crt/crt/pseudo-reloc.c", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: la función main", publisher = "Proyecto LupaBin", document = "docs/metodo.md#la-función-main", verified_on = 2026-09-26 },
+]

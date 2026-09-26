@@ -10,7 +10,7 @@ the walk, tested with negative cases, and the reason arguments are `inferred`.
 
 from collections.abc import Sequence
 
-from lupabin.evidence import api_catalog, argument_forms, call_forms, local_forms
+from lupabin.evidence import api_catalog, argument_forms, call_forms, local_forms, main_forms
 from lupabin.evidence.facts import (
     ApiCallEvidence,
     ArgumentString,
@@ -20,6 +20,7 @@ from lupabin.evidence.facts import (
     HeaderData,
     ImportEvidence,
     LocalLinkEvidence,
+    MainCallEvidence,
     SectionData,
 )
 from lupabin.evidence.primitives import Location, Name
@@ -334,6 +335,56 @@ def validate_link(
         raise ValueError("link bytes do not name its local variable")
 
 
+def validate_main(
+    fact: MainCallEvidence,
+    anchor: Evidence | None,
+    callee: Evidence | None,
+    sections: Sequence[SectionData],
+    header: HeaderData | None,
+) -> None:
+    """Raise unless the call enters an executable section and its three loads read the
+    three variables whose addresses the cited call to __getmainargs passes."""
+    if header is None:
+        raise ValueError("a main call needs the PE header")
+    bits = 32 if header.optional_magic == 0x10B else 64
+    base = header.image_base
+    named = _import_name(callee)
+    if not isinstance(anchor, ApiCallEvidence) or named is None:
+        raise ValueError("a main call cites a call to an import")
+    dll, function = named
+    if dll.lower() != main_forms.DLL or function not in main_forms.GETMAINARGS:
+        raise ValueError("a main call cites a call to __getmainargs or __wgetmainargs")
+    where = fact.location
+    if where.rva is None or where.offset is None or anchor.location.rva is None:
+        raise ValueError("a main call and its anchor locate their instructions")
+    _named(where, _mapped(where.rva, where.offset, 5, sections))
+    data = fact.data
+    if main_forms.direct_call(bytes.fromhex(data.raw_hex), where.rva) != data.target:
+        raise ValueError("a main call's target is what its bytes say")
+    if not any(
+        s.raw_status == "present"
+        and "execute" in s.permissions
+        and s.rva <= data.target < s.rva + s.raw_size
+        for s in sections
+    ):
+        raise ValueError("main lies in an executable section")
+    addresses = []
+    for position, (setter, load) in enumerate(zip(data.setters, data.loads, strict=True)):
+        for instruction in (setter, load):
+            _mapped(instruction.rva, instruction.offset, len(instruction.raw_hex) // 2, sections)
+        passed = main_forms.setter(bytes.fromhex(setter.raw_hex), setter.rva, bits, base)
+        loaded = main_forms.load(bytes.fromhex(load.raw_hex), load.rva, bits, base)
+        if passed is None or loaded is None or passed[1] != loaded[1]:
+            raise ValueError("main receives the variables __getmainargs filled")
+        if bits == 64 and not passed[0] == loaded[0] == position:
+            raise ValueError("argc, argv and envp are the first three arguments")
+        if not setter.rva < anchor.location.rva or not load.rva < where.rva:
+            raise ValueError("an argument is set before its call")
+        addresses.append(passed[1])
+    if len(set(addresses)) != main_forms.ARGUMENTS:
+        raise ValueError("argc, argv and envp are three variables")
+
+
 def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
     """Raise unless the bytes every call, argument and function range cite are the
     sample's bytes at their offsets."""
@@ -350,6 +401,10 @@ def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
                 (fact.data.address.offset, fact.data.address.raw_hex),
                 (fact.data.passes.offset, fact.data.passes.raw_hex),
             ]
+        elif isinstance(fact, MainCallEvidence):
+            spans = [(fact.location.offset, fact.data.raw_hex)]
+            for instruction in (*fact.data.setters, *fact.data.loads):
+                spans.append((instruction.offset, instruction.raw_hex))
         elif isinstance(fact, CallArgumentEvidence):
             spans = [(fact.location.offset, fact.data.raw_hex)]
             if fact.data.source is not None:

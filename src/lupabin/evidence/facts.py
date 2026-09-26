@@ -465,6 +465,71 @@ class LocalLinkEvidence(Model):
         return self
 
 
+class MainCallData(Model):
+    """The direct call through which the compiler's startup enters `main`: its first
+    three arguments are the values of the variables whose addresses a call to
+    __getmainargs or __wgetmainargs (msvcrt.dll) received (evidence/main_forms.py)."""
+
+    method: Literal["getmainargs-v1"] = "getmainargs-v1"
+    raw_hex: InstructionHex  # the call rel32
+    target: UInt  # the RVA of main
+    # the instructions that pass &argc, &argv and &envp to __getmainargs, in that order
+    setters: tuple[Instruction, Instruction, Instruction]
+    # the instructions that load argc, argv and envp for main, in that order
+    loads: tuple[Instruction, Instruction, Instruction]
+
+
+class MainCallEvidence(Model):
+    id: EvidenceId
+    source: Literal["code"] = "code"
+    component: Literal["main_function"] = "main_function"
+    kind: Literal["main_call"] = "main_call"
+    location: Location  # the call
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: MainCallData
+
+    @model_validator(mode="after")
+    def locates_its_call(self) -> Self:
+        where = self.location
+        if where.offset is None or where.rva is None or where.length != 5:
+            raise ValueError("a main call locates its 5-byte call in the file and the image")
+        if where.length != len(self.data.raw_hex) // 2:
+            raise ValueError("main call location disagrees with its bytes")
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a main call cites exactly the call to __getmainargs")
+        return self
+
+
+class CodeReachData(Model):
+    """Published calls to imports that the walk reaches from one root, following only
+    constant calls and jumps: from `main`, or from the entry point and the TLS callbacks
+    without entering `main` and not from `main` (the startup)."""
+
+    method: Literal["direct-reach-v1"] = "direct-reach-v1"
+    root: Literal["main", "startup"]
+    calls: Annotated[tuple[EvidenceId, ...], Field(max_length=4096)] = ()
+
+
+class CodeReachEvidence(Model):
+    id: EvidenceId
+    source: Literal["code"] = "code"
+    component: Literal["main_function"] = "main_function"
+    kind: Literal["code_reach"] = "code_reach"
+    location: None = None
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: CodeReachData
+
+    @model_validator(mode="after")
+    def cites_main(self) -> Self:
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a reach cites exactly the main call it starts from")
+        if len(set(self.data.calls)) != len(self.data.calls):
+            raise ValueError("a reach lists each call once")
+        return self
+
+
 class AnomalyEvidence(Fact):
     kind: Literal["header_anomaly"] = "header_anomaly"
     data: AnomalyData
@@ -537,7 +602,9 @@ Evidence = Annotated[
     | ApiCallEvidence
     | CallArgumentEvidence
     | CodeFunctionEvidence
-    | LocalLinkEvidence,
+    | LocalLinkEvidence
+    | MainCallEvidence
+    | CodeReachEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -555,4 +622,6 @@ Payload = (
     | CallArgumentData
     | CodeFunctionData
     | LocalLinkData
+    | MainCallData
+    | CodeReachData
 )

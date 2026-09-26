@@ -10,6 +10,7 @@ from lupabin.evidence.code import (
     validate_call,
     validate_function,
     validate_link,
+    validate_main,
 )
 from lupabin.evidence.facts import ApiCallEvidence, ToolchainEvidence
 from lupabin.evidence.facts import Evidence as Evidence
@@ -73,7 +74,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.9.0"] = "0.9.0"
+    version: Literal["0.10.0"] = "0.10.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -145,7 +146,7 @@ def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | 
 
 
 class Report(Model):
-    schema_version: Literal["0.9.0"] = "0.9.0"
+    schema_version: Literal["0.10.0"] = "0.10.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -178,6 +179,8 @@ class Report(Model):
             "call_argument": limits.code.arguments,
             "code_function": limits.code.calls,
             "local_link": limits.code.calls,
+            "main_call": 1,
+            "code_reach": 2,
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
@@ -268,6 +271,10 @@ class Report(Model):
         parameters: set[tuple[str, int]] = set()
         calls = [fact for fact in self.evidence if isinstance(fact, ApiCallEvidence)]
         ranges: set[int] = set()
+        roots: dict[str, set[str]] = {}
+        order = {
+            fact.id: index for index, fact in enumerate(self.evidence) if fact.kind == "api_call"
+        }
         for fact in self.evidence:
             if fact.source not in runs or runs[fact.source].status == "failed":
                 raise ValueError("evidence has no successful or partial source")
@@ -286,6 +293,34 @@ class Report(Model):
                 validate_call(fact, facts.get(refs[0]), sections, header)
                 degrees[fact.id] = 1
                 children[refs[0]].append(fact.id)
+                continue
+            if fact.kind == "main_call":
+                entered = fact.data
+                spans = [(fact.location.offset or 0, 5)] + [
+                    (item.offset, len(item.raw_hex) // 2)
+                    for item in (*entered.setters, *entered.loads)
+                ]
+                if any(offset + length > self.sample.size for offset, length in spans):
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have code evidence")
+                anchor = facts.get(fact.provenance.evidence_ids[0])
+                validate_main(fact, anchor, _callee(anchor, facts), sections, header)
+                degrees[fact.id] = 1
+                children[fact.provenance.evidence_ids[0]].append(fact.id)
+                continue
+            if fact.kind == "code_reach":
+                main = facts.get(fact.provenance.evidence_ids[0])
+                if main is None or main.kind != "main_call":
+                    raise ValueError("a reach starts from the main call")
+                if fact.data.root in roots:
+                    raise ValueError("one reach per root")
+                roots[fact.data.root] = set(fact.data.calls)
+                positions = [order.get(ref) for ref in fact.data.calls]
+                if any(p is None for p in positions) or positions != sorted(positions):  # type: ignore[type-var]
+                    raise ValueError("a reach lists published calls in report order")
+                degrees[fact.id] = 1
+                children[main.id].append(fact.id)
                 continue
             if fact.kind == "code_function":
                 span = fact.location
@@ -448,6 +483,8 @@ class Report(Model):
             degrees[fact.id] = len(refs)
             for ref in refs:
                 children[ref].append(fact.id)
+        if len(roots) == 2 and roots["main"] & roots["startup"]:
+            raise ValueError("a call reached from main is not the startup's alone")
         validate_markers(
             tuple(fact for fact in self.evidence if isinstance(fact, ToolchainEvidence)), sections
         )
