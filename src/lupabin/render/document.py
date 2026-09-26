@@ -10,7 +10,7 @@ import textwrap
 from collections.abc import Iterable
 from typing import NamedTuple
 
-from lupabin.evidence.facts import ApiCallEvidence, ImportEvidence
+from lupabin.evidence.facts import ApiCallEvidence, CodeReachEvidence, ImportEvidence
 from lupabin.evidence.models import Report
 from lupabin.explain.capabilities import BY_RULE, CATALOG_ID, TACTICS
 from lupabin.explain.models import Explanation, Item, SlotValue
@@ -149,6 +149,55 @@ def main_texts(items: tuple[Item, ...]) -> tuple[str, tuple[str, ...]] | None:
         if text.startswith("«") and sum(char.isalpha() for char in text) >= HEADER_LETTERS
     )
     return (found.id, worded[:HEADER_TEXTS]) if worded else None
+
+
+STARTUP_TITLE = "Llamadas que solo alcanza el código de arranque del compilador"
+
+
+def _runs(items: list[Item]) -> list[list[Item]]:
+    """Consecutive items of the same rule, which share their limit."""
+    runs: list[list[Item]] = []
+    for item in items:
+        if runs and runs[-1][0].rule == item.rule:
+            runs[-1].append(item)
+        else:
+            runs.append([item])
+    return runs
+
+
+def _parts(
+    chosen: list[Item], report: Report, every: tuple[Item, ...]
+) -> list[tuple[str | None, list[list[Item]]]]:
+    """The items of a section in order, with the calls to imports that only the startup
+    reaches moved to their own group at the end (the reach from the startup says so)."""
+    startup: set[str] = set()
+    for fact in report.evidence:
+        if isinstance(fact, CodeReachEvidence) and fact.data.root == "startup":
+            startup = set(fact.data.calls)
+    reach = next((item.id for item in every if item.rule == "code.reach_startup@1"), None)
+
+    def only_startup(item: Item) -> bool:
+        calls = item.evidence_ids[1:]
+        return item.rule == "code.calls@1" and bool(calls) and all(c in startup for c in calls)
+
+    late = [item for item in chosen if only_startup(item)]
+    parts: list[tuple[str | None, list[list[Item]]]] = [
+        (None, _runs([item for item in chosen if not only_startup(item)]))
+    ]
+    if late:
+        title = STARTUP_TITLE + (f" (ver {reach})" if reach else "")
+        parts.append((title, _runs(late)))
+    return parts
+
+
+def _shared_glossary(run: list[Item]) -> list[str]:
+    return list(dict.fromkeys(ref for item in run for ref in item.glossary_ids))
+
+
+def _evidence(item: Item) -> str:
+    shown = ", ".join(item.evidence_ids[:12])
+    more = len(item.evidence_ids) - 12
+    return f"Evidencia: {shown}" + (f" y {more} más" if more > 0 else "")
 
 
 class Summary(NamedTuple):
@@ -290,21 +339,40 @@ def to_text(
         chosen = [item for item in items if item.level == level]
         if not chosen:
             lines.append("   (ninguno)")
-        for item in chosen:
-            lines += wrap(visible(item.statement), "        ", f"   {item.id:<5}")
-            for label, value in _extras(item):
-                shown = ", ".join(value) if isinstance(value, tuple) else str(value)
-                if label == "Texto":
-                    shown = f"«{shown}»" + ("" if item.slots.get("complete") else " (recortado)")
-                lines += wrap(visible(f"{label}: {shown}"), "          ", "        ")
-            lines += wrap(visible(f"Límite: {item.not_proven}"), "          ", "        ")
-            lines += wrap(
-                f"Evidencia: {', '.join(item.evidence_ids[:12])}"
-                + (f" y {len(item.evidence_ids) - 12} más" if len(item.evidence_ids) > 12 else "")
-                + f" · Glosario: {', '.join(item.glossary_ids)}",
-                "          ",
-                "        ",
-            )
+        for heading, runs in _parts(chosen, report, items):
+            if heading is not None:
+                lines += ["", *wrap(visible(heading), "     ", "   — ")]
+            for run in runs:
+                shared = len(run) > 1
+                for item in run:
+                    lines += wrap(visible(item.statement), "        ", f"   {item.id:<5}")
+                    for label, value in _extras(item):
+                        shown = ", ".join(value) if isinstance(value, tuple) else str(value)
+                        if label == "Texto":
+                            complete = item.slots.get("complete")
+                            shown = f"«{shown}»" + ("" if complete else " (recortado)")
+                        lines += wrap(visible(f"{label}: {shown}"), "          ", "        ")
+                    if shared:
+                        lines += wrap(_evidence(item), "          ", "        ")
+                    else:
+                        lines += wrap(
+                            visible(f"Límite: {item.not_proven}"), "          ", "        "
+                        )
+                        lines += wrap(
+                            f"{_evidence(item)} · Glosario: {', '.join(item.glossary_ids)}",
+                            "          ",
+                            "        ",
+                        )
+                if shared:
+                    span = f"{run[0].id} a {run[-1].id}"
+                    lines += wrap(
+                        visible(f"Límite de {span}: {run[0].not_proven}"), "          ", "        "
+                    )
+                    lines += wrap(
+                        f"Glosario de {span}: {', '.join(_shared_glossary(run))}",
+                        "          ",
+                        "        ",
+                    )
     omitted = len(explanation.items) - len(items)
     if omitted:
         lines += ["", f"{omitted} explicaciones se omitieron porque no superaron la validación."]
@@ -398,16 +466,33 @@ def to_markdown(
         chosen = [item for item in items if item.level == level]
         if not chosen:
             lines.append("_(ninguno)_")
-        for item in chosen:
-            lines.append(f"- **{item.id}**: {_markdown_statement(item)}")
-            for label, value in _extras(item):
-                shown = ", ".join(value) if isinstance(value, tuple) else str(value)
-                lines.append(f"  - {label}: {code_span(shown)}")
-            lines.append(f"  - Límite: {markdown_text(item.not_proven)}")
-            lines.append(
-                f"  - Evidencia: {', '.join(item.evidence_ids)} · Glosario: "
-                + ", ".join(markdown_text(ref) for ref in item.glossary_ids)
-            )
+        for heading, runs in _parts(chosen, report, items):
+            if heading is not None:
+                lines += ["", f"### {markdown_text(heading)}", ""]
+            for run in runs:
+                shared = len(run) > 1
+                for item in run:
+                    lines.append(f"- **{item.id}**: {_markdown_statement(item)}")
+                    for label, value in _extras(item):
+                        shown = ", ".join(value) if isinstance(value, tuple) else str(value)
+                        lines.append(f"  - {label}: {code_span(shown)}")
+                    if not shared:
+                        lines.append(f"  - Límite: {markdown_text(item.not_proven)}")
+                    lines.append(
+                        f"  - Evidencia: {', '.join(item.evidence_ids)}"
+                        + (
+                            ""
+                            if shared
+                            else " · Glosario: "
+                            + ", ".join(markdown_text(ref) for ref in item.glossary_ids)
+                        )
+                    )
+                if shared:
+                    span = f"{run[0].id} a {run[-1].id}"
+                    lines.append(
+                        f"- *Límite de {span}*: {markdown_text(run[0].not_proven)} Glosario: "
+                        + ", ".join(markdown_text(ref) for ref in _shared_glossary(run))
+                    )
     omitted = len(explanation.items) - len(items)
     if omitted:
         lines += ["", f"{omitted} explicaciones se omitieron porque no superaron la validación."]
