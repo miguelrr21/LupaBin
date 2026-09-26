@@ -42,6 +42,26 @@ Comprobaciones de campos declarados, no una reproducción del cargador de Window
 
 Cada anomalía cita las cabeceras y secciones que la sustentan, y el modelo comprueba que el predicado se cumple sobre sus valores. Los intervalos vacíos no son solapamientos. Un warning genérico de pefile no se convierte en una anomalía concreta: se conserva como limitación y deja la cobertura parcial.
 
+### Marcas de compilador
+
+Bytes que una herramienta deja en todo lo que produce (catálogo `lupabin-toolchains-v1`). Sirven para leer el resto del informe: parte del código y de las funciones importadas la añade el compilador, no el autor. Solo se publica una marca con la forma exacta del catálogo y en el sitio donde su herramienta la pone; una candidata que falla cualquier comprobación se descarta, sin puntuarla:
+
+- **Cabecera Rich** (enlazador de Microsoft): entre la cabecera MS-DOS y la cabecera PE, de «DanS» a «Rich». Se recalcula su checksum, que el enlazador obtiene de los bytes anteriores (sin `e_lfanew`) y de cada entrada, y solo se publica si coincide.
+- **Marca de GCC**: el texto «GCC: (…» que GCC añade a cada archivo que compila, dentro de los datos de una sección. Cada texto distinto se publica una vez, hasta ocho.
+- **Arranque de MinGW-w64**: el mensaje «Mingw-w64 runtime failure:», dentro de los datos de una sección. Ese código de arranque usa `VirtualQuery` y `VirtualProtect` para aplicar las pseudo-relocations: por eso un programa de MinGW-w64 las importa aunque su autor no las use.
+- **Información de compilación de Go**: la cabecera «\xff Go buildinf:», con RVA múltiplo de 16 e indicadores que Go define, y la versión si la guarda en línea (Go 1.18 o posterior).
+- **Cabecera CLR (.NET)**: la que señala el directorio 14 de la cabecera PE, que empieza por su tamaño, 72. El análisis de código de LupaBin no ve el IL de .NET, y la explicación lo dice.
+- **Cookie de PyInstaller**: los 88 bytes que cierran el archivo que PyInstaller añade al ejecutable, después de todas las secciones y con una estructura coherente (tabla de contenidos dentro del archivo, nombre de la biblioteca de Python imprimible).
+
+Todas son `observed`: los bytes están ahí. Ninguna dice quién hizo el programa ni qué hace, y cualquiera puede copiarse, quitarse o fabricarse; que no aparezca ninguna no significa nada.
+
+**Mediciones** (2026-09-26, binarios benignos de Windows). La búsqueda de las seis firmas recorrió 54.899 PE de System32, SysWOW64 y Program Files; la cadena completa (informe validado, comprobación de los bytes en el host y regeneración de cada explicación) se ejecutó sobre 19.046 de ellos sin ningún fallo. Se revisaron uno a uno los casos de Go y de PyInstaller y las combinaciones inesperadas:
+
+- **Rich**: el checksum coincide en 24.021 de las 24.073 cabeceras encontradas. Las 52 restantes (51 binarios de VirtualBox y `tcblaunch.exe`) no se publican.
+- **Go**: la firma aparece en 53 binarios de Program Files. En 30 está alineada, con indicadores válidos y una versión legible, y los 30 son programas de Go (Docker, Tailscale, git-lfs y herramientas de JetBrains y MATLAB). En los otros 23 está desalineada y con indicadores inválidos: son programas de Git para Windows escritos en C (y su copia dentro de Visual Studio), y se descartan. Esta es la razón de exigir la alineación.
+- **PyInstaller**: 12 binarios con cookie, todos hechos con PyInstaller. En 7 de ellos la firma también está dentro del propio cargador, como constante para buscarla; solo cuenta la cookie de después de las secciones.
+- **GCC y Rich a la vez**: 2 DLL de JNA enlazadas con el enlazador de Microsoft que incluyen un objeto compilado con GCC. Las dos marcas son ciertas.
+
 ## Cobertura, estados y abstención
 
 Cada extractor declara la cobertura de cada componente: `complete`, `partial` o `blocked`, con contadores y motivos. Un directorio de imports ausente puede tener cobertura completa con cero hallazgos; una tabla que no se pudo leer, nunca. Detectar una anomalía no significa que el análisis fallara: puede haberse comprobado bien una inconsistencia.
@@ -295,6 +315,7 @@ El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. 
 - **Argumentos.** No se propagan valores entre registros. Un identificador solo se sigue entre dos llamadas a través de una variable local y en un camino recto (sección «Misma variable local»). La línea de órdenes de `CreateProcessW` no se lee.
 - **Decodificación.** Sin una crib del catálogo no hay resultado. Una cadena aislada con clave de 8 bytes se recupera en el 37 % de los casos en ASCII y el 62 % en UTF-16LE.
 - **Familias de APIs.** Solo reconocen imports por nombre exacto, no por ordinal.
+- **Marcas de compilador.** Solo seis herramientas: otras (Delphi, Rust, Nuitka, AutoIt…) no se reconocen, y la versión de Visual Studio no se deduce de las entradas de la cabecera Rich, porque Microsoft no documenta su significado.
 - **Idioma.** Las explicaciones y el glosario están en español.
 - **Fuentes externas.** Las páginas que cita el glosario pueden moverse: `tests/check_glossary_sources.py` lo comprueba con red, fuera de la CI.
 - **Tiempo.** En una máquina lenta, los binarios más grandes pueden quedar parciales en XOR o en código, y lo declaran con su código.
@@ -306,5 +327,6 @@ Las herramientas están en `tests/` y no forman parte del paquete ni de la CI. R
 - `uv run python -m tests.decode_eval false-positives <dir>` y `recall <dir>`: falsos positivos y cobertura de la decodificación.
 - `uv run python -m tests.code_eval corpus <dir>`: llamadas, argumentos, verificación de bytes y tiempos; `worst` mide los peores casos sintéticos: los de 20 MiB y uno con tantas llamadas enlazadas por una variable local como se pueden publicar.
 - `uv run python -m tests.capability_eval corpus <dir>`: frecuencia de cada capacidad; `review` lista cada caso para revisarlo.
+- `uv run python -m tests.toolchain_eval corpus <dir>`: marcas de compilador por binario y combinación, comprobación de los bytes y regeneración de las explicaciones; `--out` las lista para revisarlas.
 
 Cambiar un umbral, una condición, un catálogo o una redacción exige una nueva versión fijada por digest, repetir la medición y revisar los casos a mano.

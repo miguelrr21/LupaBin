@@ -1,0 +1,13 @@
+id = "toolchain.go_buildinfo"
+title = "Información de compilación de Go"
+revision = "1.0.0"
+lang = "es"
+summary = "El enlazador de Go guarda en cada programa una cabecera de información de compilación, que empieza por los bytes «\\xff Go buildinf:», con la versión de Go y los módulos usados."
+body = "La cabecera ocupa 32 bytes y está alineada a 16. Desde Go 1.18, la versión y la información de módulos van justo detrás, como cadenas precedidas de su longitud; en versiones anteriores, la cabecera guarda punteros a ellas. Es la información que muestra la orden «go version -m».\n\nLupaBin solo acepta la cabecera si está alineada a 16 bytes en la imagen y sus indicadores son los que define Go: la misma secuencia de bytes aparece, desalineada, dentro de programas que no son de Go."
+not_proven = "La cabecera y la versión son lo que declara el archivo: pueden copiarse o manipularse. No dicen qué hace el programa."
+related = ["toolchain.marker"]
+sources = [
+  { title = "Package buildinfo", publisher = "Documentación de Go", url = "https://pkg.go.dev/debug/buildinfo", verified_on = 2026-09-26 },
+  { title = "src/debug/buildinfo/buildinfo.go", publisher = "Proyecto Go", url = "https://github.com/golang/go/blob/master/src/debug/buildinfo/buildinfo.go", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: marcas de compilador", publisher = "Proyecto LupaBin", document = "docs/metodo.md#marcas-de-compilador", verified_on = 2026-09-26 },
+]

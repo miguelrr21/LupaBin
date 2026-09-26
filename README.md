@@ -6,7 +6,7 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables. C
 
 ## Estado y alcance
 
-Contrato de hechos 0.8.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. Un resumen de lo que contiene el código (capacidades como crear un servicio, escribir en una clave `Run` o pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos. VirusTotal se consulta por defecto como fuente externa (ver más abajo), y hay una web con el mismo análisis. No ejecuta ni emula la muestra. No incluye LLM, capa, FLOSS ni desempaquetado.
+Contrato de hechos 0.9.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, marcas de compilador (cabecera Rich del enlazador de Microsoft, GCC y MinGW-w64, Go, .NET y PyInstaller), cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. Un resumen de lo que contiene el código (capacidades como crear un servicio, escribir en una clave `Run` o pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos. VirusTotal se consulta por defecto como fuente externa (ver más abajo), y hay una web con el mismo análisis. No ejecuta ni emula la muestra. No incluye LLM, capa, FLOSS ni desempaquetado.
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 
@@ -24,7 +24,7 @@ Desde la raíz del repositorio, con una entrada local disponible:
 
 ```text
 uv sync --frozen
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.8.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.9.0 .
 uv run --frozen lupabin analyze "ruta/al/archivo.exe"
 ```
 
@@ -58,6 +58,8 @@ El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, ti
 - Cada frase lleva su **límite**: lo que ese hecho no demuestra. Por ejemplo, una sección con permisos de escritura y ejecución no demuestra que se ejecute código escrito en ella.
 - Las cifras de contexto están medidas. Una entropía de 7,2 o más solo la alcanza el 0,34 % de las secciones de 4 KiB o más en 55.313 binarios benignos. Los imports se agrupan en nueve familias curadas con su prevalencia benigna: por ejemplo, el 32,2 % de los binarios benignos importa alguna función de comprobación de depuradores.
 - Todo texto que procede de la muestra (nombres, cadenas, textos decodificados) se neutraliza antes de mostrarse: los caracteres de control, de escape de terminal y bidi se convierten en escapes visibles, y en Markdown van en bloques de código inertes.
+
+- Las marcas de compilador dicen con qué herramienta se hizo el archivo, solo cuando sus bytes tienen la forma exacta y están donde la herramienta los pone: por ejemplo, la cabecera Rich del enlazador de Microsoft con su checksum comprobado, o el mensaje del código de arranque de MinGW-w64, que explica por qué un programa compilado con GCC llama a `VirtualProtect`. Se midió en casi 55.000 binarios benignos, revisando a mano los casos dudosos: la firma de Go, por ejemplo, también aparece dentro de programas de Git escritos en C, y se descarta porque no está alineada como la pone Go. Una marca puede copiarse, y el informe lo dice.
 
 - Las capacidades juntan una llamada y sus argumentos constantes en una frase como «el código contiene 1 llamada de este tipo: crear un servicio de Windows», con los casos (`servicio «X», binario «Y», inicio SERVICE_AUTO_START`). Dicen lo que el código contiene, no que el programa lo haga, y dan su frecuencia en 3.090 binarios benignos: por ejemplo, el 2,36 % contiene memoria ejecutable y escribible. Si no sabe algo (la raíz de una clave, el proceso de destino), lo dice.
 
@@ -114,9 +116,9 @@ También se acotan secciones (96), entradas EAT (5.000), asociaciones de nombres
 
 Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, sin borrar las cabeceras y descriptores comprobados. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
 
-La CLI 0.8.0 exige el esquema 0.8.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 a 0.7.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
+La CLI 0.9.0 exige el esquema 0.9.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 a 0.8.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
 
-Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' lupabin-worker:0.8.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
+Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' lupabin-worker:0.9.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
 
 ## Qué aporta YARA
 
@@ -191,7 +193,7 @@ uv run --frozen python -m lupabin.explain.schema --check
 uv build
 uv run --frozen python -m tests.check_yara_distribution
 docker compose config --quiet
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.8.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.9.0 .
 uv run --frozen pytest -m docker
 ```
 

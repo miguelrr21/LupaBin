@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from lupabin.errors import LupaBinError
 from lupabin.evidence.code import verify_calls
 from lupabin.evidence.models import Limits, Report
+from lupabin.evidence.toolchain_checks import verify_markers
 from lupabin.evidence.yara import validate_matches
 from lupabin.extractors.decode import verify_decodings
 from lupabin.ingest.reader import Blob
@@ -58,6 +59,7 @@ def check_against_sample(report: Report, blob: Blob) -> None:
     try:
         verify_decodings(report.evidence, blob.data)
         verify_calls(report.evidence, blob.data)
+        verify_markers(report.evidence, blob.data)
         context = report.yara_context
         if context is not None and context.catalog is not None:
             limits = report.analysis.limits.yara

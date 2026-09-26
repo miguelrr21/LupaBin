@@ -1,0 +1,13 @@
+id = "toolchain.rich_header"
+title = "Cabecera Rich"
+revision = "1.0.0"
+lang = "es"
+summary = "La cabecera Rich es una estructura sin documentación oficial que el enlazador de Microsoft (link.exe) escribe entre la cabecera MS-DOS y la cabecera PE, con una lista de las herramientas que produjeron los archivos enlazados."
+body = "Empieza con la marca «DanS» y termina con la palabra «Rich» seguida de una clave. Entre medias hay pares de números: un identificador de herramienta y versión (@comp.id) y cuántos archivos de esa herramienta se enlazaron. Todo lo anterior a «Rich» está cifrado con XOR usando la clave.\n\nLa clave es un checksum: el enlazador la calcula a partir de los bytes de la cabecera MS-DOS y de su stub (sin el campo e_lfanew) y de cada par de la lista. LupaBin recalcula ese checksum y solo publica la cabecera si coincide.\n\nMicrosoft no documenta esta estructura: se conoce por ingeniería inversa. Como su contenido parece fiable, se ha usado para atribuir malware, y por eso también se ha falsificado: en 2018, el malware Olympic Destroyer llevaba copiada la cabecera Rich de otro grupo para despistar a los analistas."
+not_proven = "Un checksum válido solo demuestra que la estructura es coherente con los bytes que la preceden: se puede copiar o recalcular. No identifica al autor."
+related = ["toolchain.marker", "pe.header"]
+sources = [
+  { title = "The devil's in the Rich header", publisher = "Kaspersky (Securelist)", url = "https://securelist.com/the-devils-in-the-rich-header/84348/", verified_on = 2026-09-26 },
+  { title = "Microsoft's Rich Signature (undocumented)", publisher = "NTCore (Daniel Pistelli)", url = "https://ntcore.com/files/richsign.htm", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: marcas de compilador", publisher = "Proyecto LupaBin", document = "docs/metodo.md#marcas-de-compilador", verified_on = 2026-09-26 },
+]
