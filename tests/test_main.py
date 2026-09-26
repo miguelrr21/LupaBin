@@ -250,3 +250,17 @@ def test_the_host_rejects_a_changed_reference():
     changed[reference.location.offset + 3] ^= 1
     with pytest.raises(ValueError, match="differ"):
         verify_calls(report.evidence, bytes(changed))
+
+
+def test_the_families_reachable_from_main_are_named_with_those_not_seen():
+    from lupabin.explain.families import FAMILIES
+    from lupabin.render.document import areas_line
+
+    report = analyze_bytes(build_main_demo())
+    explanation = explain(report, GLOSSARY)
+    items = validate(explanation, report, GLOSSARY)
+    areas = next(item for item in items if item.rule == "code.areas@1")
+    assert areas.slots["touched"] == ("ninguna",)  # puts is on no list
+    assert areas.slots["untouched"] == tuple(label for label, _ in FAMILIES.values())
+    assert areas_line(items).startswith("con llamadas: ninguna · sin llamadas vistas: ")
+    assert "puede usar funciones que no están en la lista" in areas.not_proven

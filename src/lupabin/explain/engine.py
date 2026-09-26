@@ -151,6 +151,8 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
         elif isinstance(fact, CodeReachEvidence):
             main = facts[fact.provenance.evidence_ids[0]]
             yield f"code.reach_{fact.data.root}@1", (fact, main)
+            if fact.data.root == "main":
+                yield "code.areas@1", (fact,)
             if fact.data.root == "main" and fact.data.strings:
                 yield "strings.from_main@1", (fact, *(facts[r] for r in fact.data.strings))
     references = tuple(f for f in evidence if isinstance(f, StringReferenceEvidence))
