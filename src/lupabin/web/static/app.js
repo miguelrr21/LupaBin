@@ -156,6 +156,7 @@ function renderHead(data, name) {
   if (data.made_with) rows.push(["Hecho con", data.made_with, false]);
   if (data.main) rows.push(["main", data.main, false]);
   if (data.texts) rows.push(["Textos", data.texts, false]);
+  if (data.areas) rows.push(["Familias", data.areas, false]);
   for (const [label, value, copy] of rows) {
     hashes.append(el("dt", { text: label }), el("dd", {}, el("span", { text: value }), copy ? copyButton(value) : null));
   }
