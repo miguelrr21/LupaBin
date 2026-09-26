@@ -1,6 +1,6 @@
 services:
   worker:
-    image: lupabin-worker:0.6.0
+    image: lupabin-worker:0.7.0
     build:
       context: .
       dockerfile: docker/Dockerfile

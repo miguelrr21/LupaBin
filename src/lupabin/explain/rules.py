@@ -404,7 +404,12 @@ def _xor(reused: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | Non
 # --- code -------------------------------------------------------------------------
 
 CALL_SITES_SHOWN = 20
-VIA = {"direct": "directa", "thunk": "a través de un thunk", "register": "por registro"}
+VIA = {
+    "direct": "directa",
+    "thunk": "a través de un thunk",
+    "register": "por registro",
+    "tail": "salto en cola",
+}
 NOT_EXECUTED = (
     "Que el código contenga la llamada no demuestra que se ejecute: depende de condiciones "
     "y entradas que el análisis estático no resuelve, y un binario empaquetado solo muestra "

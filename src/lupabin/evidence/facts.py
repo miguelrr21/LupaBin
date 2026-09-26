@@ -271,15 +271,17 @@ class Instruction(Model):
 
 
 class ApiCallData(Model):
-    # Which canonical form (evidence/call_forms.py) reaches the import's slot.
-    via: Literal["direct", "thunk", "register"]
+    # Which canonical form (evidence/call_forms.py) reaches the import's slot. `tail` is
+    # a `jmp [slot]` that ends a run of code (a tail call): the import returns to the
+    # caller of the code that jumps.
+    via: Literal["direct", "thunk", "register", "tail"]
     raw_hex: InstructionHex
     # The thunk's `jmp [slot]` or the `mov reg, [slot]` right before the call.
     helper: Instruction | None = None
 
     @model_validator(mode="after")
     def helper_matches_via(self) -> Self:
-        if (self.via == "direct") != (self.helper is None):
+        if (self.via in ("direct", "tail")) != (self.helper is None):
             raise ValueError("only thunk and register calls rest on a helper instruction")
         return self
 

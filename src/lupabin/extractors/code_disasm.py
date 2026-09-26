@@ -3,7 +3,9 @@
 capstone only decodes: it turns bytes into an instruction's identity, length and
 operand text. The walk follows constant branch and call targets from known entry
 points and never keeps registers, memory or a notion of which branch is taken, so
-nothing is executed or emulated. Indirect jumps are not resolved.
+nothing is executed or emulated. An indirect jump goes to a visitor, which may return
+the targets it can prove from the bytes (a bounded jump table); nothing else about it
+is guessed.
 
 The walk calls capstone's `cs_disasm` itself (pinned capstone 5.0.9) and reads only
 each instruction's id and size, plus the operand text of branches: the public
@@ -52,14 +54,28 @@ _CLOCK_EVERY = 4096
 # visit(region bytes, offset of the call, its RVA, its size, size of the instruction
 # right before it in the same run or 0, RVA where the call's linear stretch starts)
 Visitor = Callable[[bytearray, int, int, int, int, int], None]
+# jumped(region bytes, offset of a jmp without a constant target, its RVA, its size,
+# size of the instruction right before it in the same run or 0, RVA where its linear
+# stretch starts, offsets of up to _HISTORY instructions before it in the same run,
+# oldest first) -> targets to walk
+JumpVisitor = Callable[[bytearray, int, int, int, int, int, list[int]], list[int]]
+_HISTORY = 12
+_RING = 16  # a power of two above _HISTORY
 
 
 @dataclass(frozen=True)
 class Region:
-    """An executable section's bytes on disk, addressed by RVA."""
+    """An executable section's bytes on disk, addressed by RVA.
+
+    `fields`, when the image has base relocations, holds 1 on every byte of a relocated
+    field except its first: a real instruction never starts inside such a field and
+    never ends inside one, so a decode that does has left the code (the bytes after a
+    call that never returns, a jump table) and its run stops there.
+    """
 
     rva: int
     data: bytearray
+    fields: bytearray | None = None
 
     @property
     def end(self) -> int:
@@ -97,6 +113,8 @@ class Walk:
     call_limit: bool = False  # the call budget stopped the walk
     time_limit: bool = False  # the deadline stopped the walk
     targets: Targets = field(default_factory=lambda: Targets([], []))
+    # one byte per byte of each region: 1 where the walk decoded an instruction start
+    decoded: list[bytearray] = field(default_factory=list)
 
 
 def _target(operand: bytes) -> int | None:
@@ -125,8 +143,9 @@ def walk(
     visit: Visitor,
     call_budget: int,
     deadline: float = float("inf"),
+    jumped: JumpVisitor | None = None,
 ) -> Walk:
-    """Decode every instruction reachable from `entries` without resolving indirection.
+    """Decode every instruction reachable from `entries`.
 
     Every `call` is passed to `visit` with the start of its linear stretch: the start
     of the run, or the instruction after the run's previous call, since a call leaves
@@ -134,7 +153,8 @@ def walk(
     Stops after `budget` instructions or `call_budget` calls, whichever comes first:
     classifying a call costs several times more than decoding an instruction.
     Also stops when `time.monotonic()` passes `deadline`, checked every
-    _CLOCK_EVERY instructions.
+    _CLOCK_EVERY instructions. A `jmp` without a constant target goes to `jumped`, and
+    the targets it returns are walked like constant ones.
     """
     engine = Cs(CS_ARCH_X86, CS_MODE_32 if bits == 32 else CS_MODE_64)
     disasm = capstone._cs.cs_disasm
@@ -152,8 +172,9 @@ def walk(
         else 0
         for region in regions
     ]
-    result = Walk(targets=Targets(starts, entered))
+    result = Walk(targets=Targets(starts, entered), decoded=decoded)
     instructions = calls = 0
+    recent = array("I", bytes(4 * _RING))  # offsets of the last instructions decoded
     pending = array("I", reversed([entry for entry in entries if 0 <= entry < _LIMIT]))
     insn = ctypes.POINTER(capstone._cs_insn)()
     pointer = ctypes.POINTER(ctypes.c_char)
@@ -165,12 +186,14 @@ def walk(
         region, marks, base = regions[index], decoded[index], bases[index]
         joins = entered[index]
         rva, data, length = region.rva, region.data, len(region.data)
+        fields = region.fields
         position = address - rva
         joins[position] = 1
         if marks[position]:
             continue
         previous = 0
         stretch = address
+        first = instructions  # the ordinal of this run's first instruction
         running = True
         while running and position < length:
             count = disasm(
@@ -200,7 +223,13 @@ def walk(
                     result.time_limit = True
                     return _drained(result, pending, entered)
                 ident, size = head(batch, record)
+                if fields is not None and (
+                    fields[position] or (position + size < length and fields[position + size])
+                ):
+                    running = False  # it cuts a relocated field: these bytes are not code
+                    break
                 marks[position] = 1
+                recent[instructions & (_RING - 1)] = position
                 instructions += 1
                 role = flow(ident)
                 if role is not None:
@@ -212,6 +241,16 @@ def walk(
                         if target is not None and target < _LIMIT:
                             if target != rva + position + size:
                                 pending.append(target)
+                        elif role == _JUMP and jumped is not None:
+                            earlier = range(
+                                max(first, instructions - 1 - _HISTORY), instructions - 1
+                            )
+                            history = [recent[i & (_RING - 1)] for i in earlier]
+                            for found in jumped(
+                                data, position, rva + position, size, previous, stretch, history
+                            ):
+                                if 0 <= found < _LIMIT:
+                                    pending.append(found)
                     if role == _CALL:
                         if calls >= call_budget:
                             result.instructions, result.calls = instructions, calls

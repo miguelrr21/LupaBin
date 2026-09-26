@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.7.0",
-          "default": "0.7.0",
+          "const": "0.6.0",
+          "default": "0.6.0",
           "title": "Version",
           "type": "string"
         }
@@ -176,8 +176,7 @@
           "enum": [
             "direct",
             "thunk",
-            "register",
-            "tail"
+            "register"
           ],
           "title": "Via",
           "type": "string"
@@ -2731,8 +2730,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.7.0",
-      "default": "0.7.0",
+      "const": "0.6.0",
+      "default": "0.6.0",
       "title": "Schema Version",
       "type": "string"
     },

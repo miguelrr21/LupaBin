@@ -1,4 +1,4 @@
-"""Which walked calls reach an imported function, and by which of three forms."""
+"""Which walked calls and tail jumps reach an imported function, and by which form."""
 
 from collections.abc import Callable, Container
 from dataclasses import dataclass
@@ -6,7 +6,7 @@ from typing import Literal
 
 from lupabin.evidence import call_forms
 
-Via = Literal["direct", "thunk", "register"]
+Via = Literal["direct", "thunk", "register", "tail"]
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,29 @@ class CallFinder:
     def visit(
         self, data: bytearray, offset: int, rva: int, size: int, previous: int, start: int
     ) -> None:
-        call = self._classify(data, offset, rva, size, previous, start)
+        self._keep(self._classify(data, offset, rva, size, previous, start))
+
+    def jumped(
+        self,
+        data: bytearray,
+        offset: int,
+        rva: int,
+        size: int,
+        previous: int,
+        start: int,
+        history: list[int],
+    ) -> list[int]:
+        """A `jmp [slot]` after other code of its run is a tail call to the import. One
+        that starts its run is an import thunk: the calls that reach it are published
+        with it as their helper, so it is not counted again."""
+        if previous:
+            raw = bytes(data[offset : offset + size])
+            slot = call_forms.memory_slot(raw, rva, self.bits, self.base, call_forms.JMP)
+            if slot is not None and slot in self.slots:
+                self._keep(Call("tail", rva, size, slot, None, start))
+        return []
+
+    def _keep(self, call: Call | None) -> None:
         if call is None:
             return
         self.found += 1

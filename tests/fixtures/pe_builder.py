@@ -415,6 +415,102 @@ def build_same_function_demo(
     return bytes(data)
 
 
+RELOC_RVA = 0x1C00
+
+
+def with_relocations(data, rvas, *, bits=32):
+    """Add a base relocation directory at RELOC_RVA (in .idata) listing `rvas` as
+    pointer-sized fields: HIGHLOW in x86, DIR64 in x64."""
+    data = bytearray(data)
+    kind = 3 if bits == 32 else 10
+    pages = {}
+    for rva in sorted(rvas):
+        pages.setdefault(rva & ~0xFFF, []).append(rva & 0xFFF)
+    table = b""
+    for page, offsets in pages.items():
+        items = [kind << 12 | offset for offset in offsets]
+        if len(items) % 2:
+            items.append(0)  # IMAGE_REL_BASED_ABSOLUTE pads a block to 4 bytes
+        table += struct.pack("<II", page, 8 + 2 * len(items))
+        table += struct.pack(f"<{len(items)}H", *items)
+    at = 0x200 + RELOC_RVA - 0x1000
+    data[at : at + len(table)] = table
+    directory = 0x98 + (92 if bits == 32 else 108) + 4 + 8 * 5
+    struct.pack_into("<II", data, directory, RELOC_RVA, len(table))
+    return bytes(data)
+
+
+# Inert training code for jump tables: `switch (eax) { case 0..2: call the import }`,
+# compiled the way MSVC does it, with its bound, three case blocks and the table of
+# case addresses after the code. Never executed.
+SWITCH_CASES = 3
+
+
+def switch_x86_code(entries=SWITCH_CASES, bound=SWITCH_CASES - 1):
+    """x86 code at CODE_RVA: cmp eax, bound; ja default; jmp [eax*4 + table]. Returns
+    (code, RVAs of the pointer fields the linker would relocate)."""
+    base, slot = 0x400000, 0x1140
+    head = bytes.fromhex("83f8") + bytes([bound]) + b"\x77\x00"  # ja patched below
+    table_at = CODE_RVA + 0x100
+    head += bytes.fromhex("ff2485") + struct.pack("<I", base + table_at)
+    cases = []
+    body = bytearray(head)
+    fields = [CODE_RVA + len(head) - 4]
+    for _ in range(entries):
+        cases.append(CODE_RVA + len(body))
+        fields.append(CODE_RVA + len(body) + 2)
+        body += b"\xff\x15" + struct.pack("<I", base + slot) + b"\xc3"  # call [slot]; ret
+    default = CODE_RVA + len(body)
+    body += b"\xc3"
+    body[4] = default - (CODE_RVA + 5)  # ja default
+    body += b"\xcc" * (0x100 - len(body))
+    for index, case in enumerate(cases):
+        body += struct.pack("<I", base + case)
+        fields.append(table_at + 4 * index)
+    return bytes(body), fields
+
+
+def switch_x64_code(entries=SWITCH_CASES, bound=SWITCH_CASES - 1, outside=False):
+    """x64 code at CODE_RVA in MSVC's form: cmp ecx, bound; ja; movsxd rax, ecx;
+    lea rdx, [image base]; mov ecx, [rdx + rax*4 + table]; add rcx, rdx; jmp rcx.
+    `outside` points the last entry past the function's .pdata range."""
+    slot = 0x1140
+    body = bytearray(bytes.fromhex("83f9") + bytes([bound]) + b"\x77\x00")
+    body += bytes.fromhex("4863c1")  # movsxd rax, ecx
+    body += bytes.fromhex("488d15") + struct.pack("<i", -(CODE_RVA + len(body) + 7))
+    table_at = CODE_RVA + 0x100
+    body += bytes.fromhex("8b8c82") + struct.pack("<I", table_at)
+    body += bytes.fromhex("4803ca") + bytes.fromhex("ffe1")  # add rcx, rdx; jmp rcx
+    cases = []
+    for _ in range(entries):
+        cases.append(CODE_RVA + len(body))
+        call = CODE_RVA + len(body)
+        body += b"\xff\x15" + struct.pack("<i", slot - (call + 6)) + b"\xc3"
+    default = CODE_RVA + len(body)
+    body += b"\xc3"
+    body[4] = default - (CODE_RVA + 5)
+    function_end = CODE_RVA + len(body)
+    body += b"\xcc" * (0x100 - len(body))
+    if outside:
+        cases[-1] = CODE_RVA + 0x180
+    for case in cases:
+        body += struct.pack("<I", case)
+    body += b"\xcc" * (0x180 - len(body))
+    body += b"\xff\x15" + struct.pack("<i", slot - (CODE_RVA + 0x180 + 6)) + b"\xc3"
+    return bytes(body), function_end
+
+
+def with_pdata(data, ranges):
+    """Declare x64 .pdata entries (begin RVA, end RVA) at PDATA_RVA."""
+    data = bytearray(data)
+    directory = 0x98 + 108 + 4 + 8 * 3
+    struct.pack_into("<II", data, directory, PDATA_RVA, 12 * len(ranges))
+    for index, (begin, end) in enumerate(ranges):
+        entry = 0x200 + PDATA_RVA - 0x1000 + 12 * index
+        struct.pack_into("<III", data, entry, begin, end, 0x1880)
+    return bytes(data)
+
+
 def build_code_demo(*, bits=32, **imports):
     """An entry point that calls the import once through each canonical form."""
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)
