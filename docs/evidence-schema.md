@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.8.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.9.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -30,10 +30,10 @@ El host trata la respuesta del worker como entrada no fiable: la valida, comprue
 
 | Campo | Contenido |
 | --- | --- |
-| `schema_version` | Literal `0.8.0`; versiones distintas se rechazan. |
+| `schema_version` | Literal `0.9.0`; versiones distintas se rechazan. |
 | `sample` | SHA-256, MD5, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. MD5 se incluye solo por interoperabilidad. |
 | `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
-| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function` y `local_link`. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function` y `local_link`. |
 | `extractor_runs` | Fuentes `pe`, `strings`, `yara`, `decode` y `code`, con su versión y componentes tipados con cobertura y contadores. |
 | `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
 | `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
@@ -53,6 +53,21 @@ Cada evidencia tiene `id` (`E1`, `E2`…, único y local al informe), `source`, 
 - **`export`**: índice en la tabla de direcciones de exportación, ordinal, nombres y destino declarado o forwarder, sin resolver otras DLL.
 - **`string`**: texto ASCII o UTF-16LE exacto y sus bytes, con repertorio ASCII imprimible explícito. Una URL no demuestra una conexión.
 - **`header_anomaly`**: una comprobación estructural que se cumple sobre los valores de las cabeceras y secciones que cita, no solo sobre sus IDs.
+
+## Marcas de compilador (`toolchain_marker`)
+
+Bytes que un compilador, un enlazador o un empaquetador deja en el archivo, con la forma exacta del catálogo `lupabin-toolchains-v1` (componente `toolchain` de la fuente `pe`). `data` lleva `catalog`, `marker`, `raw_hex` (los bytes de la marca tal como están en el archivo) y `text` (lo que esos bytes dicen, si dicen algo). `confidence` es `observed`: los bytes están ahí; lo que significa cada marca lo dice su explicación, con lo que no demuestra.
+
+| `marker` | Bytes publicados | `text` | Dónde debe estar |
+| --- | --- | --- | --- |
+| `rich_header` | De «DanS» cifrado hasta «Rich» y su clave | nulo | Entre la cabecera MS-DOS y la cabecera PE, con el checksum del enlazador de Microsoft correcto |
+| `gcc_ident` | «GCC: (» y texto imprimible hasta su NUL, incluido | El texto | Dentro de los datos de una sección; cada texto distinto una vez, hasta 8 |
+| `mingw_w64_runtime` | «Mingw-w64 runtime failure:» | nulo | Dentro de los datos de una sección |
+| `go_buildinfo` | La cabecera de 16 bytes o, si guarda la versión en línea, hasta el final de la versión | La versión, o nulo | En una sección, con RVA múltiplo de 16 e indicadores que Go define |
+| `clr_header` | Los 8 primeros bytes de la cabecera CLI (tamaño 72 y versión del formato) | La versión del formato | Donde apunta el directorio 14 (`CLR Runtime Header`), con tamaño de al menos 72 |
+| `pyinstaller_cookie` | Los 88 bytes de la cookie | La biblioteca de Python | Después de los datos de todas las secciones, con su archivo también detrás de ellos |
+
+El modelo comprueba la forma de los bytes; el informe, dónde está cada marca respecto a las secciones y que cada una aparezca una vez (la de GCC, una vez por texto); y el host, con la muestra, que los bytes son los suyos, que el checksum de la cabecera Rich se cumple sobre los bytes anteriores y que el directorio CLR apunta a la cabecera publicada. Solo `go_buildinfo` y `clr_header` llevan RVA y sección. Una candidata que falla cualquier comprobación no se publica. Con más de 8 textos distintos de GCC, el componente queda parcial (`toolchain_limit`). Una correspondencia ambigua entre memoria y archivo bloquea el componente (`unsafe_mapping`).
 
 ## Coincidencias YARA (`yara_match`)
 
@@ -186,6 +201,7 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 | 0.5.0 | Fuente `code`: `api_call`, `call_argument` e `iat_rva` en los imports | `docs/schemas/0.5.0.json` |
 | 0.6.0 | `code_function` (rangos de `.pdata` en x64) | `docs/schemas/0.6.0.json` |
 | 0.7.0 | La vía `tail` de `api_call` (saltos en cola a una función importada) | `docs/schemas/0.7.0.json` |
-| 0.8.0 | `local_link` (un identificador que pasa de una llamada a otra por una variable local) | `docs/evidence-schema.json` (activo) |
+| 0.8.0 | `local_link` (un identificador que pasa de una llamada a otra por una variable local) | `docs/schemas/0.8.0.json` |
+| 0.9.0 | Componente `toolchain` y `toolchain_marker` (marcas de compilador) | `docs/evidence-schema.json` (activo) |
 
 Los consumidores rechazan versiones de esquema no soportadas. La CLI no transforma informes antiguos.
