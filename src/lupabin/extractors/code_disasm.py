@@ -144,6 +144,7 @@ def walk(
     call_budget: int,
     deadline: float = float("inf"),
     jumped: JumpVisitor | None = None,
+    avoid: frozenset[int] = frozenset(),
 ) -> Walk:
     """Decode every instruction reachable from `entries`.
 
@@ -154,7 +155,8 @@ def walk(
     classifying a call costs several times more than decoding an instruction.
     Also stops when `time.monotonic()` passes `deadline`, checked every
     _CLOCK_EVERY instructions. A `jmp` without a constant target goes to `jumped`, and
-    the targets it returns are walked like constant ones.
+    the targets it returns are walked like constant ones. Constant targets in `avoid`
+    are not walked (the startup's walk stops at `main`).
     """
     engine = Cs(CS_ARCH_X86, CS_MODE_32 if bits == 32 else CS_MODE_64)
     disasm = capstone._cs.cs_disasm
@@ -239,7 +241,9 @@ def walk(
                         # a branch or call to the next instruction adds nothing: this run
                         # decodes it anyway. A jmp there ends this run, so it is walked.
                         if target is not None and target < _LIMIT:
-                            if target != rva + position + size or role == _JUMP:
+                            if target in avoid:
+                                pass
+                            elif target != rva + position + size or role == _JUMP:
                                 pending.append(target)
                         elif role == _JUMP and jumped is not None:
                             earlier = range(

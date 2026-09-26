@@ -26,6 +26,7 @@ Component = Literal[
     "disassembly",
     "api_calls",
     "call_arguments",
+    "main_function",
 ]
 COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "pe": (
@@ -41,7 +42,7 @@ COMPONENTS: dict[Source, tuple[Component, ...]] = {
     "strings": ("ascii", "utf16le"),
     "yara": ("yara_rules", "yara_scan", "yara_evidence"),
     "decode": ("decode_strings", "decode_xor"),
-    "code": ("disassembly", "api_calls", "call_arguments"),
+    "code": ("disassembly", "api_calls", "call_arguments", "main_function"),
 }
 
 
