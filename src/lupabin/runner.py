@@ -16,7 +16,7 @@ from lupabin.rules.catalog import CatalogError, load_catalog
 from lupabin.transport import Completed as Completed
 from lupabin.transport import DockerCLI, Transport
 
-IMAGE = "lupabin-worker:0.9.0"
+IMAGE = "lupabin-worker:0.10.0"
 SOURCES = ("pe", "strings", "yara", "decode", "code")
 LABEL = "org.lupabin.analysis"
 
@@ -110,7 +110,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         try:
             envelope = json.loads(response.stdout)
             if isinstance(envelope, dict) and isinstance(envelope.get("schema_version"), str):
-                if envelope["schema_version"] != "0.9.0":
+                if envelope["schema_version"] != "0.10.0":
                     raise LupaBinError("incompatible_worker")
             report = Report.model_validate_json(response.stdout)
         except (ValidationError, ValueError, RecursionError):

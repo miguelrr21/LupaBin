@@ -571,6 +571,79 @@ def build_code_demo(*, bits=32, **imports):
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)
 
 
+# The startup's variables for __getmainargs, in the read-only .idata of build_pe: only
+# their addresses matter, the program is never run.
+MAIN_VARIABLES = (0x1A00, 0x1A08, 0x1A10)  # argc, argv, envp
+MAIN_RVA = 0x2100
+
+
+def build_main_demo(
+    *,
+    bits=64,
+    dll=b"msvcrt.dll",
+    loads=MAIN_VARIABLES,
+    twice=False,
+    clobber=b"",
+):
+    """A startup that calls __getmainargs(&argc, &argv, &envp, 0, 0), then main(argc,
+    argv, envp) and exit; main calls puts. Imports from `dll`: __getmainargs (first
+    slot), puts, exit. `loads` are the variables main's arguments are read from,
+    `twice` repeats the call to main, `clobber` goes right before it. Inert training
+    data: never executed."""
+    width = bits // 8
+    slots = {name: 0x1140 + index * width for index, name in enumerate(("args", "puts", "exit"))}
+
+    def rel(source, target, size):
+        return struct.pack("<i", target - (source + size))
+
+    code = bytearray(b"\xcc" * 0x200)
+    body = b""
+    if bits == 64:
+        for opcode, address in zip(
+            (b"\x48\x8d\x0d", b"\x48\x8d\x15", b"\x4c\x8d\x05"), MAIN_VARIABLES, strict=False
+        ):
+            body += opcode + rel(CODE_RVA + len(body), address, 7)
+        body += b"\x45\x31\xc9"  # xor r9d, r9d
+        body += b"\x48\xff\x15" + rel(CODE_RVA + len(body), slots["args"], 7)  # call [args]
+        for _ in range(2 if twice else 1):
+            for opcode, address in zip(
+                (b"\x8b\x0d", b"\x48\x8b\x15", b"\x4c\x8b\x05"), loads, strict=False
+            ):
+                body += opcode + rel(CODE_RVA + len(body), address, len(opcode) + 4)
+            body += clobber
+            body += b"\xe8" + rel(CODE_RVA + len(body), MAIN_RVA, 5)  # call main
+        body += b"\x89\xc1"  # mov ecx, eax
+        body += b"\x48\xff\x15" + rel(CODE_RVA + len(body), slots["exit"], 7)  # call [exit]
+        main = b"\x48\xff\x15" + rel(MAIN_RVA, slots["puts"], 7) + b"\xc3"  # call [puts]; ret
+    else:
+        base = 0x400000
+        body += b"\x6a\x00\x6a\x00"  # push 0 (startinfo); push 0 (doWildCard)
+        for address in reversed(MAIN_VARIABLES):
+            body += b"\x68" + struct.pack("<I", base + address)  # push &variable
+        body += b"\xff\x15" + struct.pack("<I", base + slots["args"])  # call [args]
+        body += b"\x83\xc4\x14"  # add esp, 20
+        for _ in range(2 if twice else 1):
+            for address in reversed(loads):
+                body += b"\xff\x35" + struct.pack("<I", base + address)  # push [variable]
+            body += clobber
+            body += b"\xe8" + rel(CODE_RVA + len(body), MAIN_RVA, 5)  # call main
+            body += b"\x83\xc4\x0c"  # add esp, 12
+        body += b"\x50"  # push eax
+        body += b"\xff\x15" + struct.pack("<I", base + slots["exit"])  # call [exit]
+        main = b"\xff\x15" + struct.pack("<I", base + slots["puts"]) + b"\xc3"
+    body += b"\xc3"
+    assert CODE_RVA + len(body) <= MAIN_RVA
+    code[: len(body)] = body
+    code[MAIN_RVA - CODE_RVA : MAIN_RVA - CODE_RVA + len(main)] = main
+    return build_code_pe(
+        bytes(code),
+        bits=bits,
+        dll=dll,
+        function=b"__getmainargs",
+        more=(b"puts", b"exit"),
+    )
+
+
 GCC_IDENT = b"GCC: (GNU) 13-win32\0"
 GO_VERSION = b"go1.26.5"
 PYTHON_LIBRARY = b"python311.dll"

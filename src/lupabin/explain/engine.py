@@ -7,6 +7,7 @@ from lupabin.evidence.facts import (
     ApiCallEvidence,
     CallArgumentEvidence,
     CodeFunctionEvidence,
+    CodeReachEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -14,6 +15,7 @@ from lupabin.evidence.facts import (
     HeaderEvidence,
     ImportEvidence,
     LocalLinkEvidence,
+    MainCallEvidence,
     SectionEvidence,
     StringEvidence,
     ToolchainEvidence,
@@ -142,6 +144,12 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
     functions = tuple(fact for fact in evidence if isinstance(fact, CodeFunctionEvidence))
     if functions:
         yield "code.functions@1", functions
+    for fact in evidence:
+        if isinstance(fact, MainCallEvidence):
+            yield "code.main_call@1", (fact, facts[fact.provenance.evidence_ids[0]])
+        elif isinstance(fact, CodeReachEvidence):
+            main = facts[fact.provenance.evidence_ids[0]]
+            yield f"code.reach_{fact.data.root}@1", (fact, main)
     sections = executable_sections(report)
     if sections and RULES["code.walk_density@1"].derive(sections, report) is not None:
         yield "code.walk_density@1", sections

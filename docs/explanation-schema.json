@@ -215,7 +215,8 @@
                 "decode_xor",
                 "disassembly",
                 "api_calls",
-                "call_arguments"
+                "call_arguments",
+                "main_function"
               ],
               "type": "string"
             },
@@ -279,7 +280,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "0.9.0",
+          "const": "0.10.0",
           "title": "Schema Version",
           "type": "string"
         }
