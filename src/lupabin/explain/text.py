@@ -19,6 +19,7 @@ COMPONENTS: dict[Component, str] = {
     "imports_delay": "imports retardados",
     "exports": "exports",
     "anomalies": "anomalías estructurales",
+    "toolchain": "marcas de compilador",
     "ascii": "cadenas ASCII",
     "utf16le": "cadenas UTF-16LE",
     "yara_rules": "catálogo de reglas",
@@ -70,6 +71,7 @@ MESSAGES: dict[str, str] = {
         "Se agotó el presupuesto de bytes para medir entropía: algunas secciones no se midieron."
     ),
     "anomaly_limit": "Se alcanzó el máximo de anomalías conservadas.",
+    "toolchain_limit": "Se alcanzó el máximo de marcas de GCC distintas conservadas.",
     "evidence_budget": "Se alcanzó el tamaño máximo del informe y se omitieron resultados.",
     "dependency_omitted": (
         "Faltan datos de los que depende este componente, así que parte de él no se calculó."

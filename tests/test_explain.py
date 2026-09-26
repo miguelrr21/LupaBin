@@ -23,6 +23,7 @@ from tests.fixtures.pe_builder import (
     build_pe,
     build_resolve_demo,
     build_same_function_demo,
+    build_toolchain_demo,
 )
 
 GLOSSARY = load_glossary()
@@ -62,6 +63,8 @@ SAMPLES = {
     "entry-outside": lambda: patched_demo(0x98 + 16, 0xFFFF),
     "demo": build_demo,
     "demo64": lambda: build_demo(bits=64),
+    "toolchain": build_toolchain_demo,
+    "toolchain-go-pointer": lambda: build_toolchain_demo(bits=64, go_inline=False),
     "corrupt": lambda: build_demo(corrupt=True),
     "decode": build_decode_demo,
     "code": build_code_demo,

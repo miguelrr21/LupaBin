@@ -10,6 +10,7 @@ import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from lupabin.evidence import toolchain
 from lupabin.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
@@ -24,6 +25,7 @@ from lupabin.evidence.facts import (
     LocalLinkEvidence,
     SectionEvidence,
     StringEvidence,
+    ToolchainEvidence,
     YaraEvidence,
 )
 from lupabin.evidence.models import Report
@@ -132,6 +134,71 @@ def _header(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
         "size_of_image": number(data.size_of_image),
     }
     return slots, ("pe.format", "pe.header")
+
+
+TOOLCHAIN_GLOSSARY = {
+    "rich_header": "toolchain.rich_header",
+    "gcc_ident": "toolchain.gcc_ident",
+    "mingw_w64_runtime": "toolchain.mingw_w64",
+    "go_buildinfo": "toolchain.go_buildinfo",
+    "clr_header": "toolchain.clr_header",
+    "pyinstaller_cookie": "toolchain.pyinstaller",
+}
+
+
+def _marker(
+    marker: toolchain.Marker, versioned: bool | None = None
+) -> Callable[[tuple[Evidence, ...], Report], Derived | None]:
+    """One marker; for GCC, every ident the report publishes, in report order."""
+
+    def derive(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+        facts = [fact for fact in cited if isinstance(fact, ToolchainEvidence)]
+        if not facts or len(facts) != len(cited) or any(f.data.marker != marker for f in facts):
+            return None
+        first = facts[0]
+        if marker == "gcc_ident":
+            group = tuple(
+                fact.id
+                for fact in report.evidence
+                if isinstance(fact, ToolchainEvidence) and fact.data.marker == marker
+            )
+            if tuple(fact.id for fact in facts) != group:
+                return None
+        elif len(facts) != 1:
+            return None
+        if versioned is not None and (first.data.text is not None) != versioned:
+            return None
+        where = first.location
+        slots: Slots
+        if marker == "rich_header":
+            entries = (len(first.data.raw_hex) // 2 - 24) // 8
+            slots = {
+                "offset": hexadecimal(where.offset or 0),
+                "entries": entries,
+                "noun": "entrada" if entries == 1 else "entradas",
+            }
+        elif marker == "gcc_ident":
+            slots = {
+                "count": len(facts),
+                "noun": "texto" if len(facts) == 1 else "textos distintos",
+                "idents": "; ".join(fact.data.text or "" for fact in facts),
+            }
+        elif marker == "mingw_w64_runtime":
+            slots = {
+                "message": toolchain.MINGW_W64.decode("ascii"),
+                "offset": hexadecimal(where.offset or 0),
+            }
+        elif marker == "go_buildinfo":
+            slots = {"rva": hexadecimal(where.rva or 0)}
+            if first.data.text is not None:
+                slots["version"] = first.data.text
+        elif marker == "clr_header":
+            slots = {"rva": hexadecimal(where.rva or 0)}
+        else:
+            slots = {"offset": hexadecimal(where.offset or 0), "library": first.data.text or ""}
+        return slots, (TOOLCHAIN_GLOSSARY[marker], "toolchain.marker")
+
+    return derive
 
 
 def _section(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
@@ -686,6 +753,65 @@ RULES: dict[str, Rule] = {
             "Son valores declarados por el archivo: no garantizan que Windows lo cargue así "
             "ni dicen nada de lo que hace el programa.",
             _header,
+        ),
+        Rule(
+            "toolchain.rich_header@1",
+            "El archivo contiene una cabecera Rich (desplazamiento {offset}, {entries} {noun}) "
+            "cuyo checksum coincide con los bytes que la preceden: es la estructura que "
+            "escribe el enlazador de Microsoft (link.exe), el de Visual Studio.",
+            "Una cabecera Rich puede copiarse de otro programa o fabricarse con un checksum "
+            "válido. No dice quién compiló el programa ni qué hace.",
+            _marker("rich_header"),
+        ),
+        Rule(
+            "toolchain.gcc_ident@1",
+            "El archivo contiene {count} {noun} de identificación de GCC, la marca que GCC "
+            "añade a cada archivo que compila: «{idents}».",
+            "La marca puede quitarse o copiarse. Indica que al menos parte del código se "
+            "compiló con GCC, no quién lo compiló ni qué hace el programa.",
+            _marker("gcc_ident"),
+        ),
+        Rule(
+            "toolchain.mingw_w64_runtime@1",
+            "El archivo contiene el mensaje «{message}» (desplazamiento {offset}), del código "
+            "de arranque que MinGW-w64 añade a los programas que compila.",
+            "Indica que el archivo incluye ese código de arranque; no dice quién lo compiló "
+            "ni qué hace el resto del programa.",
+            _marker("mingw_w64_runtime"),
+        ),
+        Rule(
+            "toolchain.go_buildinfo@1",
+            "El archivo contiene la cabecera de información de compilación que el enlazador "
+            "de Go escribe en sus programas (RVA {rva}); declara la versión «{version}».",
+            "La cabecera y la versión son lo que declara el archivo: pueden copiarse o "
+            "manipularse. No dicen qué hace el programa.",
+            _marker("go_buildinfo", versioned=True),
+        ),
+        Rule(
+            "toolchain.go_buildinfo_pointer@1",
+            "El archivo contiene la cabecera de información de compilación que el enlazador "
+            "de Go escribe en sus programas (RVA {rva}), en el formato que guarda la versión "
+            "fuera de la cabecera: LupaBin no la lee.",
+            "La cabecera es lo que declara el archivo: puede copiarse o manipularse. No dice "
+            "qué hace el programa.",
+            _marker("go_buildinfo", versioned=False),
+        ),
+        Rule(
+            "toolchain.clr_header@1",
+            "El directorio «CLR Runtime Header» apunta a una cabecera CLR válida (RVA {rva}): "
+            "el archivo es un ensamblado .NET, con código gestionado (IL).",
+            "LupaBin solo recorre código x86 y x64: no ve el código IL de .NET, así que no "
+            "encontrar llamadas ni capacidades en este archivo no dice nada de lo que hace.",
+            _marker("clr_header"),
+        ),
+        Rule(
+            "toolchain.pyinstaller_cookie@1",
+            "Después de las secciones está la cookie de un archivo de PyInstaller "
+            "(desplazamiento {offset}), que declara la biblioteca de Python «{library}»: es el "
+            "formato en que PyInstaller empaqueta un programa Python con su intérprete.",
+            "LupaBin solo analiza el cargador que abre ese archivo, no el código Python que "
+            "contiene. La cookie puede copiarse.",
+            _marker("pyinstaller_cookie"),
         ),
         Rule(
             "pe.section@1",

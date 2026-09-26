@@ -1,0 +1,13 @@
+id = "toolchain.pyinstaller"
+title = "Archivo de PyInstaller"
+revision = "1.0.0"
+lang = "es"
+summary = "PyInstaller convierte un programa Python en un ejecutable: un cargador nativo seguido de un archivo con el intérprete, las bibliotecas y el código Python, que termina en una cookie que empieza por «MEI»."
+body = "La cookie está al final del archivo empaquetado y dice dónde empieza el archivo, dónde está su tabla de contenidos y qué biblioteca de Python usa, por ejemplo python311.dll. Al ejecutarse, el cargador se abre a sí mismo, busca la cookie desde el final y extrae o carga lo que necesita.\n\nEl propio cargador contiene la secuencia «MEI» como constante para buscarla, así que LupaBin solo acepta la cookie después de las secciones y con una estructura coherente.\n\nEl código Python va compilado a bytecode dentro del archivo: el análisis de LupaBin, que es de código nativo, no lo ve."
+not_proven = "LupaBin solo analiza el cargador, que es el mismo en todos los programas hechos con PyInstaller: su informe no dice nada del código Python. La cookie puede copiarse."
+related = ["toolchain.marker"]
+sources = [
+  { title = "Advanced Topics: The CArchive", publisher = "Documentación de PyInstaller", url = "https://pyinstaller.org/en/stable/advanced-topics.html#carchive", verified_on = 2026-09-26 },
+  { title = "PyInstaller/archive/writers.py", publisher = "Proyecto PyInstaller", url = "https://github.com/pyinstaller/pyinstaller/blob/develop/PyInstaller/archive/writers.py", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: marcas de compilador", publisher = "Proyecto LupaBin", document = "docs/metodo.md#marcas-de-compilador", verified_on = 2026-09-26 },
+]

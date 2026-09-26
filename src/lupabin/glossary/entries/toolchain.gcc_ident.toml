@@ -1,0 +1,12 @@
+id = "toolchain.gcc_ident"
+title = "Marca de identificación de GCC"
+revision = "1.0.0"
+lang = "es"
+summary = "GCC añade a cada archivo que compila un texto de identificación que empieza por «GCC: », seguido del nombre del paquete y de la versión del compilador."
+body = "El texto se construye en el propio GCC como «GCC: » más el paquete, que por defecto es «(GNU) » y que las distribuciones cambian (por ejemplo «(Rev3, Built by MSYS2 project) »), más la versión. La opción -fno-ident lo suprime.\n\nComo se añade una vez por cada archivo compilado, en un ejecutable suele aparecer repetido muchas veces. LupaBin publica cada texto distinto una sola vez, hasta ocho."
+not_proven = "Indica que al menos parte del código se compiló con GCC: el resto del programa puede venir de otro compilador. La marca puede quitarse o copiarse."
+related = ["toolchain.marker", "toolchain.mingw_w64"]
+sources = [
+  { title = "gcc/toplev.cc (compile_file: directiva .ident)", publisher = "Proyecto GCC (espejo en GitHub)", url = "https://github.com/gcc-mirror/gcc/blob/master/gcc/toplev.cc", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: marcas de compilador", publisher = "Proyecto LupaBin", document = "docs/metodo.md#marcas-de-compilador", verified_on = 2026-09-26 },
+]
