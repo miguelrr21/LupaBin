@@ -8,7 +8,7 @@
 #  1. instala Docker, Caddy y las actualizaciones automáticas de seguridad;
 #  2. instala uv 0.8.22 comprobando su SHA-256 publicado;
 #  3. copia el código a /opt/lupabin y crea su entorno (Python 3.12, extra "web");
-#  4. construye la imagen aislada lupabin-worker:0.7.0;
+#  4. construye la imagen aislada lupabin-worker:0.8.0;
 #  5. crea el usuario de servicio "lupabin", la configuración /etc/lupabin/web.env,
 #     la unidad de systemd y el sitio de Caddy (puerto 80; HTTPS al poner un dominio);
 #  6. abre los puertos 80 y 443 si el sistema trae reglas de iptables que los bloquean
@@ -21,7 +21,7 @@ APP="/opt/lupabin"
 STATE="/var/lib/lupabin"
 CONFIG="/etc/lupabin"
 SERVICE_USER="lupabin"
-IMAGE="lupabin-worker:0.7.0"
+IMAGE="lupabin-worker:0.8.0"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="$(cd "$HERE/../.." && pwd)"
 

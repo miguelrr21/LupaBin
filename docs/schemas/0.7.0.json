@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.8.0",
-          "default": "0.8.0",
+          "const": "0.7.0",
+          "default": "0.7.0",
           "title": "Version",
           "type": "string"
         }
@@ -1205,33 +1205,6 @@
       "title": "ExtractorError",
       "type": "object"
     },
-    "FrameSlot": {
-      "additionalProperties": false,
-      "description": "A local variable: a displacement from the frame register.",
-      "properties": {
-        "displacement": {
-          "exclusiveMaximum": 2147483648,
-          "minimum": -2147483648,
-          "title": "Displacement",
-          "type": "integer"
-        },
-        "frame": {
-          "enum": [
-            "ebp",
-            "rsp",
-            "rbp"
-          ],
-          "title": "Frame",
-          "type": "string"
-        }
-      },
-      "required": [
-        "frame",
-        "displacement"
-      ],
-      "title": "FrameSlot",
-      "type": "object"
-    },
     "HeaderData": {
       "additionalProperties": false,
       "properties": {
@@ -1669,119 +1642,6 @@
         }
       },
       "title": "Limits",
-      "type": "object"
-    },
-    "LocalLinkData": {
-      "additionalProperties": false,
-      "description": "A call's parameter receives the address of a local variable (`phkResult`), and a\nlater call passes that variable's value (`hKey`): the value the first call leaves\nthere, if nothing in between changes it (the walk's rule).",
-      "properties": {
-        "address": {
-          "$ref": "#/$defs/Instruction"
-        },
-        "method": {
-          "const": "frame-slot-v1",
-          "default": "frame-slot-v1",
-          "title": "Method",
-          "type": "string"
-        },
-        "passes": {
-          "$ref": "#/$defs/Instruction"
-        },
-        "raw_hex": {
-          "pattern": "^(?:[a-f0-9]{2}){1,15}$",
-          "title": "Raw Hex",
-          "type": "string"
-        },
-        "reader_name": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Reader Name",
-          "type": "string"
-        },
-        "reader_position": {
-          "maximum": 15,
-          "minimum": 0,
-          "title": "Reader Position",
-          "type": "integer"
-        },
-        "slot": {
-          "$ref": "#/$defs/FrameSlot"
-        },
-        "writer_name": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Writer Name",
-          "type": "string"
-        },
-        "writer_position": {
-          "maximum": 15,
-          "minimum": 0,
-          "title": "Writer Position",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "slot",
-        "writer_position",
-        "writer_name",
-        "reader_position",
-        "reader_name",
-        "raw_hex",
-        "address",
-        "passes"
-      ],
-      "title": "LocalLinkData",
-      "type": "object"
-    },
-    "LocalLinkEvidence": {
-      "additionalProperties": false,
-      "properties": {
-        "component": {
-          "const": "call_arguments",
-          "default": "call_arguments",
-          "title": "Component",
-          "type": "string"
-        },
-        "confidence": {
-          "const": "inferred",
-          "default": "inferred",
-          "title": "Confidence",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/LocalLinkData"
-        },
-        "id": {
-          "maxLength": 16,
-          "pattern": "^E[1-9][0-9]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "local_link",
-          "default": "local_link",
-          "title": "Kind",
-          "type": "string"
-        },
-        "location": {
-          "$ref": "#/$defs/Location"
-        },
-        "provenance": {
-          "$ref": "#/$defs/Provenance"
-        },
-        "source": {
-          "const": "code",
-          "default": "code",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "location",
-        "data"
-      ],
-      "title": "LocalLinkEvidence",
       "type": "object"
     },
     "Location": {
@@ -2790,7 +2650,6 @@
             "export": "#/$defs/ExportEvidence",
             "header_anomaly": "#/$defs/AnomalyEvidence",
             "import": "#/$defs/ImportEvidence",
-            "local_link": "#/$defs/LocalLinkEvidence",
             "pe_header": "#/$defs/HeaderEvidence",
             "section": "#/$defs/SectionEvidence",
             "string": "#/$defs/StringEvidence",
@@ -2834,9 +2693,6 @@
           },
           {
             "$ref": "#/$defs/CodeFunctionEvidence"
-          },
-          {
-            "$ref": "#/$defs/LocalLinkEvidence"
           }
         ]
       },
@@ -2875,8 +2731,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.8.0",
-      "default": "0.8.0",
+      "const": "0.7.0",
+      "default": "0.7.0",
       "title": "Schema Version",
       "type": "string"
     },

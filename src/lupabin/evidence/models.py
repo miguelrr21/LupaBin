@@ -1,9 +1,15 @@
 from collections import Counter, deque
+from collections.abc import Mapping
 from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from lupabin.evidence.code import validate_argument, validate_call, validate_function
+from lupabin.evidence.code import (
+    validate_argument,
+    validate_call,
+    validate_function,
+    validate_link,
+)
 from lupabin.evidence.facts import ApiCallEvidence
 from lupabin.evidence.facts import Evidence as Evidence
 from lupabin.evidence.facts import ImportData as ImportData
@@ -64,7 +70,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.7.0"] = "0.7.0"
+    version: Literal["0.8.0"] = "0.8.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -128,8 +134,15 @@ class ExtractorError(Model):
     code: ErrorCode
 
 
+def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | None:
+    """The import an api_call cites, or None when `call` is not an api_call."""
+    if not isinstance(call, ApiCallEvidence):
+        return None
+    return facts.get(call.provenance.evidence_ids[0])
+
+
 class Report(Model):
-    schema_version: Literal["0.7.0"] = "0.7.0"
+    schema_version: Literal["0.8.0"] = "0.8.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -160,6 +173,7 @@ class Report(Model):
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
             "code_function": limits.code.calls,
+            "local_link": limits.code.calls,
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
@@ -282,6 +296,35 @@ class Report(Model):
                     raise ValueError("a function range is published once")
                 ranges.add(fact.data.begin)
                 degrees[fact.id] = 0
+                continue
+            if fact.kind == "local_link":
+                data = fact.data
+                spans = [
+                    (fact.location.offset or 0, fact.location.length or 0),
+                    (data.address.offset, len(data.address.raw_hex) // 2),
+                    (data.passes.offset, len(data.passes.raw_hex) // 2),
+                ]
+                if any(offset + length > self.sample.size for offset, length in spans):
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have code evidence")
+                refs = fact.provenance.evidence_ids
+                writer, reader = facts.get(refs[0]), facts.get(refs[1])
+                validate_link(
+                    fact,
+                    writer,
+                    _callee(writer, facts),
+                    reader,
+                    _callee(reader, facts),
+                    sections,
+                    header,
+                )
+                if (refs[1], data.reader_position) in parameters:
+                    raise ValueError("a call has one value per argument")
+                parameters.add((refs[1], data.reader_position))
+                degrees[fact.id] = 2
+                children[refs[0]].append(fact.id)
+                children[refs[1]].append(fact.id)
                 continue
             if fact.kind == "call_argument":
                 span = fact.location

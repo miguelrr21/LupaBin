@@ -169,6 +169,18 @@ Las revisiones manuales, desensamblando cada tramo, dieron 213 correctos de 213:
 
 **Límite conocido.** La línea de órdenes de `CreateProcessW` nunca se lee: Learn exige que esté en memoria escribible, y una cadena escribible puede cambiar antes de la llamada.
 
+### Misma variable local
+
+`RegOpenKeyEx(…, &clave)` deja la clave que abre en una variable local cuya dirección recibe (`phkResult`), y `RegSetValueEx(clave, …)` la usa después. Cuando las dos llamadas nombran la misma variable (un desplazamiento del registro de marco: `[ebp-0x8]` en x86, `[rsp+0x30]` o `[rbp-0x10]` en x64), LupaBin publica un enlace entre ellas (`local_link`), pero solo si el camino entre ambas la conserva:
+- la instrucción que lee la variable solo se alcanza desde la primera llamada, sin otro camino que entre en medio;
+- ninguna instrucción intermedia cambia el registro de marco, escribe en la variable, vuelve a tomar su dirección ni salta de forma incondicional; se admiten otras llamadas;
+- una escritura a través del otro registro de la pila (`esp` para una variable de `ebp`; `rbp` o `rsp` en x64) cuenta como escritura en la variable, porque los dos apuntan al mismo marco a una distancia que el código no dice;
+- en x64 no se admite una variable de las cuatro primeras ranuras de la pila, que según Microsoft pertenecen a la función llamada, y la lectura tiene que estar a menos de 4.096 bytes.
+
+**Medición.** En una muestra de 1 de cada 6 binarios de SysWOW64, el 73 % de las llamadas que abren una clave pasan la dirección de una variable reconocible, y de 1.673 parejas candidatas el camino conserva la variable en 635. Casi todas las rechazadas (892) lo son porque otro camino entra entre las dos llamadas. En 1 de cada 20 binarios de System32 salen 122 enlaces. Revisión manual, desensamblando el tramo entre las dos llamadas: 30 de 30 correctos en x86 y 30 de 30 en x64, incluidos casos con varias llamadas intermedias y con escrituras en variables vecinas.
+
+**Coste.** Cada llamada que lee una clave busca por bisección la última llamada anterior que escribió en esa variable. El peor caso sintético, 4.096 llamadas publicadas en las que cada una lee la variable que escribió la anterior y la vuelve a escribir, tarda 6,5 s en el contenedor y 14,4 s en total, con las explicaciones. Llena el cupo de hechos del informe, y el informe lo declara (`evidence_budget`).
+
 ### Nota de cobertura del recorrido
 
 Cuando el recorrido decodifica pocas instrucciones para el tamaño del código, una explicación lo pone en contexto (`code.walk_density@1`). Solo se aplica con al menos 64 KiB de código nativo, recorrido completo y un binario que no sea .NET. Umbral: 20 instrucciones por KiB, por debajo del cual se queda el 0,28 % de los binarios benignos medidos. Con un mínimo de solo 4 KiB, incluso un umbral de 5 por KiB saltaba en uno de cada quince binarios benignos (distribuciones de teclado, DLL de recursos), y se descartó. No demuestra empaquetado.
@@ -276,7 +288,7 @@ El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. 
 ## Límites conocidos
 
 - **Código.** Solo x86 y x64. De los saltos indirectos solo se siguen las tablas de `switch` de MSVC comprobables; vtables y callbacks no. Tras una llamada que no vuelve, el recorrido sigue en línea recta: en x86 los campos reubicados lo detienen, pero en x64 puede decodificar bytes que no son código. Un binario empaquetado muestra poco más que su desempaquetador.
-- **Argumentos.** No se propagan valores entre registros ni se sigue un identificador entre llamadas. La línea de órdenes de `CreateProcessW` no se lee.
+- **Argumentos.** No se propagan valores entre registros. Un identificador solo se sigue entre dos llamadas a través de una variable local y en un camino recto (sección «Misma variable local»). La línea de órdenes de `CreateProcessW` no se lee.
 - **Decodificación.** Sin una crib del catálogo no hay resultado. Una cadena aislada con clave de 8 bytes se recupera en el 37 % de los casos en ASCII y el 62 % en UTF-16LE.
 - **Familias de APIs.** Solo reconocen imports por nombre exacto, no por ordinal.
 - **Idioma.** Las explicaciones y el glosario están en español.
@@ -288,7 +300,7 @@ El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. 
 Las herramientas están en `tests/` y no forman parte del paquete ni de la CI. Reciben un directorio de binarios benignos que aporte quien evalúa, y los leen como datos:
 
 - `uv run python -m tests.decode_eval false-positives <dir>` y `recall <dir>`: falsos positivos y cobertura de la decodificación.
-- `uv run python -m tests.code_eval corpus <dir>`: llamadas, argumentos, verificación de bytes y tiempos; `worst` mide los peores casos sintéticos de 20 MiB.
+- `uv run python -m tests.code_eval corpus <dir>`: llamadas, argumentos, verificación de bytes y tiempos; `worst` mide los peores casos sintéticos: los de 20 MiB y uno con tantas llamadas enlazadas por una variable local como se pueden publicar.
 - `uv run python -m tests.capability_eval corpus <dir>`: frecuencia de cada capacidad; `review` lista cada caso para revisarlo.
 
 Cambiar un umbral, una condición, un catálogo o una redacción exige una nueva versión fijada por digest, repetir la medición y revisar los casos a mano.
