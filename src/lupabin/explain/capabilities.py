@@ -1,4 +1,4 @@
-"""Catalog `lupabin-capabilities-v3`: what the code contains, from calls and their constant
+"""Catalog `lupabin-capabilities-v4`: what the code contains, from calls and their constant
 arguments (docs/metodo.md, «Capacidades»).
 
 A capability is an explanation rule, not a fact: it reads `api_call` and
@@ -25,44 +25,47 @@ from lupabin.evidence.facts import (
     CodeFunctionEvidence,
     Evidence,
     ImportEvidence,
+    LocalLinkEvidence,
 )
 from lupabin.evidence.models import Report
 from lupabin.explain import winapi
 from lupabin.explain.models import SlotValue
-from lupabin.explain.text import hexadecimal, name, number
+from lupabin.explain.text import frame_slot, hexadecimal, name, number
 
-CATALOG_ID = "lupabin-capabilities-v3"
-CATALOG_SHA256 = "4399114c42fc38588b37ea2d82c590865da02666ee1bf0dd904ce8ced40d23e8"
+CATALOG_ID = "lupabin-capabilities-v4"
+CATALOG_SHA256 = "a64172c0cf7df395eec93c944c701076c8bb89a65d92911316d2ef1df2bd7e17"
 API_CATALOG = "lupabin-api-semantics-v4"
 
 Arguments = dict[str, CallArgumentEvidence]
 Slots = dict[str, SlotValue]
 Derived = tuple[Slots, tuple[str, ...]]  # slots and glossary entry ids
 
-# Benign context: on 2026-09-24, binaries with at least one case among
-# 3,087 benign PE files (System32 --stride 3: 1,363; SysWOW64 --stride 5: 521; Program
-# Files and Program Files (x86) --recursive --stride 40: 1,203), measured with
-# `uv run python -m tests.capability_eval`. Each of the 821 cases was reviewed by hand
-# (803 with catalog v1, the 13 that v2 adds and the 5 same-function pairs of v3, each
-# reviewed by disassembly; sections 10 and 11 of the design).
-BENIGN_FILES = 3087
+# Benign context: on 2026-09-26, binaries with at least one case among
+# 3,090 benign PE files (System32 --stride 3: 1,363; SysWOW64 --stride 5: 521; Program
+# Files and Program Files (x86) --recursive --stride 40: 1,206), measured with
+# `uv run python -m tests.capability_eval`. Each of the 831 cases was reviewed by hand;
+# the 7 writes through a local variable and the pair left in a .pdata range were also
+# reviewed by disassembly.
+BENIGN_FILES = 3090
 BENIGN = {
     "run_key_value": 0,
     "run_key_open_write": 9,
-    "run_key_open_and_set": 5,
+    "run_key_open_and_set": 1,
+    "run_key_set_opened": 7,
     "winlogon_open_write": 1,
     "winlogon_value": 0,
     "winlogon_open_and_set": 0,
-    "service_create": 2,
-    "command_execution": 26,
+    "winlogon_set_opened": 0,
+    "service_create": 3,
+    "command_execution": 25,
     "download_to_file": 0,
     "network_destination": 3,
-    "user_agent": 39,
-    "executable_writable_memory": 72,
-    "process_memory_access": 22,
+    "user_agent": 40,
+    "executable_writable_memory": 73,
+    "process_memory_access": 23,
     "move_on_reboot": 9,
     "named_mutex": 105,
-    "crypto_algorithm": 152,
+    "crypto_algorithm": 149,
 }
 
 
@@ -122,6 +125,9 @@ class Capability:
     # `describe` then decides which calls open it
     writes: frozenset[str] = frozenset()
     unit: tuple[str, str] = ("llamada", "llamadas")  # what a case is, singular and plural
+    # Cases come from local_link facts: a call of `writes` that passes the key a call
+    # meeting `describe` wrote into a local variable, instead of the same .pdata range
+    through: bool = False
 
     def technique_of(self, function: str, args: Arguments) -> str | None:
         if self.technique is None or isinstance(self.technique, str):
@@ -566,9 +572,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         "RegSetValueEx en el mismo rango de función que declara .pdata",
         {**_aw(("RegOpenKeyEx", "RegCreateKeyEx"), REGISTRY_OPEN), **SET_VALUE},
         _open_for_write(RUN_KEYS),
-        "LupaBin no sigue el identificador de la clave entre las dos llamadas, así que no "
-        "sabe si la escritura usa la clave abierta, y el rango lo declara el archivo. Muchos "
-        "instaladores y programas legítimos se registran así para arrancar con Windows.",
+        "LupaBin no pudo seguir el identificador de la clave entre las dos llamadas, así "
+        "que no sabe si la escritura usa la clave abierta, y el rango lo declara el archivo. "
+        "Muchos instaladores y programas legítimos se registran así para arrancar con Windows.",
         ("api.family.registry", "code.function_range", *EVIDENCE),
         "T1547.001",
         frozenset(SET_VALUE),
@@ -581,13 +587,41 @@ CAPABILITIES: tuple[Capability, ...] = (
         "de función que declara .pdata",
         {**_aw(("RegOpenKeyEx", "RegCreateKeyEx"), REGISTRY_OPEN), **SET_VALUE},
         _open_for_write((WINLOGON,)),
-        "LupaBin no sigue el identificador de la clave entre las dos llamadas, así que no "
-        "sabe si la escritura usa la clave abierta, y el rango lo declara el archivo. "
+        "LupaBin no pudo seguir el identificador de la clave entre las dos llamadas, así "
+        "que no sabe si la escritura usa la clave abierta, y el rango lo declara el archivo. "
         "Componentes de Windows y programas de administración legítimos escriben en ella.",
         ("api.family.registry", "code.function_range", *EVIDENCE),
         _written_winlogon_value,
         frozenset(SET_VALUE),
         ("rango de función", "rangos de función"),
+    ),
+    Capability(
+        "run_key_set_opened",
+        "persistence",
+        "escribir un valor en una clave de arranque automático (Run) que el mismo código "
+        "abre para escribir",
+        {**_aw(("RegOpenKeyEx", "RegCreateKeyEx"), REGISTRY_OPEN), **SET_VALUE},
+        _open_for_write(RUN_KEYS),
+        "Muchos instaladores y programas legítimos se registran así para arrancar con Windows.",
+        ("api.family.registry", "code.local_link", *EVIDENCE),
+        "T1547.001",
+        frozenset(SET_VALUE),
+        ("escritura", "escrituras"),
+        through=True,
+    ),
+    Capability(
+        "winlogon_set_opened",
+        "persistence",
+        "escribir un valor en la clave Winlogon que el mismo código abre para escribir",
+        {**_aw(("RegOpenKeyEx", "RegCreateKeyEx"), REGISTRY_OPEN), **SET_VALUE},
+        _open_for_write((WINLOGON,)),
+        "Componentes de Windows y programas de administración legítimos escriben en ella; "
+        "solo los valores Shell y Userinit se usan para ejecutar programas al iniciar sesión.",
+        ("api.family.registry", "code.local_link", *EVIDENCE),
+        _written_winlogon_value,
+        frozenset(SET_VALUE),
+        ("escritura", "escrituras"),
+        through=True,
     ),
     Capability(
         "service_create",
@@ -781,6 +815,8 @@ def _site(call: ApiCallEvidence) -> str:
 
 def cases(capability: Capability, report: Report) -> list[Case]:
     """Every case of the report that meets the condition, in report order."""
+    if capability.through:
+        return _through_variable(capability, report)
     if capability.writes:
         return _same_function(capability, report)
     found = []
@@ -799,7 +835,14 @@ def cases(capability: Capability, report: Report) -> list[Case]:
 def _same_function(capability: Capability, report: Report) -> list[Case]:
     """Per x64 .pdata range the report publishes: the calls that open the key for
     writing and the calls to a writing function whose key is not a predefined one."""
-    calls = _calls(report)
+    # a write whose key a link identifies is not a guess: _through_variable says
+    # which key it writes to, or it writes to another key
+    linked = {
+        fact.provenance.evidence_ids[1]
+        for fact in report.evidence
+        if isinstance(fact, LocalLinkEvidence)
+    }
+    calls = [entry for entry in _calls(report) if entry[0].id not in linked]
     found = []
     for fact in report.evidence:
         if not isinstance(fact, CodeFunctionEvidence):
@@ -835,6 +878,43 @@ def _same_function(capability: Capability, report: Report) -> list[Case]:
             )
             heading = f"{hexadecimal(begin)}-{hexadecimal(end)} (rango de .pdata)"
             found.append(Case(tuple(cited), heading, details, technique))
+    return found
+
+
+def _through_variable(capability: Capability, report: Report) -> list[Case]:
+    """Per local link: a call that opens the key for writing, and the call of `writes`
+    that passes the key the first one left in a local variable."""
+    calls = {call.id: (call, function, published) for call, function, published in _calls(report)}
+    order = {fact.id: index for index, fact in enumerate(report.evidence)}
+    found = []
+    for fact in report.evidence:
+        if not isinstance(fact, LocalLinkEvidence):
+            continue
+        writer = calls.get(fact.provenance.evidence_ids[0])
+        reader = calls.get(fact.provenance.evidence_ids[1])
+        if writer is None or reader is None:
+            continue
+        (opens, opener, opened), (sets, setter, given) = writer, reader
+        if opener not in capability.reads or setter not in capability.writes:
+            continue
+        details = capability.describe(opener, _by_name(opened))
+        if details is None:
+            continue
+        args = _by_name(given)
+        value = _labelled("el valor", _text(args, "lpValueName"))
+        variable = frame_slot(fact)
+        parts: list[Evidence] = [opens, *opened, sets, *given, fact]
+        cited = sorted(parts, key=lambda f: order[f.id])
+        found.append(
+            Case(
+                tuple(cited),
+                f"{_site(sets)} {setter}",
+                f"escribe {value or 'un valor'} en la clave que abre {opener} en "
+                f"{_site(opens)}: {details}. El identificador pasa por la variable local "
+                f"{variable}",
+                capability.technique_of(setter, args),
+            )
+        )
     return found
 
 

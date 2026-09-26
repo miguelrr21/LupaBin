@@ -1,0 +1,13 @@
+id = "code.local_link"
+title = "Identificador que pasa por una variable local"
+revision = "1.0.0"
+lang = "es"
+summary = "Una función como RegOpenKeyEx deja el identificador de la clave que abre en una variable local cuya dirección recibe (phkResult); una llamada posterior puede pasar el valor de esa variable como hKey."
+body = "Una variable local vive en el marco de pila de la función, a una distancia fija del registro de marco: [ebp-0x8] en x86, o [rsp+0x30] o [rbp-0x10] en x64. Para que RegOpenKeyEx o RegCreateKeyEx devuelvan la clave abierta, el código les pasa la dirección de esa variable (lea), y la función escribe allí el identificador. Si después el código pasa el contenido de esa misma variable a RegSetValueEx, la escritura va a la clave que se abrió.\n\nLupaBin lo afirma solo cuando las dos llamadas nombran la misma variable y el camino entre ellas es recto: la segunda solo se alcanza desde la primera, ninguna instrucción intermedia cambia el registro de marco ni escribe en la variable, y su dirección no se vuelve a tomar. En x64 no se admite una variable de las cuatro primeras ranuras de la pila, que pertenecen a la función llamada."
+not_proven = "Que el código contenga las dos llamadas no demuestra que se ejecuten, ni que la primera tenga éxito: si falla, la variable no guarda una clave abierta."
+related = ["code.call_argument", "code.import_call"]
+sources = [
+  { title = "RegOpenKeyExW function (winreg.h): phkResult", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw", verified_on = 2026-09-26 },
+  { title = "x64 stack usage: Stack allocation", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/build/stack-usage#stack-allocation", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: misma variable local", publisher = "Proyecto LupaBin", document = "docs/metodo.md#misma-variable-local", verified_on = 2026-09-26 },
+]

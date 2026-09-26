@@ -254,7 +254,13 @@ def test_a_call_that_meets_the_condition_is_described(function, call, capability
 
 def test_every_capability_has_a_positive_fixture():
     tested = {capability for _, _, capability, _ in POSITIVE}
-    elsewhere = {"service_create", "run_key_open_and_set", "winlogon_open_and_set"}  # x64 files
+    elsewhere = {  # x64 files, or local links (tests/test_code_links.py)
+        "service_create",
+        "run_key_open_and_set",
+        "winlogon_open_and_set",
+        "run_key_set_opened",
+        "winlogon_set_opened",
+    }
     assert tested | elsewhere == {c.id for c in capabilities.CAPABILITIES}
 
 
@@ -538,14 +544,14 @@ def test_every_capability_states_its_measured_benign_prevalence():
     _, _, items = found(build_call_demo("CreateMutexW", {2: "LupaBin"}))
     statement = items["capability.named_mutex@1"].statement
     assert statement.endswith(
-        "En binarios benignos medidos, 105 de 3.087 (3,40 %) contienen algún caso."
+        "En binarios benignos medidos, 105 de 3.090 (3,40 %) contienen algún caso."
     )
 
 
 def test_a_capability_never_seen_in_benign_binaries_says_so():
     _, _, items = found(build_call_demo("URLDownloadToFileW", {1: "http://training.invalid/"}))
     statement = items["capability.download_to_file@1"].statement
-    assert statement.endswith("Ninguno de los 3.087 binarios benignos medidos contiene un caso.")
+    assert statement.endswith("Ninguno de los 3.090 binarios benignos medidos contiene un caso.")
 
 
 # --- more coverage: CFG modifier, RunOnceEx and Winlogon values ------------------------------

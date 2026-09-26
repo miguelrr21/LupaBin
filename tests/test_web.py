@@ -139,7 +139,7 @@ def test_an_upload_is_analysed_in_the_isolated_worker_and_explained():
 def test_x64_same_function_capabilities_reach_the_page():
     body = analyze(client(), build_same_function_demo()).json()
     rules = {item["rule"] for item in body["items"]}
-    assert {"capability.run_key_open_and_set@1", "code.functions@1"} <= rules
+    assert {"capability.run_key_set_opened@1", "code.local_link@1", "code.functions@1"} <= rules
 
 
 def test_sample_text_is_neutralised_before_it_leaves_the_server():

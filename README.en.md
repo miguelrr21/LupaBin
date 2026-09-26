@@ -8,9 +8,9 @@ The didactic report, the glossary and the web interface are in Spanish (the stru
 
 ## What it does
 
-- **Facts from the bytes** (contract 0.7.0), produced in an isolated Docker worker with no network: hashes, PE headers and sections, entropy, imports and exports, structural anomalies, strings, matches of LupaBin's own YARA rules, and bounded static decoding (Base64, hex, repeating-key XOR anchored on known text).
+- **Facts from the bytes** (contract 0.8.0), produced in an isolated Docker worker with no network: hashes, PE headers and sections, entropy, imports and exports, structural anomalies, strings, matches of LupaBin's own YARA rules, and bounded static decoding (Base64, hex, repeating-key XOR anchored on known text).
 - **What the code calls.** A recursive-descent walk of x86/x64 code (capstone, inside the worker) finds which imported functions are called and from where, and the constant arguments of 72 Windows API functions (registry keys, service names, command lines, URLs, memory protections…). The host re-checks every call and argument against the sample's bytes, without a disassembler of its own.
-- **Capabilities.** Calls and arguments become sentences such as "the code contains 1 call of this kind: write a value in an autostart (Run) key", with the MITRE ATT&CK technique **only** where the mechanism matches its definition, and how often the capability appears in 3,087 measured benign binaries.
+- **Capabilities.** Calls and arguments become sentences such as "the code contains 1 call of this kind: write a value in an autostart (Run) key", with the MITRE ATT&CK technique **only** where the mechanism matches its definition, and how often the capability appears in 3,090 measured benign binaries.
 - **Explanations you can verify.** Every sentence is regenerated from the evidence it cites before it is shown; an altered sentence is dropped and counted.
 - **VirusTotal, kept apart.** Optional lookup by SHA-256, and upload if VirusTotal does not know the file, shown as an external source and never mixed with LupaBin's facts.
 
@@ -21,7 +21,7 @@ LupaBin favours **the lowest error rate over coverage**. Every threshold and cat
 Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/) and a Linux Docker engine.
 
 ```text
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.7.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.8.0 .
 uv run --frozen lupabin analyze path/to/file.exe --no-virustotal
 ```
 

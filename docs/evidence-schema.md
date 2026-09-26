@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.7.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.8.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -30,10 +30,10 @@ El host trata la respuesta del worker como entrada no fiable: la valida, comprue
 
 | Campo | Contenido |
 | --- | --- |
-| `schema_version` | Literal `0.7.0`; versiones distintas se rechazan. |
+| `schema_version` | Literal `0.8.0`; versiones distintas se rechazan. |
 | `sample` | SHA-256, MD5, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. MD5 se incluye solo por interoperabilidad. |
 | `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
-| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `yara_match`, `decoded_string`, `api_call`, `call_argument` y `code_function`. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function` y `local_link`. |
 | `extractor_runs` | Fuentes `pe`, `strings`, `yara`, `decode` y `code`, con su versión y componentes tipados con cobertura y contadores. |
 | `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
 | `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
@@ -128,6 +128,25 @@ Una llamada en cola solo admite argumentos de registro y solo en x64: en el salt
 
 **Verificación.** El modelo vuelve a derivar el valor desde `raw_hex` con las formas canónicas, exige que en x64 el registro fijado sea el del parámetro, que la clave sea una de las aceptadas, que el entero coincida, que el puntero lleve exactamente a la cadena citada y que la cadena decodifique sus bytes con su terminador. También exige que la función llamada y el parámetro estén en el catálogo, y que no haya dos valores para el mismo argumento de una llamada. El host compara además con la muestra los bytes de la instrucción y de la cadena. Lo que no puede comprobar sin desensamblar es que ninguna instrucción intermedia cambie el valor, ni que otro camino no entre en medio. Por eso el hecho es `inferred`, y el método es una regla del worker probada con casos negativos (`tests/test_code_args.py`).
 
+## Variables locales entre llamadas (`local_link`)
+
+`local_link` es `inferred`: afirma que una llamada recibe la dirección de una variable local en el parámetro con el que devuelve un identificador (`phkResult` de `RegOpenKeyEx` y `RegCreateKeyEx`), y que una llamada posterior pasa el valor de esa misma variable como clave (`hKey` de una función del catálogo). Campos:
+
+| Campo | Contenido |
+| --- | --- |
+| `component` | `call_arguments`. |
+| `location` | La instrucción que pasa el valor a la segunda llamada: `push dword ptr [ebp+d]` en x86; `mov r64, qword ptr [rsp/rbp+d]` en x64, al registro del parámetro. |
+| `data.method` | `frame-slot-v1`. |
+| `data.slot` | La variable: registro de marco (`ebp`, `rsp` o `rbp`) y desplazamiento con signo. |
+| `data.writer_position`, `data.writer_name` | El parámetro que recibe la dirección (`phkResult`, posición 4 o 7). |
+| `data.reader_position`, `data.reader_name` | El parámetro que recibe el valor (`hKey`). |
+| `data.raw_hex` | Los bytes de `location`. |
+| `data.address` | El `lea` que toma la dirección de la variable, con `offset`, `rva` y `raw_hex`. |
+| `data.passes` | La instrucción que pasa esa dirección a la primera llamada: `push r32` en x86; `mov qword ptr [rsp+8·i], r64` en x64. |
+| `provenance.evidence_ids` | Las dos llamadas: la que escribe y la que lee. |
+
+**Verificación.** El modelo exige que las dos llamadas lleguen por nombre a funciones que escriben y leen una clave en esos parámetros, que las tres instrucciones nombren la misma variable con las formas canónicas de `src/lupabin/evidence/local_forms.py` (en x64, además, que la dirección se guarde en la ranura de `phkResult` y el valor llegue al registro de `hKey`), que todo esté en una sección ejecutable y en orden, que la lectura esté a menos de 4.096 bytes de la primera llamada y que la variable no esté en las cuatro primeras ranuras de la pila en x64, que pertenecen a la función llamada. El host compara los bytes con la muestra. Lo que no se puede comprobar sin desensamblar es el camino entre las dos llamadas: esa es la regla del worker y la razón de que el hecho sea `inferred`.
+
 ## Rangos de función (`code_function`)
 
 `code_function` es `observed`: afirma que la tabla `.pdata` de un PE32+ declara, en esos 12 bytes, una entrada `RUNTIME_FUNCTION` con ese inicio, fin e información de desenrollado. Sirve para que una explicación pueda decir que dos llamadas están en el mismo rango de función sin volver a la muestra. No afirma que el rango sea una función completa: una función partida tiene varias entradas. Se publica, sin repetir, la entrada que contiene cada llamada publicada a una función del catálogo de argumentos; si dos entradas de la tabla se solapan, la tabla está malformada y no se publica ninguna. En x86 no hay `.pdata`. Campos:
@@ -166,6 +185,7 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 | 0.4.0 | Fuente `decode` y `decoded_string` | `docs/schemas/0.4.0.json` |
 | 0.5.0 | Fuente `code`: `api_call`, `call_argument` e `iat_rva` en los imports | `docs/schemas/0.5.0.json` |
 | 0.6.0 | `code_function` (rangos de `.pdata` en x64) | `docs/schemas/0.6.0.json` |
-| 0.7.0 | La vía `tail` de `api_call` (saltos en cola a una función importada) | `docs/evidence-schema.json` (activo) |
+| 0.7.0 | La vía `tail` de `api_call` (saltos en cola a una función importada) | `docs/schemas/0.7.0.json` |
+| 0.8.0 | `local_link` (un identificador que pasa de una llamada a otra por una variable local) | `docs/evidence-schema.json` (activo) |
 
 Los consumidores rechazan versiones de esquema no soportadas. La CLI no transforma informes antiguos.

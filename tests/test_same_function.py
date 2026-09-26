@@ -112,8 +112,13 @@ def test_every_range_is_explained_in_one_item():
 # --- the capabilities ----------------------------------------------------------------------
 
 
+# The write reads another variable than the one the opening call fills, so no link says
+# which key it uses: only the .pdata range pairs the two calls.
+UNLINKED = bytes.fromhex("488b4c2438")  # mov rcx, [rsp+0x38]
+
+
 def test_opening_run_and_setting_a_value_in_one_range_is_one_case():
-    report, found = items(build_same_function_demo())
+    report, found = items(build_same_function_demo(set_key=UNLINKED))
     item = found["capability.run_key_open_and_set@1"]
     (case,) = item.slots["cases"]
     assert case.startswith("0x00002000-0x00002043 (rango de .pdata): abre RegOpenKeyExW")
@@ -128,7 +133,7 @@ def test_opening_run_and_setting_a_value_in_one_range_is_one_case():
 
 @pytest.mark.parametrize(("value", "technique"), [("Shell", True), ("AutoAdminLogon", False)])
 def test_winlogon_pairs_carry_t1547_004_only_for_its_values(value, technique):
-    _, found = items(build_same_function_demo(subkey=WINLOGON, value=value))
+    _, found = items(build_same_function_demo(subkey=WINLOGON, value=value, set_key=UNLINKED))
     (case,) = found["capability.winlogon_open_and_set@1"].slots["cases"]
     assert case.endswith(" (T1547.004)") == technique
     assert "capability.run_key_open_and_set@1" not in found

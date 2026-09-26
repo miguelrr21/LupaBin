@@ -10,7 +10,7 @@ the walk, tested with negative cases, and the reason arguments are `inferred`.
 
 from collections.abc import Sequence
 
-from lupabin.evidence import api_catalog, argument_forms, call_forms
+from lupabin.evidence import api_catalog, argument_forms, call_forms, local_forms
 from lupabin.evidence.facts import (
     ApiCallEvidence,
     ArgumentString,
@@ -19,6 +19,7 @@ from lupabin.evidence.facts import (
     Evidence,
     HeaderData,
     ImportEvidence,
+    LocalLinkEvidence,
     SectionData,
 )
 from lupabin.evidence.primitives import Location, Name
@@ -240,6 +241,99 @@ def validate_function(
         raise ValueError("a function range is published only for a call it holds")
 
 
+def _import_name(callee: Evidence | None) -> tuple[bytes, bytes] | None:
+    if not isinstance(callee, ImportEvidence) or callee.data.function is None:
+        return None
+    return bytes.fromhex(callee.data.dll.raw_hex), bytes.fromhex(callee.data.function.raw_hex)
+
+
+def validate_link(
+    fact: LocalLinkEvidence,
+    writer: Evidence | None,
+    writer_callee: Evidence | None,
+    reader: Evidence | None,
+    reader_callee: Evidence | None,
+    sections: Sequence[SectionData],
+    header: HeaderData | None,
+) -> None:
+    """Raise unless a link's instructions name the same local variable, in the forms of
+    local_forms.py, in the order the rule needs, for parameters that write and read a
+    handle. What the bytes cannot prove is that nothing in between changes the
+    variable: that is the walk's rule, and the reason a link is `inferred`."""
+    if not isinstance(writer, ApiCallEvidence) or not isinstance(reader, ApiCallEvidence):
+        raise ValueError("a link cites the call that writes and the call that reads")
+    names = _import_name(writer_callee), _import_name(reader_callee)
+    if names[0] is None or names[1] is None:
+        raise ValueError("a link's calls must reach imports by name")
+    data = fact.data
+    if api_catalog.lookup(*names[0]) is None or local_forms.WRITERS.get(names[0][1]) != (
+        data.writer_position,
+        data.writer_name,
+    ):
+        raise ValueError("the first call does not write a handle through that parameter")
+    entry = api_catalog.lookup(*names[1])
+    parameter = (
+        None
+        if entry is None
+        else next((p for p in entry.parameters if p.position == data.reader_position), None)
+    )
+    if parameter is None or (parameter.name, parameter.type) != (data.reader_name, "hkey"):
+        raise ValueError("the second call does not read a key through that parameter")
+    if header is None:
+        raise ValueError("a link needs the PE header")
+    where, bits = fact.location, 32 if header.optional_magic == 267 else 64
+    if where.offset is None or where.rva is None or where.length is None:
+        raise ValueError("a link must locate the instruction that passes the value")
+    section = _mapped(where.rva, where.offset, where.length, sections)
+    _named(where, section)
+    places = [(i.rva, i.offset, len(i.raw_hex) // 2) for i in (data.address, data.passes)]
+    places += [
+        (call.location.rva or 0, call.location.offset or 0, call.location.length or 0)
+        for call in (writer, reader)
+    ]
+    if any(_mapped(rva, offset, size, sections) != section for rva, offset, size in places):
+        raise ValueError("a link must lie in one executable section")
+    writer_end = (writer.location.rva or 0) + (writer.location.length or 0)
+    order = [
+        data.address.rva,
+        data.passes.rva,
+        writer.location.rva or 0,
+        where.rva,
+        reader.location.rva or 0,
+    ]
+    if order != sorted(order) or len(set(order)) != len(order):
+        raise ValueError("a link's instructions must come in order")
+    if where.rva - writer_end > local_forms.MAX_DISTANCE:
+        raise ValueError("a link must read the variable near the call that writes it")
+    address = bytes.fromhex(data.address.raw_hex)
+    passes = bytes.fromhex(data.passes.raw_hex)
+    passed = bytes.fromhex(data.raw_hex)
+    if bits == 32:
+        taken = local_forms.x86_lea(address)
+        pushed = local_forms.x86_push_register(passes)
+        read = local_forms.x86_push_value(passed)
+        forms = taken is not None and pushed is not None and pushed == taken.register
+    else:
+        taken = local_forms.x64_lea(address)
+        store = argument_forms.x64_stack_store(passes)
+        read = local_forms.x64_load(passed)
+        forms = (
+            taken is not None
+            and store is not None
+            and store.register == taken.register
+            and store.width == 8
+            and store.position == data.writer_position
+            and read is not None
+            and data.reader_position < 4
+            and read.register == local_forms.X64_ARGUMENT_REGISTERS[data.reader_position]
+        )
+    slot = local_forms.Slot(data.slot.frame, data.slot.displacement)
+    if not local_forms.keeps_across_calls(slot):
+        raise ValueError("a variable in the x64 home area does not survive a call")
+    if not forms or taken is None or read is None or taken.slot != slot or read.slot != slot:
+        raise ValueError("link bytes do not name its local variable")
+
+
 def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
     """Raise unless the bytes every call, argument and function range cite are the
     sample's bytes at their offsets."""
@@ -250,6 +344,12 @@ def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
             spans = [(fact.location.offset, fact.data.raw_hex)]
             if fact.data.helper is not None:
                 spans.append((fact.data.helper.offset, fact.data.helper.raw_hex))
+        elif isinstance(fact, LocalLinkEvidence):
+            spans = [
+                (fact.location.offset, fact.data.raw_hex),
+                (fact.data.address.offset, fact.data.address.raw_hex),
+                (fact.data.passes.offset, fact.data.passes.raw_hex),
+            ]
         elif isinstance(fact, CallArgumentEvidence):
             spans = [(fact.location.offset, fact.data.raw_hex)]
             if fact.data.source is not None:
