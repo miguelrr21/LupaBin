@@ -131,13 +131,23 @@ Sobre 16.193 rutas y claves de registro reales, reservadas y no usadas para eleg
 
 LupaBin recorre el código máquina x86 y x64 dentro del worker, con capstone, que solo traduce bytes a instrucciones. No hay estado de ejecución, memoria simulada ni saltos tomados. Se descartó capa porque su motor por defecto emula instrucciones.
 
-**Recorrido.** Descenso recursivo por las secciones ejecutables desde puntos de partida que escribe el compilador o el enlazador: el punto de entrada, los exports, los callbacks TLS, `.pdata` (x64), la tabla de funciones de Control Flow Guard y los manejadores SafeSEH (x86). Se siguen los destinos directos de `call`, `jmp` y saltos condicionales. Los saltos indirectos no se resuelven y no se adivinan tablas de salto ni inicios de función.
+**Recorrido.** Descenso recursivo por las secciones ejecutables desde puntos de partida que escribe el compilador o el enlazador: el punto de entrada, los exports, los callbacks TLS, `.pdata` (x64), la tabla de funciones de Control Flow Guard y los manejadores SafeSEH (x86). Se siguen los destinos directos de `call`, `jmp` y saltos condicionales. De los saltos indirectos solo se siguen las tablas de `switch` que se pueden comprobar (abajo); no se adivinan tablas de salto ni inicios de función.
 
-**Tres formas de llamada**, cada una comprobable con aritmética sin desensamblador: `direct` (`call [casilla]`), `thunk` (`call rel32` a un `jmp [casilla]`) y `register` (`mov reg, [casilla]` justo antes de `call reg`). El propio informe rehace la aritmética, y el host compara los bytes con la muestra.
+**Cuatro formas de llamada**, cada una comprobable con aritmética sin desensamblador: `direct` (`call [casilla]`), `thunk` (`call rel32` a un `jmp [casilla]`), `register` (`mov reg, [casilla]` justo antes de `call reg`) y `tail` (un `jmp [casilla]` que termina un tramo de código: una llamada en cola, en la que la función importada vuelve a quien llamó al código que salta). Un `jmp [casilla]` que empieza su tramo es un thunk y no se cuenta dos veces. El propio informe rehace la aritmética, y el host compara los bytes con la muestra.
 
-**Medición** (1.363 binarios de System32 y 520 de SysWOW64): 0 informes inválidos y 0 fallos de verificación. El 90,4 % de los imports por nombre en x64 y el 90,7 % en x86 tienen alguna llamada localizada; en x86, añadir la tabla de Control Flow Guard como punto de partida lo subió del 43,8 %. Solo 3 llamadas x64 quedaron fuera de las funciones declaradas en `.pdata`, y al desensamblarlas a mano resultaron auténticas.
+**Tablas de `switch`.** Un salto indirecto solo se sigue cuando las instrucciones justo anteriores tienen la forma que emite MSVC para una tabla acotada: la comparación con la cota (`cmp índice, N; ja`), la lectura de la tabla y el salto, con como mucho 1.024 entradas. Cada entrada tiene que superar una comprobación que da el propio archivo:
+- en x86 la tabla guarda direcciones absolutas, así que el enlazador marca cada entrada con una reubicación; una entrada sin ella no es un puntero a código y la tabla no se sigue (un ejecutable sin reubicaciones no tiene tablas);
+- en x64 cada destino tiene que estar dentro de la misma función de `.pdata` que el salto.
 
-**Límite principal.** El código al que solo se llega por saltos indirectos (vtables, callbacks) no se recorre si ninguna tabla del compilador lo declara. Un binario empaquetado solo muestra su desempaquetador.
+**Campos reubicados.** Una instrucción real nunca empieza dentro de un campo que el enlazador reubica ni lo parte. Si el recorrido decodifica una así, ha salido del código (por ejemplo, tras una llamada que no vuelve, hacia los datos de una tabla) y ese tramo se detiene. Se encontró al medir las tablas: en `urlmon.dll` una tabla correcta llevaba a un `case` que termina en una llamada que no vuelve, y el recorrido seguía hasta decodificar los datos de la tabla como código.
+
+**Medición** (1.363 binarios de System32 y 520 de SysWOW64): 0 informes inválidos y 0 fallos de verificación. El 92,5 % de los imports por nombre en x64 y el 92,6 % en x86 tienen alguna llamada localizada. En x86, añadir la tabla de Control Flow Guard como punto de partida lo subió del 43,8 % al 91,1 %, y las llamadas en cola y las tablas, al 92,6 %. En x64 las llamadas en cola y las tablas lo subieron del 90,4 % al 92,5 %.
+- Llamadas en cola: 18.114 en System32 y 1.134 en SysWOW64. En x64 aparecen fuera de `.pdata`, porque una función hoja que termina con un salto no reserva pila ni llama a nada, y Microsoft no le da entrada; se revisaron a mano ejemplos, todos auténticos. Las demás formas siguen con 0 llamadas fuera de `.pdata` (las 3 de `edit.exe` son auténticas).
+- Tablas de `switch`, en una muestra de 66 binarios de SysWOW64: 444 tablas y un 2,1 % más de código recorrido, con 0 instrucciones solapadas. En 69 de System32: 25 tablas.
+- Instrucciones solapadas (un inicio que cae dentro de otra instrucción), el indicador de un recorrido que se sale del código: 0 en la muestra x86. En la de x64 quedan 18 en un solo binario, un flujo desalineado anterior a estos cambios, sin ninguna llamada a una función importada.
+- En una llamada en cola solo se leen argumentos de registro en x64: la dirección de retorno ya está en la pila, así que las ranuras de la pila están 8 bytes más allá que en una llamada, y en x86 los `push` anteriores no son argumentos de la función. Revisión manual de 30 argumentos de llamadas en cola, desensamblando cada tramo: 30 correctos.
+
+**Límite principal.** El código al que solo se llega por saltos o llamadas indirectos que no son una tabla de `switch` comprobable (vtables, callbacks, tablas de otros compiladores) no se recorre si ninguna tabla del compilador lo declara. Un binario empaquetado solo muestra su desempaquetador.
 
 ## Argumentos constantes
 
@@ -265,7 +275,7 @@ El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. 
 
 ## Límites conocidos
 
-- **Código.** Solo x86 y x64. No se sigue código al que solo se llega por saltos indirectos. Un binario empaquetado muestra poco más que su desempaquetador.
+- **Código.** Solo x86 y x64. De los saltos indirectos solo se siguen las tablas de `switch` de MSVC comprobables; vtables y callbacks no. Tras una llamada que no vuelve, el recorrido sigue en línea recta: en x86 los campos reubicados lo detienen, pero en x64 puede decodificar bytes que no son código. Un binario empaquetado muestra poco más que su desempaquetador.
 - **Argumentos.** No se propagan valores entre registros ni se sigue un identificador entre llamadas. La línea de órdenes de `CreateProcessW` no se lee.
 - **Decodificación.** Sin una crib del catálogo no hay resultado. Una cadena aislada con clave de 8 bytes se recupera en el 37 % de los casos en ASCII y el 62 % en UTF-16LE.
 - **Familias de APIs.** Solo reconocen imports por nombre exacto, no por ordinal.

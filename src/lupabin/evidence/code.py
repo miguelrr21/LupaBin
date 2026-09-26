@@ -77,6 +77,8 @@ def validate_call(
     slot: int | None = None
     if data.via == "direct":
         slot = call_forms.memory_slot(raw, where.rva, bits, base, call_forms.CALL)
+    elif data.via == "tail":
+        slot = call_forms.memory_slot(raw, where.rva, bits, base, call_forms.JMP)
     elif data.via == "thunk" and helper is not None:
         if call_forms.relative_target(raw, where.rva) == helper.rva:
             slot = call_forms.memory_slot(helper_raw, helper.rva, bits, base, call_forms.JMP)
@@ -116,6 +118,10 @@ def validate_argument(
         raise ValueError("argument name or type disagrees with the catalog")
     if header is None:
         raise ValueError("an argument needs the PE header")
+    if call.data.via == "tail" and (header.optional_magic != 523 or data.position >= 4):
+        # At a tail jump the stack already holds the caller's return address: x64 stack
+        # slots sit one slot further than at a call, and x86 pushes are not arguments.
+        raise ValueError("a tail call only has register arguments, in x64")
     where, at = fact.location, call.location
     if where.offset is None or where.rva is None or where.length is None:
         raise ValueError("an argument must locate the instruction that sets it")
