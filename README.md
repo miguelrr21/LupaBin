@@ -59,7 +59,7 @@ El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, ti
 - Las cifras de contexto están medidas. Una entropía de 7,2 o más solo la alcanza el 0,34 % de las secciones de 4 KiB o más en 55.313 binarios benignos. Los imports se agrupan en nueve familias curadas con su prevalencia benigna: por ejemplo, el 32,2 % de los binarios benignos importa alguna función de comprobación de depuradores.
 - Todo texto que procede de la muestra (nombres, cadenas, textos decodificados) se neutraliza antes de mostrarse: los caracteres de control, de escape de terminal y bidi se convierten en escapes visibles, y en Markdown van en bloques de código inertes.
 
-- Las capacidades juntan una llamada y sus argumentos constantes en una frase como «el código contiene 1 llamada de este tipo: crear un servicio de Windows», con los casos (`servicio «X», binario «Y», inicio SERVICE_AUTO_START`). Dicen lo que el código contiene, no que el programa lo haga, y dan su frecuencia en 3.087 binarios benignos: por ejemplo, el 2,33 % contiene memoria ejecutable y escribible. Si no sabe algo (la raíz de una clave, el proceso de destino), lo dice.
+- Las capacidades juntan una llamada y sus argumentos constantes en una frase como «el código contiene 1 llamada de este tipo: crear un servicio de Windows», con los casos (`servicio «X», binario «Y», inicio SERVICE_AUTO_START`). Dicen lo que el código contiene, no que el programa lo haga, y dan su frecuencia en 3.090 binarios benignos: por ejemplo, el 2,36 % contiene memoria ejecutable y escribible. Si no sabe algo (la raíz de una clave, el proceso de destino), lo dice.
 
 Método y mediciones: [cómo trabaja LupaBin](docs/metodo.md).
 

@@ -1,5 +1,5 @@
 """A key that one call leaves in a local variable and a later call passes: the link, its
-checks in the report and its explanation."""
+checks in the report and the capabilities built on it."""
 
 import json
 
@@ -12,7 +12,13 @@ from lupabin.evidence.facts import LocalLinkEvidence
 from lupabin.evidence.models import Limits, Report
 from lupabin.explain.engine import explain
 from lupabin.glossary.catalog import load_glossary
-from tests.fixtures.pe_builder import build_local_link_demo, build_same_function_demo
+from tests.fixtures.pe_builder import (
+    SAME_FUNCTION_VALUE,
+    build_local_link_demo,
+    build_same_function_demo,
+)
+
+WINLOGON = r"Software\Microsoft\Windows NT\CurrentVersion\Winlogon"
 
 
 def links(report):
@@ -127,7 +133,7 @@ def test_the_host_compares_the_link_bytes_with_the_sample():
         verify_calls(report.evidence, bytes(changed))
 
 
-# --- explanation ---------------------------------------------------------------------------
+# --- explanations and capabilities -----------------------------------------------------
 
 
 def test_the_link_is_explained():
@@ -135,3 +141,25 @@ def test_the_link_is_explained():
     assert item.level == "inferred"
     assert "variable local [ebp-0x8]" in item.statement
     assert "«RegOpenKeyExW»" in item.statement and "«RegSetValueExW»" in item.statement
+
+
+@pytest.mark.parametrize("build", [build_local_link_demo, build_same_function_demo])
+def test_writing_the_run_key_it_opened_carries_t1547_001(build):
+    found = rules(analyze_bytes(build(), Limits()))
+    (case,) = found["capability.run_key_set_opened@1"].slots["cases"]
+    assert f"el valor «{SAME_FUNCTION_VALUE}»" in case and case.endswith("(T1547.001)")
+    assert "capability.run_key_open_and_set@1" not in found  # the link says which key
+
+
+@pytest.mark.parametrize(("value", "technique"), [("Shell", True), ("AutoAdminLogon", False)])
+def test_writing_winlogon_carries_t1547_004_only_for_its_values(value, technique):
+    found = rules(analyze_bytes(build_local_link_demo(subkey=WINLOGON, value=value), Limits()))
+    (case,) = found["capability.winlogon_set_opened@1"].slots["cases"]
+    assert case.endswith(" (T1547.004)") == technique
+
+
+def test_a_linked_write_to_another_key_is_not_a_run_write():
+    subkey = r"Software\LupaBin\Training"
+    found = rules(analyze_bytes(build_local_link_demo(subkey=subkey), Limits()))
+    assert "capability.run_key_set_opened@1" not in found
+    assert "code.local_link@1" in found

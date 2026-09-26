@@ -28,12 +28,17 @@ from typing import Any
 from lupabin.analysis import analyze_bytes
 from lupabin.evidence.code import verify_calls
 from lupabin.evidence.facts import ApiCallEvidence, CallArgumentEvidence, ImportEvidence
+from lupabin.explain import capabilities as capabilities_module
 from lupabin.explain.capabilities import CAPABILITIES, RUN_KEYS, cases
-from lupabin.explain.engine import explain
 from lupabin.explain.text import name, number
 from lupabin.extractors.code import CodeExtractor
 from lupabin.extractors.pe import PEExtractor
 from lupabin.glossary.catalog import load_glossary
+
+# A capability being measured has no benign figure yet, and its explanation needs one to
+# be generated; the placeholder only lives in this measuring process, never in a report.
+for _capability in CAPABILITIES:
+    capabilities_module.BENIGN.setdefault(_capability.id, 0)
 
 MAX_INPUT = 20 * 1024 * 1024
 GLOSSARY = load_glossary()
@@ -104,6 +109,8 @@ def measure(path_text: str) -> dict[str, Any]:
     except ValueError:
         result["verify_failure"] = True
     try:
+        from lupabin.explain.engine import explain  # after the placeholder figures
+
         explanation = explain(report, GLOSSARY)  # regenerates and validates every item
     except ValueError as error:
         result["explanation_error"] = str(error)[:200]
