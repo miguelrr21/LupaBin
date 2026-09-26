@@ -281,7 +281,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "0.10.0",
+          "const": "0.11.0",
           "title": "Schema Version",
           "type": "string"
         }
