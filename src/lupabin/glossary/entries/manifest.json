@@ -91,7 +91,7 @@
   {
    "id": "capability.static",
    "filename": "capability.static.toml",
-   "sha256": "6edb1592afb6f7db56c8f5e65c033c0f2b357f7bdb88f3098383fc0334e6f2b7"
+   "sha256": "77a3eb5f6c74618ecaa7190991c3d730e6f567a780a928fcb5ca2e6ee6923b2d"
   },
   {
    "id": "code.call_argument",
