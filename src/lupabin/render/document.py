@@ -68,6 +68,28 @@ ONE_CALL = (
 )
 
 
+# The tool each toolchain explanation names, in the report's order of markers. Fixed
+# labels: the line never repeats text from the sample (the items it cites do).
+MADE_WITH = {
+    "toolchain.rich_header@1": "enlazador de Microsoft",
+    "toolchain.gcc_ident@1": "GCC",
+    "toolchain.mingw_w64_runtime@1": "MinGW-w64",
+    "toolchain.go_buildinfo@1": "Go",
+    "toolchain.go_buildinfo_pointer@1": "Go",
+    "toolchain.clr_header@1": ".NET",
+    "toolchain.pyinstaller_cookie@1": "PyInstaller",
+}
+MADE_WITH_NOTE = "según las marcas que dejan esas herramientas, que pueden copiarse"
+
+
+def made_with(items: tuple[Item, ...]) -> str | None:
+    """The tools whose markers the validated items show, each with its item, or None."""
+    shown = [f"{MADE_WITH[item.rule]} ({item.id})" for item in items if item.rule in MADE_WITH]
+    if not shown:
+        return None
+    return " · ".join(shown) + f", {MADE_WITH_NOTE}."
+
+
 class Summary(NamedTuple):
     groups: list[tuple[str, list[Item]]]  # (tactic, its capability items), design order
     warnings: list[str | Item]  # what limits the summary; an Item is the density note
@@ -167,6 +189,9 @@ def to_text(
     ]
     if origin:
         lines += wrap(origin, "          ", "Origen    ")
+    tools = made_with(items)
+    if tools:
+        lines += wrap(tools, "          ", "Hecho con ")
     lines += ["", SUMMARY_TITLE, *wrap(SUMMARY_INTRO, "   ")]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:
@@ -261,6 +286,9 @@ def to_markdown(
     ]
     if origin:
         lines.append(f"- **Origen**: {markdown_text(origin)}")
+    tools = made_with(items)
+    if tools:
+        lines.append(f"- **Hecho con**: {markdown_text(tools)}")
     lines += ["", f"## {SUMMARY_TITLE}", "", markdown_text(SUMMARY_INTRO)]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:

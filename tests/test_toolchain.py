@@ -242,3 +242,39 @@ def test_every_marker_is_explained_with_its_limit():
             if item.rule.startswith("toolchain."):
                 assert "toolchain.marker" in item.glossary_ids
                 assert item.not_proven
+
+
+def test_the_header_names_the_tools_and_cites_their_items():
+    from lupabin.render.document import MADE_WITH_NOTE, made_with, to_markdown, to_text
+    from lupabin.web import view
+
+    report = analyze_bytes(build_toolchain_demo())
+    explanation = explain(report, GLOSSARY)
+    items = validate(explanation, report, GLOSSARY)
+    ids = {item.rule: item.id for item in items}
+    line = made_with(items)
+    assert line == (
+        f"enlazador de Microsoft ({ids['toolchain.rich_header@1']}) · "
+        f"GCC ({ids['toolchain.gcc_ident@1']}) · "
+        f"MinGW-w64 ({ids['toolchain.mingw_w64_runtime@1']}) · "
+        f"Go ({ids['toolchain.go_buildinfo@1']}) · "
+        f".NET ({ids['toolchain.clr_header@1']}) · "
+        f"PyInstaller ({ids['toolchain.pyinstaller_cookie@1']}), {MADE_WITH_NOTE}."
+    )
+    assert "Hecho con enlazador de Microsoft" in to_text(explanation, items, report, GLOSSARY)
+    assert "- **Hecho con**: enlazador de Microsoft" in to_markdown(
+        explanation, items, report, GLOSSARY
+    )
+    assert view.build(report, explanation, items, GLOSSARY, None)["made_with"] == line
+
+
+def test_without_markers_the_header_says_nothing_about_tools():
+    from lupabin.render.document import made_with, to_text
+    from lupabin.web import view
+
+    report = analyze_bytes(build_demo())
+    explanation = explain(report, GLOSSARY)
+    items = validate(explanation, report, GLOSSARY)
+    assert made_with(items) is None
+    assert "Hecho con" not in to_text(explanation, items, report, GLOSSARY)
+    assert view.build(report, explanation, items, GLOSSARY, None)["made_with"] is None
