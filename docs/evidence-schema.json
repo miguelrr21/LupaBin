@@ -100,7 +100,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -621,6 +622,94 @@
       "title": "CodeLimits",
       "type": "object"
     },
+    "CodeReachData": {
+      "additionalProperties": false,
+      "description": "Published calls to imports that the walk reaches from one root, following only\nconstant calls and jumps: from `main`, or from the entry point and the TLS callbacks\nwithout entering `main` and not from `main` (the startup).",
+      "properties": {
+        "calls": {
+          "default": [],
+          "items": {
+            "maxLength": 16,
+            "pattern": "^E[1-9][0-9]*$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "title": "Calls",
+          "type": "array"
+        },
+        "method": {
+          "const": "direct-reach-v1",
+          "default": "direct-reach-v1",
+          "title": "Method",
+          "type": "string"
+        },
+        "root": {
+          "enum": [
+            "main",
+            "startup"
+          ],
+          "title": "Root",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "title": "CodeReachData",
+      "type": "object"
+    },
+    "CodeReachEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "const": "main_function",
+          "default": "main_function",
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "inferred",
+          "default": "inferred",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/CodeReachData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "code_reach",
+          "default": "code_reach",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "default": null,
+          "title": "Location",
+          "type": "null"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "const": "code",
+          "default": "code",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "data"
+      ],
+      "title": "CodeReachEvidence",
+      "type": "object"
+    },
     "ComponentRun": {
       "additionalProperties": false,
       "properties": {
@@ -662,7 +751,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Name",
           "type": "string"
@@ -902,7 +992,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -1047,7 +1138,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -1186,7 +1278,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -1348,7 +1441,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -1478,7 +1572,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -1850,6 +1945,122 @@
       "title": "Location",
       "type": "object"
     },
+    "MainCallData": {
+      "additionalProperties": false,
+      "description": "The direct call through which the compiler's startup enters `main`: its first\nthree arguments are the values of the variables whose addresses a call to\n__getmainargs or __wgetmainargs (msvcrt.dll) received (evidence/main_forms.py).",
+      "properties": {
+        "loads": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Instruction"
+            },
+            {
+              "$ref": "#/$defs/Instruction"
+            },
+            {
+              "$ref": "#/$defs/Instruction"
+            }
+          ],
+          "title": "Loads",
+          "type": "array"
+        },
+        "method": {
+          "const": "getmainargs-v1",
+          "default": "getmainargs-v1",
+          "title": "Method",
+          "type": "string"
+        },
+        "raw_hex": {
+          "pattern": "^(?:[a-f0-9]{2}){1,15}$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "setters": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Instruction"
+            },
+            {
+              "$ref": "#/$defs/Instruction"
+            },
+            {
+              "$ref": "#/$defs/Instruction"
+            }
+          ],
+          "title": "Setters",
+          "type": "array"
+        },
+        "target": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Target",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "raw_hex",
+        "target",
+        "setters",
+        "loads"
+      ],
+      "title": "MainCallData",
+      "type": "object"
+    },
+    "MainCallEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "const": "main_function",
+          "default": "main_function",
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "inferred",
+          "default": "inferred",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/MainCallData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "main_call",
+          "default": "main_call",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "const": "code",
+          "default": "code",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "data"
+      ],
+      "title": "MainCallEvidence",
+      "type": "object"
+    },
     "Name": {
       "additionalProperties": false,
       "properties": {
@@ -2171,7 +2382,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -2310,7 +2522,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -2436,7 +2649,8 @@
             "decode_xor",
             "disassembly",
             "api_calls",
-            "call_arguments"
+            "call_arguments",
+            "main_function"
           ],
           "title": "Component",
           "type": "string"
@@ -2921,12 +3135,14 @@
             "api_call": "#/$defs/ApiCallEvidence",
             "call_argument": "#/$defs/CallArgumentEvidence",
             "code_function": "#/$defs/CodeFunctionEvidence",
+            "code_reach": "#/$defs/CodeReachEvidence",
             "decoded_string": "#/$defs/DecodedStringEvidence",
             "entropy": "#/$defs/EntropyEvidence",
             "export": "#/$defs/ExportEvidence",
             "header_anomaly": "#/$defs/AnomalyEvidence",
             "import": "#/$defs/ImportEvidence",
             "local_link": "#/$defs/LocalLinkEvidence",
+            "main_call": "#/$defs/MainCallEvidence",
             "pe_header": "#/$defs/HeaderEvidence",
             "section": "#/$defs/SectionEvidence",
             "string": "#/$defs/StringEvidence",
@@ -2977,6 +3193,12 @@
           },
           {
             "$ref": "#/$defs/LocalLinkEvidence"
+          },
+          {
+            "$ref": "#/$defs/MainCallEvidence"
+          },
+          {
+            "$ref": "#/$defs/CodeReachEvidence"
           }
         ]
       },

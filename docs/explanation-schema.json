@@ -215,7 +215,8 @@
                 "decode_xor",
                 "disassembly",
                 "api_calls",
-                "call_arguments"
+                "call_arguments",
+                "main_function"
               ],
               "type": "string"
             },

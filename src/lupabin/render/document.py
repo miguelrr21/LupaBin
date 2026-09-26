@@ -90,6 +90,29 @@ def made_with(items: tuple[Item, ...]) -> str | None:
     return " · ".join(shown) + f", {MADE_WITH_NOTE}."
 
 
+def main_line(items: tuple[Item, ...]) -> str | None:
+    """Where main is and how the published calls split, from the validated items."""
+    found = {
+        item.rule: item
+        for item in items
+        if item.rule.startswith(("code.main_call@", "code.reach_"))
+    }
+    main = found.get("code.main_call@1")
+    if main is None:
+        return None
+    parts = [f"{main.slots['target']} ({main.id})"]
+    reach = found.get("code.reach_main@1")
+    if reach is not None:
+        reachable = "alcanzable" if reach.slots["noun"] == "llamada" else "alcanzables"
+        parts.append(
+            f"{reach.slots['count']} {reach.slots['noun']} {reachable} desde main ({reach.id})"
+        )
+    startup = found.get("code.reach_startup@1")
+    if startup is not None:
+        parts.append(f"{startup.slots['count']} solo del arranque ({startup.id})")
+    return " · ".join(parts)
+
+
 class Summary(NamedTuple):
     groups: list[tuple[str, list[Item]]]  # (tactic, its capability items), design order
     warnings: list[str | Item]  # what limits the summary; an Item is the density note
@@ -192,6 +215,9 @@ def to_text(
     tools = made_with(items)
     if tools:
         lines += wrap(tools, "          ", "Hecho con ")
+    entered = main_line(items)
+    if entered:
+        lines += wrap(entered, "          ", "main      ")
     lines += ["", SUMMARY_TITLE, *wrap(SUMMARY_INTRO, "   ")]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:
@@ -289,6 +315,9 @@ def to_markdown(
     tools = made_with(items)
     if tools:
         lines.append(f"- **Hecho con**: {markdown_text(tools)}")
+    entered = main_line(items)
+    if entered:
+        lines.append(f"- **main**: {markdown_text(entered)}")
     lines += ["", f"## {SUMMARY_TITLE}", "", markdown_text(SUMMARY_INTRO)]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:

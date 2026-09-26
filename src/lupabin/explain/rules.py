@@ -16,6 +16,7 @@ from lupabin.evidence.facts import (
     ApiCallEvidence,
     CallArgumentEvidence,
     CodeFunctionEvidence,
+    CodeReachEvidence,
     DecodedStringEvidence,
     EntropyEvidence,
     Evidence,
@@ -23,6 +24,7 @@ from lupabin.evidence.facts import (
     HeaderEvidence,
     ImportEvidence,
     LocalLinkEvidence,
+    MainCallEvidence,
     SectionEvidence,
     StringEvidence,
     ToolchainEvidence,
@@ -743,6 +745,66 @@ def _code_family(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, (f"api.family.{chosen}", "code.import_call")
 
 
+MAIN_FUNCTIONS_SHOWN = 40
+
+
+def _main_call(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """The call that enters main, with the call to __getmainargs it rests on."""
+    if len(cited) != 2:
+        return None
+    main, anchor = cited
+    if not isinstance(main, MainCallEvidence) or not isinstance(anchor, ApiCallEvidence):
+        return None
+    if main.provenance.evidence_ids != (anchor.id,):
+        return None
+    callee = groups(report).facts.get(anchor.provenance.evidence_ids[0])
+    if not isinstance(callee, ImportEvidence) or callee.data.function is None:
+        return None
+    slots: Slots = {
+        "site": hexadecimal(main.location.rva or 0),
+        "target": hexadecimal(main.data.target),
+        "function": _import_label(callee),
+        "anchor": hexadecimal(anchor.location.rva or 0),
+    }
+    return slots, ("code.main_function", "code.import_call", "evidence.confidence")
+
+
+def _reach(root: str) -> Callable[[tuple[Evidence, ...], Report], Derived | None]:
+    def derive(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+        if len(cited) != 2:
+            return None
+        reach, main = cited
+        if not isinstance(reach, CodeReachEvidence) or not isinstance(main, MainCallEvidence):
+            return None
+        if reach.data.root != root:
+            return None
+        if reach.provenance.evidence_ids != (main.id,):
+            return None
+        facts = groups(report).facts
+        names: dict[str, None] = {}
+        for call_id in reach.data.calls:
+            call = facts.get(call_id)
+            callee = None if call is None else facts.get(call.provenance.evidence_ids[0])
+            if not isinstance(callee, ImportEvidence):
+                return None
+            names[_import_label(callee)] = None
+        count, distinct = len(reach.data.calls), len(names)
+        shown = tuple(sorted(names)[:MAIN_FUNCTIONS_SHOWN])
+        if distinct > MAIN_FUNCTIONS_SHOWN:
+            shown += (f"y {number(distinct - MAIN_FUNCTIONS_SHOWN)} más",)
+        slots: Slots = {
+            "target": hexadecimal(main.data.target),
+            "count": number(count),
+            "noun": "llamada" if count == 1 else "llamadas",
+            "distinct": number(distinct),
+            "fnoun": "función" if distinct == 1 else "funciones",
+            "functions": shown,
+        }
+        return slots, ("code.reach", "code.main_function", "code.import_call")
+
+    return derive
+
+
 RULES: dict[str, Rule] = {
     rule.id: rule
     for rule in (
@@ -919,6 +981,37 @@ RULES: dict[str, Rule] = {
             "Es lo que declara el archivo: un binario manipulado puede declarar rangos falsos. "
             "Cada rango es un tramo contiguo de una función, y una función puede ocupar varios.",
             _functions,
+        ),
+        Rule(
+            "code.main_call@1",
+            "En {site}, el código de arranque del compilador llama a la función de {target} "
+            "con los valores de las tres variables que rellenó {function} ({anchor}): argc, "
+            "argv y envp. Es la función main del programa, donde el arranque le entrega el "
+            "control.",
+            "Es una inferencia a partir de las direcciones que comparten las dos llamadas, sin "
+            "ejecutar nada. No demuestra que el programa llegue a main, y antes de main puede "
+            "ejecutarse otro código del programa, como constructores de C++ o funciones TLS.",
+            _main_call,
+        ),
+        Rule(
+            "code.reach_main@1",
+            "Desde main ({target}), siguiendo solo llamadas y saltos directos, el recorrido "
+            "alcanza {count} {noun} a {distinct} {fnoun} importadas.",
+            "Incluye código que el autor no escribió pero su programa usa, como las "
+            "bibliotecas que enlaza o las comprobaciones que añade el compilador. No incluye "
+            "lo que main alcanza por llamadas indirectas, ni demuestra que esas llamadas se "
+            "ejecuten.",
+            _reach("main"),
+        ),
+        Rule(
+            "code.reach_startup@1",
+            "{count} {noun} a {distinct} {fnoun} importadas solo las alcanza el código de "
+            "arranque del compilador: desde el punto de entrada y las funciones TLS, sin pasar "
+            "por main ({target}).",
+            "Es código que el compilador añade a sus programas: que llame a una función no dice "
+            "nada de lo que hace el programa. Si el autor también la llama por un camino que el "
+            "recorrido no ve, no aparece aquí.",
+            _reach("startup"),
         ),
         Rule(
             "exports.table@1",

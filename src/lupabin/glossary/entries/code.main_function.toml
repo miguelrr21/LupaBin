@@ -1,0 +1,14 @@
+id = "code.main_function"
+title = "Función main y código de arranque"
+revision = "1.0.0"
+lang = "es"
+summary = "Un programa no empieza en su función main: el punto de entrada es código de arranque que añade el compilador, que prepara el entorno, llama a los inicializadores globales y después llama a main."
+body = "Con la biblioteca msvcrt.dll, el arranque llama a __getmainargs (o a __wgetmainargs en programas Unicode) con las direcciones de tres variables, y esa función deja en ellas los argumentos de main: argc (cuántos hay), argv (cuáles son) y envp (el entorno). Después, el arranque llama a main con los valores de esas tres variables. Es lo que hacen los programas compilados con MinGW-w64 contra msvcrt.dll y muchos programas del propio Windows.\n\nLupaBin reconoce main cuando una sola llamada directa del código recibe como primeros argumentos exactamente los valores de esas tres variables. Si no hay ninguna, o hay más de una, no dice nada. Otros compiladores o bibliotecas (Visual Studio con la UCRT, MinGW-w64 con la UCRT, programas con WinMain) preparan los argumentos de otra forma, y LupaBin todavía no los reconoce.\n\nSaber dónde está main sirve para empezar a leer el código por la parte que escribió el autor, por ejemplo en un desensamblador."
+not_proven = "Encontrar main no demuestra que el programa llegue a ejecutarlo. Y no todo el código del autor está en main ni se ejecuta después: los constructores de C++ o las funciones TLS se ejecutan antes."
+related = ["code.import_call", "code.reach", "toolchain.mingw_w64"]
+sources = [
+  { title = "__getmainargs, __wgetmainargs", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/c-runtime-library/getmainargs-wgetmainargs", verified_on = 2026-09-26 },
+  { title = "CRT Initialization", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-initialization", verified_on = 2026-09-26 },
+  { title = "mingw-w64-crt/crt/crtexe.c", publisher = "Proyecto MinGW-w64", url = "https://github.com/mingw-w64/mingw-w64/blob/master/mingw-w64-crt/crt/crtexe.c", verified_on = 2026-09-26 },
+  { title = "Cómo trabaja LupaBin: la función main", publisher = "Proyecto LupaBin", document = "docs/metodo.md#la-función-main", verified_on = 2026-09-26 },
+]

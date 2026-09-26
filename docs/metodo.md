@@ -207,6 +207,23 @@ Con el enlace, "abre la clave `Run` y escribe en ella" ya no depende de `.pdata`
 
 Cuando el recorrido decodifica pocas instrucciones para el tamaño del código, una explicación lo pone en contexto (`code.walk_density@1`). Solo se aplica con al menos 64 KiB de código nativo, recorrido completo y un binario que no sea .NET. Umbral: 20 instrucciones por KiB, por debajo del cual se queda el 0,28 % de los binarios benignos medidos. Con un mínimo de solo 4 KiB, incluso un umbral de 5 por KiB saltaba en uno de cada quince binarios benignos (distribuciones de teclado, DLL de recursos), y se descartó. No demuestra empaquetado.
 
+## La función main
+
+Un programa no empieza en su `main`: el punto de entrada es código de arranque que añade el compilador. Con la biblioteca `msvcrt.dll`, el arranque llama a `__getmainargs` (o a `__wgetmainargs`) con las direcciones de tres variables, y según Microsoft esa función «copia los argumentos para `main()` a través de los punteros que recibe». Después llama a `main` con los valores de esas tres variables: argc, argv y envp.
+
+**Regla (`getmainargs-v1`).** Por cada llamada a esas funciones de `msvcrt.dll`, las formas canónicas de sus tres primeros argumentos (una `lea` relativa a RIP en x64, un `push imm32` en x86) dan tres direcciones. `main` es el destino de la **única** llamada directa (`call rel32`) de todo el código recorrido cuyos tres primeros argumentos se cargan de exactamente esas tres direcciones (`mov` desde `[rip+disp32]` a rcx, rdx y r8 en x64; `push dword ptr [dirección]` en x86), en el tramo lineal de la llamada y sin que nada los cambie antes de ella, con las mismas reglas de seguimiento que los argumentos constantes. Si ninguna llamada cumple la regla, o si la cumple más de una, LupaBin no dice nada. El host comprueba con los bytes que las direcciones coinciden y que el destino es el de la llamada.
+
+**Alcance.** Con `main` encontrado, el código se recorre dos veces más, siguiendo solo llamadas y saltos con destino constante: desde `main` y desde el punto de entrada y las funciones TLS sin entrar en `main`. Lo que alcanza el primer recorrido forma parte del programa, aunque no lo haya escrito el autor (bibliotecas enlazadas, comprobaciones del compilador). Lo que solo alcanza el segundo es código de arranque del compilador: en un programa de MinGW-w64, por ejemplo, `VirtualProtect` y `VirtualQuery` (sus pseudo-relocations), `SetUnhandledExceptionFilter` o `_initterm`. Una llamada que no aparece en ninguno solo se alcanza por otros caminos, como las funciones de `.pdata`.
+
+**Abstenciones.** No se reconocen otros arranques: Visual Studio con la UCRT (`_get_initial_narrow_environment`), MinGW-w64 con la UCRT (su `__getmainargs` va dentro del programa) y el MinGW-w64 reciente de 32 bits, que llama a `__getmainargs` a través de una función propia y escribe los argumentos con `mov [esp+n]`. Tampoco los programas de ventanas (`WinMain`) ni los servicios, que llaman a `__wgetmainargs` pero entran en funciones con otros argumentos.
+
+**Mediciones** (2026-09-26):
+
+- **Programas de referencia**: 90 compilaciones propias e inofensivas con GCC 16 de MSYS2 (cinco programas, entre ellos uno con `wmain`; `-O0`, `-O2` y `-Os`; con y sin símbolos), cuyo `main` se conoce por la tabla de símbolos. Las 30 de x64 con `msvcrt.dll`: 30 aciertos. Las 30 de 32 bits y las 30 con la UCRT: abstención. Ningún `main` equivocado.
+- **Ejecutables de Windows** (uno de cada cuatro de System32 y uno de cada tres de SysWOW64): de 259 ejecutables, 149 llaman a `__getmainargs` o `__wgetmainargs`; en 74 se encuentra `main` y en 75 LupaBin se abstiene (programas de ventanas y servicios, sobre todo). Ningún informe, comprobación ni explicación falló. Se revisaron a mano 20 de los encontrados (12 de 64 bits y 8 de 32), desensamblando el principio de la función: en 12 se ve cómo lee argc o argv en sus primeras instrucciones, y en los otros 8 no los usa al principio, algo que un `main` puede hacer. Ninguno contradice la regla. En ejecutables con más llamadas de las que caben en el informe (`git.exe`, `sppsvc.exe`), se publica `main` sin el alcance.
+- **Los dos retos** (`reto_final.exe`, `reto_prueba.exe`, MinGW-w64 x64): `main` en `0x1528`, la función que compara la contraseña. Solo del arranque: 21 llamadas, entre ellas `VirtualProtect`, `VirtualQuery` y `SetUnhandledExceptionFilter`.
+- **Coste**: en los ocho ejecutables más grandes que usan `__getmainargs` (de 2,5 a 4,8 MB), encontrar `main` y los dos recorridos de alcance añaden entre 0 y 0,5 s. Los recorridos comparten el plazo del recorrido principal: si no les da tiempo, el alcance no se publica y se dice por qué.
+
 ## Explicaciones y glosario
 
 Las explicaciones se generan en el host a partir de un informe ya validado, nunca en el worker. Cada frase es una regla pura de sus citas: sus valores salen solo de los campos de los hechos citados, lleva su texto de límite (qué no demuestra) y remite al glosario. Al validar, cada frase se regenera desde sus citas y se exige igualdad exacta. Una frase hereda el nivel más débil de lo que cita.
@@ -315,6 +332,7 @@ El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. 
 - **Argumentos.** No se propagan valores entre registros. Un identificador solo se sigue entre dos llamadas a través de una variable local y en un camino recto (sección «Misma variable local»). La línea de órdenes de `CreateProcessW` no se lee.
 - **Decodificación.** Sin una crib del catálogo no hay resultado. Una cadena aislada con clave de 8 bytes se recupera en el 37 % de los casos en ASCII y el 62 % en UTF-16LE.
 - **Familias de APIs.** Solo reconocen imports por nombre exacto, no por ordinal.
+- **La función main.** Solo con el arranque que usa `__getmainargs` de `msvcrt.dll`, en x64 y en x86 con `push`; el alcance sigue solo llamadas y saltos directos.
 - **Marcas de compilador.** Solo seis herramientas: otras (Delphi, Rust, Nuitka, AutoIt…) no se reconocen, y la versión de Visual Studio no se deduce de las entradas de la cabecera Rich, porque Microsoft no documenta su significado.
 - **Idioma.** Las explicaciones y el glosario están en español.
 - **Fuentes externas.** Las páginas que cita el glosario pueden moverse: `tests/check_glossary_sources.py` lo comprueba con red, fuera de la CI.
@@ -327,6 +345,7 @@ Las herramientas están en `tests/` y no forman parte del paquete ni de la CI. R
 - `uv run python -m tests.decode_eval false-positives <dir>` y `recall <dir>`: falsos positivos y cobertura de la decodificación.
 - `uv run python -m tests.code_eval corpus <dir>`: llamadas, argumentos, verificación de bytes y tiempos; `worst` mide los peores casos sintéticos: los de 20 MiB y uno con tantas llamadas enlazadas por una variable local como se pueden publicar.
 - `uv run python -m tests.capability_eval corpus <dir>`: frecuencia de cada capacidad; `review` lista cada caso para revisarlo.
+- `uv run python -m tests.main_eval corpus <dir>`: `main` encontrado o abstención por ejecutable, reparto de las llamadas y tiempos; `--out` lista cada caso para revisarlo.
 - `uv run python -m tests.toolchain_eval corpus <dir>`: marcas de compilador por binario y combinación, comprobación de los bytes y regeneración de las explicaciones; `--out` las lista para revisarlas.
 
 Cambiar un umbral, una condición, un catálogo o una redacción exige una nueva versión fijada por digest, repetir la medición y revisar los casos a mano.

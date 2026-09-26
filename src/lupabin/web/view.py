@@ -127,6 +127,7 @@ def build(
         },
         "status": explanation.status,
         "made_with": document.made_with(items),
+        "main": document.main_line(items),
         "summary": _summary(items, report),
         "notes": [note.statement for note in explanation.notes],
         "items": [_item(item) for item in items],
