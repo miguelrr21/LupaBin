@@ -1,0 +1,11 @@
+id = "code.string_reference"
+title = "Textos que usa el código"
+revision = "1.0.0"
+lang = "es"
+summary = "Una cadena del archivo que una instrucción del código recorrido usa: la instrucción toma la dirección exacta donde empieza la cadena, por ejemplo para pasarla a una función que la muestra."
+body = "El barrido de cadenas encuentra cualquier secuencia de bytes que parece texto, y en un programa normal son cientos: mensajes de bibliotecas, nombres internos, restos de datos. Las que interesan suelen ser las que el código usa.\n\nLupaBin busca, entre las instrucciones que decodificó el recorrido, las que toman una dirección con una forma conocida (lea con una dirección relativa a RIP en x64; push o mov de una dirección de la imagen en x86) y comprueba que esa dirección es exactamente el inicio de una cadena publicada, en una sección que no se puede escribir. Publica la primera instrucción que usa cada cadena.\n\nCuando LupaBin encuentra main, dice también qué textos usa el código alcanzable desde main: en un programa de consola, suelen ser sus mensajes."
+not_proven = "Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni para qué se usa. Los textos que el código construye o descifra al ejecutarse no aparecen."
+related = ["strings.literal", "code.reach", "code.main_function"]
+sources = [
+  { title = "Cómo trabaja LupaBin: textos que usa el código", publisher = "Proyecto LupaBin", document = "docs/metodo.md#textos-que-usa-el-código", verified_on = 2026-09-26 },
+]

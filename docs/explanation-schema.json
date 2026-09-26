@@ -216,6 +216,7 @@
                 "disassembly",
                 "api_calls",
                 "call_arguments",
+                "string_references",
                 "main_function"
               ],
               "type": "string"

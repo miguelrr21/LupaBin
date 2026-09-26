@@ -224,6 +224,14 @@ Un programa no empieza en su `main`: el punto de entrada es código de arranque 
 - **Los dos retos** (`reto_final.exe`, `reto_prueba.exe`, MinGW-w64 x64): `main` en `0x1528`, la función que compara la contraseña. Solo del arranque: 21 llamadas, entre ellas `VirtualProtect`, `VirtualQuery` y `SetUnhandledExceptionFilter`.
 - **Coste**: en los ocho ejecutables más grandes que usan `__getmainargs` (de 2,5 a 4,8 MB), encontrar `main` y los dos recorridos de alcance añaden entre 0 y 0,5 s. Los recorridos comparten el plazo del recorrido principal: si no les da tiempo, el alcance no se publica y se dice por qué.
 
+## Textos que usa el código
+
+El barrido de cadenas publica todo lo que parece texto (476 cadenas en uno de los retos de prueba). Para saber cuáles usa el programa, LupaBin busca entre las instrucciones que decodificó el recorrido las que toman una dirección con una forma canónica (`lea` relativa a RIP en x64; `push imm32` o `mov r32, imm32` en x86) y publica, por cada cadena, la primera cuya dirección es **exactamente** el inicio de esa cadena publicada, en una sección que no se puede escribir (`string_reference`). El informe comprueba la dirección con los bytes de la instrucción y la sección de la cadena; el host, los bytes. Con `main` encontrado, cada alcance lista también las referencias cuyas instrucciones decodificó su recorrido.
+
+En los dos retos de prueba, el código alcanzable desde `main` usa exactamente sus seis mensajes («Introduce la flag para ganar :)», «FELICIDADES, LLAMAME PARA RECLAMAR TU PREMIO!!!», «Acceso denegado, no es la flag correcta»…), y el arranque, los mensajes de error de MinGW-w64. Un puntero a la mitad de una cadena (el sondeo previo encontró «inity», dentro de «Infinity») no se publica, porque no es el inicio de ninguna cadena publicada.
+
+No aparecen los textos que el código construye en la pila o descifra al ejecutarse, los que solo usa por caminos que el recorrido no ve, ni los de secciones que se pueden escribir, que pueden cambiar antes de usarse.
+
 ## Explicaciones y glosario
 
 Las explicaciones se generan en el host a partir de un informe ya validado, nunca en el worker. Cada frase es una regla pura de sus citas: sus valores salen solo de los campos de los hechos citados, lleva su texto de límite (qué no demuestra) y remite al glosario. Al validar, cada frase se regenera desde sus citas y se exige igualdad exacta. Una frase hereda el nivel más débil de lo que cita.
