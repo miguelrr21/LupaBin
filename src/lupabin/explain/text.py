@@ -29,6 +29,7 @@ COMPONENTS: dict[Component, str] = {
     "decode_xor": "XOR",
     "disassembly": "recorrido del código",
     "api_calls": "llamadas a funciones importadas",
+    "string_references": "textos que usa el código",
     "main_function": "función main",
     "call_arguments": "argumentos constantes de las llamadas",
 }

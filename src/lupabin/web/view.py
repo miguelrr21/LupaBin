@@ -128,6 +128,11 @@ def build(
         "status": explanation.status,
         "made_with": document.made_with(items),
         "main": document.main_line(items),
+        "texts": (
+            None
+            if (texts := document.main_texts(items)) is None
+            else f"{' · '.join(texts[1])} ({texts[0]})"
+        ),
         "summary": _summary(items, report),
         "notes": [note.statement for note in explanation.notes],
         "items": [_item(item) for item in items],

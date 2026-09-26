@@ -37,6 +37,7 @@ EXTRA = {
     "unlisted": "Sin import con ese nombre",
     "description": "Qué significa, según el catálogo",
     "text": "Texto",
+    "texts": "Textos",
 }
 
 
@@ -111,6 +112,27 @@ def main_line(items: tuple[Item, ...]) -> str | None:
     if startup is not None:
         parts.append(f"{startup.slots['count']} solo del arranque ({startup.id})")
     return " · ".join(parts)
+
+
+HEADER_TEXTS = 4
+HEADER_LETTERS = 3  # a header shows words, not separators or format strings
+
+
+def main_texts(items: tuple[Item, ...]) -> tuple[str, tuple[str, ...]] | None:
+    """The item that lists the texts code reachable from main uses, and the first few
+    with words in them (the item lists them all)."""
+    found = next((item for item in items if item.rule == "strings.from_main@1"), None)
+    if found is None:
+        return None
+    texts = found.slots["texts"]
+    if not isinstance(texts, tuple):
+        return None
+    worded = tuple(
+        text
+        for text in texts
+        if text.startswith("«") and sum(char.isalpha() for char in text) >= HEADER_LETTERS
+    )
+    return (found.id, worded[:HEADER_TEXTS]) if worded else None
 
 
 class Summary(NamedTuple):
@@ -218,6 +240,9 @@ def to_text(
     entered = main_line(items)
     if entered:
         lines += wrap(entered, "          ", "main      ")
+    used = main_texts(items)
+    if used:
+        lines += wrap(visible(f"{' · '.join(used[1])} ({used[0]})"), "          ", "Textos    ")
     lines += ["", SUMMARY_TITLE, *wrap(SUMMARY_INTRO, "   ")]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:
@@ -318,6 +343,10 @@ def to_markdown(
     entered = main_line(items)
     if entered:
         lines.append(f"- **main**: {markdown_text(entered)}")
+    used = main_texts(items)
+    if used:
+        shown = " · ".join(code_span(text) for text in used[1])
+        lines.append(f"- **Textos**: {shown} ({used[0]})")
     lines += ["", f"## {SUMMARY_TITLE}", "", markdown_text(SUMMARY_INTRO)]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:

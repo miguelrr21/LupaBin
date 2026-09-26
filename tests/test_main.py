@@ -9,8 +9,14 @@ from lupabin.evidence.models import Report
 from lupabin.evidence.primitives import CodeLimits, Limits
 from lupabin.explain.engine import explain, validate
 from lupabin.glossary.catalog import load_glossary
-from lupabin.render.document import main_line
-from tests.fixtures.pe_builder import MAIN_RVA, MAIN_VARIABLES, build_main_demo
+from lupabin.render.document import main_line, main_texts
+from tests.fixtures.pe_builder import (
+    MAIN_RVA,
+    MAIN_TEXT,
+    MAIN_VARIABLES,
+    STARTUP_TEXT,
+    build_main_demo,
+)
 
 GLOSSARY = load_glossary()
 
@@ -195,3 +201,52 @@ def test_main_and_the_reaches_are_explained_and_in_the_header(bits):
         f"({rules['code.reach_main@1'].id}) · 2 solo del arranque "
         f"({rules['code.reach_startup@1'].id})"
     )
+
+
+def texts(report, fact_ids):
+    facts = {fact.id: fact for fact in report.evidence}
+    return [facts[facts[i].provenance.evidence_ids[0]].data.text for i in fact_ids]
+
+
+@pytest.mark.parametrize("bits", [64, 32])
+def test_the_texts_code_uses_are_split_by_reach(bits):
+    data = build_main_demo(bits=bits)
+    report = analyze_bytes(data)
+    references = kinds(report, "string_reference")
+    assert texts(report, [r.id for r in references]) == [MAIN_TEXT.decode(), STARTUP_TEXT.decode()]
+    reaches = {fact.data.root: fact for fact in kinds(report, "code_reach")}
+    assert texts(report, reaches["main"].data.strings) == [MAIN_TEXT.decode()]
+    assert texts(report, reaches["startup"].data.strings) == [STARTUP_TEXT.decode()]
+    verify_calls(report.evidence, data)
+    explanation = explain(report, GLOSSARY)
+    items = validate(explanation, report, GLOSSARY)
+    rules = {item.rule: item for item in items}
+    assert rules["strings.references@1"].slots["texts"] == (
+        f"«{MAIN_TEXT.decode()}»",
+        f"«{STARTUP_TEXT.decode()}»",
+    )
+    assert main_texts(items) == (rules["strings.from_main@1"].id, (f"«{MAIN_TEXT.decode()}»",))
+
+
+def test_the_report_rejects_a_reference_to_another_string():
+    report = analyze_bytes(build_main_demo())
+    ids = [fact.id for fact in kinds(report, "string_reference")]
+    strings = {r.provenance.evidence_ids[0] for r in kinds(report, "string_reference")}
+
+    def change(evidence):
+        first_reference = next(f for f in evidence if f["id"] == ids[0])
+        other = next(f for f in evidence if f["kind"] == "string" and f["id"] not in strings)
+        first_reference["provenance"]["evidence_ids"] = [other["id"]]
+
+    with pytest.raises(ValidationError, match="where its string starts|not writable"):
+        Report.model_validate_json(tampered(report, change))
+
+
+def test_the_host_rejects_a_changed_reference():
+    data = build_main_demo()
+    report = analyze_bytes(data)
+    reference = kinds(report, "string_reference")[0]
+    changed = bytearray(data)
+    changed[reference.location.offset + 3] ^= 1
+    with pytest.raises(ValueError, match="differ"):
+        verify_calls(report.evidence, bytes(changed))

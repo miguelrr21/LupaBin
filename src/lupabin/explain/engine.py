@@ -18,6 +18,7 @@ from lupabin.evidence.facts import (
     MainCallEvidence,
     SectionEvidence,
     StringEvidence,
+    StringReferenceEvidence,
     ToolchainEvidence,
     YaraEvidence,
 )
@@ -150,6 +151,11 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
         elif isinstance(fact, CodeReachEvidence):
             main = facts[fact.provenance.evidence_ids[0]]
             yield f"code.reach_{fact.data.root}@1", (fact, main)
+            if fact.data.root == "main" and fact.data.strings:
+                yield "strings.from_main@1", (fact, *(facts[r] for r in fact.data.strings))
+    references = tuple(f for f in evidence if isinstance(f, StringReferenceEvidence))
+    if references:
+        yield "strings.references@1", references
     sections = executable_sections(report)
     if sections and RULES["code.walk_density@1"].derive(sections, report) is not None:
         yield "code.walk_density@1", sections

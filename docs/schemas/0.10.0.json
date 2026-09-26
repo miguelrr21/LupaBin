@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.11.0",
-          "default": "0.11.0",
+          "const": "0.10.0",
+          "default": "0.10.0",
           "title": "Version",
           "type": "string"
         }
@@ -101,7 +101,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -651,17 +650,6 @@
           ],
           "title": "Root",
           "type": "string"
-        },
-        "strings": {
-          "default": [],
-          "items": {
-            "maxLength": 16,
-            "pattern": "^E[1-9][0-9]*$",
-            "type": "string"
-          },
-          "maxItems": 5000,
-          "title": "Strings",
-          "type": "array"
         }
       },
       "required": [
@@ -764,7 +752,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Name",
@@ -1006,7 +993,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -1153,7 +1139,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -1294,7 +1279,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -1458,7 +1442,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -1590,7 +1573,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -2401,7 +2383,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -2542,7 +2523,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -2595,73 +2575,6 @@
         "data"
       ],
       "title": "StringEvidence",
-      "type": "object"
-    },
-    "StringReferenceData": {
-      "additionalProperties": false,
-      "description": "An instruction of the walked code that takes the address where a published string\nstarts (evidence/reference_forms.py).",
-      "properties": {
-        "raw_hex": {
-          "pattern": "^(?:[a-f0-9]{2}){1,15}$",
-          "title": "Raw Hex",
-          "type": "string"
-        }
-      },
-      "required": [
-        "raw_hex"
-      ],
-      "title": "StringReferenceData",
-      "type": "object"
-    },
-    "StringReferenceEvidence": {
-      "additionalProperties": false,
-      "properties": {
-        "component": {
-          "const": "string_references",
-          "default": "string_references",
-          "title": "Component",
-          "type": "string"
-        },
-        "confidence": {
-          "const": "observed",
-          "default": "observed",
-          "title": "Confidence",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/StringReferenceData"
-        },
-        "id": {
-          "maxLength": 16,
-          "pattern": "^E[1-9][0-9]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "string_reference",
-          "default": "string_reference",
-          "title": "Kind",
-          "type": "string"
-        },
-        "location": {
-          "$ref": "#/$defs/Location"
-        },
-        "provenance": {
-          "$ref": "#/$defs/Provenance"
-        },
-        "source": {
-          "const": "code",
-          "default": "code",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "location",
-        "data"
-      ],
-      "title": "StringReferenceEvidence",
       "type": "object"
     },
     "ToolchainData": {
@@ -2737,7 +2650,6 @@
             "disassembly",
             "api_calls",
             "call_arguments",
-            "string_references",
             "main_function"
           ],
           "title": "Component",
@@ -3234,7 +3146,6 @@
             "pe_header": "#/$defs/HeaderEvidence",
             "section": "#/$defs/SectionEvidence",
             "string": "#/$defs/StringEvidence",
-            "string_reference": "#/$defs/StringReferenceEvidence",
             "toolchain_marker": "#/$defs/ToolchainEvidence",
             "yara_match": "#/$defs/YaraEvidence"
           },
@@ -3288,9 +3199,6 @@
           },
           {
             "$ref": "#/$defs/CodeReachEvidence"
-          },
-          {
-            "$ref": "#/$defs/StringReferenceEvidence"
           }
         ]
       },
@@ -3329,8 +3237,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.11.0",
-      "default": "0.11.0",
+      "const": "0.10.0",
+      "default": "0.10.0",
       "title": "Schema Version",
       "type": "string"
     },

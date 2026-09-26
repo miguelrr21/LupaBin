@@ -22,6 +22,7 @@ from lupabin.evidence.facts import (
     Payload,
     SectionData,
     StringData,
+    StringReferenceData,
     ToolchainData,
 )
 from lupabin.evidence.models import (
@@ -53,6 +54,7 @@ KINDS = {
     LocalLinkData: "local_link",
     MainCallData: "main_call",
     CodeReachData: "code_reach",
+    StringReferenceData: "string_reference",
 }
 
 
@@ -134,6 +136,7 @@ class Collector:
             "local_link": limits.code.calls,  # at most one per published reader call
             "main_call": 1,
             "code_reach": 2,  # from main and from the startup
+            "string_reference": limits.strings,  # the first reference of each string
         }
         # Coverage of extractors that already ran, for those that depend on them.
         self.coverage: dict[tuple[Source, Component], Coverage] = {}

@@ -12,7 +12,8 @@ def test_generated_schema_is_current():
 
 
 @pytest.mark.parametrize(
-    "version", ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0"]
+    "version",
+    ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0"],
 )
 def test_historical_schema_is_preserved(version):
     old = json.loads(Path(f"docs/schemas/{version}.json").read_text(encoding="utf-8"))

@@ -501,6 +501,35 @@ class MainCallEvidence(Model):
         return self
 
 
+class StringReferenceData(Model):
+    """An instruction of the walked code that takes the address where a published string
+    starts (evidence/reference_forms.py)."""
+
+    raw_hex: InstructionHex
+
+
+class StringReferenceEvidence(Model):
+    id: EvidenceId
+    source: Literal["code"] = "code"
+    component: Literal["string_references"] = "string_references"
+    kind: Literal["string_reference"] = "string_reference"
+    location: Location  # the instruction
+    confidence: Literal["observed"] = "observed"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: StringReferenceData
+
+    @model_validator(mode="after")
+    def locates_its_instruction(self) -> Self:
+        where = self.location
+        if where.offset is None or where.rva is None or where.length is None:
+            raise ValueError("a reference locates its instruction in the file and the image")
+        if where.length != len(self.data.raw_hex) // 2:
+            raise ValueError("reference location disagrees with its bytes")
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a reference cites exactly the string it points to")
+        return self
+
+
 class CodeReachData(Model):
     """Published calls to imports that the walk reaches from one root, following only
     constant calls and jumps: from `main`, or from the entry point and the TLS callbacks
@@ -509,6 +538,8 @@ class CodeReachData(Model):
     method: Literal["direct-reach-v1"] = "direct-reach-v1"
     root: Literal["main", "startup"]
     calls: Annotated[tuple[EvidenceId, ...], Field(max_length=4096)] = ()
+    # the published string references whose instruction the same walk decoded
+    strings: Annotated[tuple[EvidenceId, ...], Field(max_length=5000)] = ()
 
 
 class CodeReachEvidence(Model):
@@ -527,6 +558,8 @@ class CodeReachEvidence(Model):
             raise ValueError("a reach cites exactly the main call it starts from")
         if len(set(self.data.calls)) != len(self.data.calls):
             raise ValueError("a reach lists each call once")
+        if len(set(self.data.strings)) != len(self.data.strings):
+            raise ValueError("a reach lists each string reference once")
         return self
 
 
@@ -604,7 +637,8 @@ Evidence = Annotated[
     | CodeFunctionEvidence
     | LocalLinkEvidence
     | MainCallEvidence
-    | CodeReachEvidence,
+    | CodeReachEvidence
+    | StringReferenceEvidence,
     Field(discriminator="kind"),
 ]
 Payload = (
@@ -624,4 +658,5 @@ Payload = (
     | LocalLinkData
     | MainCallData
     | CodeReachData
+    | StringReferenceData
 )

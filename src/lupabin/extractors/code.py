@@ -1,7 +1,8 @@
 import bisect
+import time
 from collections.abc import Callable
 
-from lupabin.evidence import argument_forms, local_forms, main_forms
+from lupabin.evidence import argument_forms, local_forms, main_forms, reference_forms
 from lupabin.evidence.api_catalog import Encoding, Function, Parameter, hkey_name, lookup
 from lupabin.evidence.collector import Collector, Progress
 from lupabin.evidence.facts import (
@@ -16,13 +17,15 @@ from lupabin.evidence.facts import (
     Instruction,
     LocalLinkData,
     MainCallData,
+    StringEvidence,
+    StringReferenceData,
 )
 from lupabin.evidence.models import ErrorCode
 from lupabin.evidence.primitives import Component, Source
 from lupabin.extractors.base import Extraction
 from lupabin.extractors.code_args import ArgumentFinder, Budget, Found
 from lupabin.extractors.code_calls import Call, CallFinder
-from lupabin.extractors.code_disasm import Region, Targets, walk
+from lupabin.extractors.code_disasm import Region, Targets, Walk, walk
 from lupabin.extractors.code_entries import FunctionRanges, entries, regions
 from lupabin.extractors.code_links import Passed, SlotFinder
 from lupabin.extractors.code_main import MainFinder
@@ -154,11 +157,13 @@ class CodeExtractor:
         _arguments(
             layout, code, result.targets, catalog, finder.calls(), collector, progress, deadline
         )
+        references = _references(layout, code, result, collector, progress, deadline)
         _main(
             layout,
             code,
             result.targets,
             finder.calls(),
+            references,
             slots,
             main_finder,
             switches,
@@ -174,6 +179,7 @@ def _main(
     code: list[Region],
     targets: Targets,
     calls: list[Call],
+    references: dict[int, str],
     slots: dict[int, str],
     main_finder: MainFinder,
     switches: SwitchTables,
@@ -260,6 +266,7 @@ def _main(
         return
     limits = collector.limits.code
     reached: dict[str, set[int]] = {}
+    texts: dict[str, set[int]] = {}
     for root, starts, avoid in (
         ("main", [main.target], frozenset()),
         (
@@ -311,10 +318,12 @@ def _main(
             progress.issue("main_function", stopped, limit=True)
             return
         reached[root] = {call.rva for call in finder.calls()}
-    for root, chosen in (
-        ("main", reached["main"]),
-        ("startup", reached["startup"] - reached["main"]),
+        texts[root] = {rva for rva in references if _decoded(result, rva)}
+    for root, chosen, shown in (
+        ("main", reached["main"], texts["main"]),
+        ("startup", reached["startup"] - reached["main"], texts["startup"] - texts["main"]),
     ):
+        strings = tuple(collector.ids[key] for rva, key in references.items() if rva in shown)
         ids = tuple(
             collector.ids[f"code:call:{call.rva}"]
             for call in calls
@@ -324,12 +333,111 @@ def _main(
             f"code:reach:{root}",
             progress,
             "main_function",
-            CodeReachData(root=root, calls=ids),  # type: ignore[arg-type]
+            CodeReachData(root=root, calls=ids, strings=strings),  # type: ignore[arg-type]
             None,
             refs=("code:main",),
         ):
             return
     progress.complete("main_function")
+
+
+_REFERENCE_CLOCK = 65536
+
+
+def _references(
+    layout: Layout,
+    code: list[Region],
+    walked: Walk,
+    collector: Collector,
+    progress: Progress,
+    deadline: float,
+) -> dict[int, str]:
+    """Publishes, for each published string in a section that is not writable, the first
+    instruction the walk decoded whose canonical form takes the address where the string
+    starts (evidence/reference_forms.py). Returns instruction RVA -> collector key."""
+    if progress.states["disassembly"] != "complete":
+        progress.issue("string_references", "dependency_omitted", limit=True)
+    parts: tuple[Component, ...] = ("ascii", "utf16le")
+    if any(collector.coverage.get(("strings", part)) != "complete" for part in parts):
+        # a string that was not published cannot be cited
+        progress.issue("string_references", "dependency_omitted", limit=True)
+    keys = {public: key for key, public in collector.ids.items()}
+    readable = [
+        item.data
+        for item in layout.sections
+        if item.data.raw_status == "present" and "write" not in item.data.permissions
+    ]
+    starts: dict[int, str] = {}
+    order: dict[str, int] = {}
+    for fact in collector.facts:
+        if not isinstance(fact, StringEvidence) or fact.location.offset is None:
+            continue
+        offset = fact.location.offset
+        holder = next(
+            (s for s in readable if s.raw_offset <= offset < s.raw_offset + s.raw_size), None
+        )
+        if holder is None:
+            continue
+        key = keys[fact.id]
+        order[key] = len(order)
+        starts.setdefault(holder.rva + offset - holder.raw_offset, key)
+    bits, base = layout.bits, layout.header.image_base
+    opcodes = (b"\x8d",) if bits == 64 else (b"\x68", *(bytes([op]) for op in range(0xB8, 0xC0)))
+    found: dict[str, tuple[int, int]] = {}
+    examined = 0
+    for region, marks in zip(sorted(code, key=lambda r: r.rva), walked.decoded, strict=True):
+        data = region.data
+        for opcode in opcodes:
+            at = data.find(opcode)
+            while at >= 0:
+                examined += 1
+                if not examined % _REFERENCE_CLOCK and time.monotonic() > deadline:
+                    progress.issue("string_references", "code_time_limit", limit=True)
+                    return _publish_references(layout, found, order, collector, progress)
+                start, size = (at - 1, 7) if bits == 64 else (at, 5)
+                if start >= 0 and start + size <= len(data) and marks[start]:
+                    rva = region.rva + start
+                    target = reference_forms.address(
+                        bytes(data[start : start + size]), rva, bits, base
+                    )
+                    string = None if target is None else starts.get(target)
+                    if string is not None and (string not in found or rva < found[string][0]):
+                        found[string] = (rva, size)
+                at = data.find(opcode, at + 1)
+    progress.examined["string_references"] = len(starts)
+    return _publish_references(layout, found, order, collector, progress)
+
+
+def _publish_references(
+    layout: Layout,
+    found: dict[str, tuple[int, int]],
+    order: dict[str, int],
+    collector: Collector,
+    progress: Progress,
+) -> dict[int, str]:
+    published: dict[int, str] = {}
+    for key in sorted(found, key=order.__getitem__):
+        rva, size = found[key]
+        try:
+            data = StringReferenceData(raw_hex=_bytes(layout, (rva, size)))
+            location = layout.location(rva, size)
+        except InvalidTable:
+            continue
+        reference = f"code:reference:{key}"
+        if not collector.add(reference, progress, "string_references", data, location, refs=(key,)):
+            return published
+        published[rva] = reference
+    progress.complete("string_references")
+    return published
+
+
+def _decoded(walked: Walk, rva: int) -> bool:
+    starts = walked.targets.starts
+    index = bisect.bisect_right(starts, rva) - 1
+    if index < 0:
+        return False
+    marks = walked.decoded[index]
+    return 0 <= rva - starts[index] < len(marks) and bool(marks[rva - starts[index]])
 
 
 def _functions(
