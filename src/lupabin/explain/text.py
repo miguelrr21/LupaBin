@@ -1,5 +1,6 @@
 """Reviewed Spanish wording for sources, components and report codes."""
 
+from lupabin.evidence.facts import LocalLinkEvidence
 from lupabin.evidence.primitives import Component, Name, Source
 
 SOURCES: dict[Source, str] = {
@@ -153,3 +154,10 @@ def section_name(text: str | None, raw_hex: str) -> str:
     if text is None:
         return f"(nombre no UTF-8: {raw_hex})"
     return text if text else "(sin nombre)"
+
+
+def frame_slot(fact: LocalLinkEvidence) -> str:
+    """A local variable as the code names it: [ebp-0x8], [rsp+0x30]."""
+    displacement = fact.data.slot.displacement
+    sign = "-" if displacement < 0 else "+"
+    return f"[{fact.data.slot.frame}{sign}{abs(displacement):#x}]"

@@ -511,6 +511,61 @@ def with_pdata(data, ranges):
     return bytes(data)
 
 
+def local_link_x86_code(between=b"", enter=False):
+    """x86 code at CODE_RVA, with an ebp frame: RegOpenKeyExW(HKEY_CURRENT_USER, subkey,
+    0, KEY_WRITE, &key) with key at [ebp-8], then, if it succeeded,
+    RegSetValueExW(key, value name, 0, REG_SZ, NULL, 0) passing [ebp-8]. `between` goes
+    between the two calls; `enter` adds a jump from the start to the instruction right
+    after the first call's check, so another path reaches the second call. Inert."""
+    base = 0x400000
+    body = bytearray(b"\x55\x8b\xec")  # push ebp; mov ebp, esp
+    enter_at = len(body)
+    if enter:
+        body += b"\x74\x00"  # jz: patched below
+    body += bytes.fromhex("8d45f8") + b"\x50"  # lea eax, [ebp-8]; push eax
+    body += b"\x68" + struct.pack("<I", 0x20006) + b"\x6a\x00"  # KEY_WRITE, ulOptions
+    body += b"\x68" + struct.pack("<I", base + 0x1A00) + HKCU32  # subkey, hKey
+    body += b"\xff\x15" + struct.pack("<I", base + 0x1140)  # call RegOpenKeyExW
+    body += b"\x85\xc0\x75\x00"  # test eax, eax; jne end (patched below)
+    jne_at = len(body) - 1
+    after_check = len(body)
+    body += between
+    body += b"\x6a\x00\x6a\x00\x6a\x01\x6a\x00"  # cbData, lpData, REG_SZ, Reserved
+    body += b"\x68" + struct.pack("<I", base + 0x1B00)  # lpValueName
+    body += bytes.fromhex("ff75f8")  # push dword ptr [ebp-8]: hKey
+    body += b"\xff\x15" + struct.pack("<I", base + 0x1144)  # call RegSetValueExW
+    end = len(body)
+    body += b"\x8b\xe5\x5d\xc3"  # mov esp, ebp; pop ebp; ret
+    body[jne_at] = end - (jne_at + 1)
+    if enter:
+        body[enter_at + 1] = after_check - (enter_at + 2)
+    return bytes(body)
+
+
+def build_local_link_demo(
+    *,
+    subkey=r"Software\Microsoft\Windows\CurrentVersion\Run",
+    value=SAME_FUNCTION_VALUE,
+    between=b"",
+    enter=False,
+):
+    """x86 PE importing RegOpenKeyExW and RegSetValueExW from advapi32.dll, whose code
+    opens `subkey` and writes `value` through the key it keeps in a local variable."""
+    data = bytearray(
+        build_code_pe(
+            local_link_x86_code(between, enter),
+            bits=32,
+            dll=b"advapi32.dll",
+            function=b"RegOpenKeyExW",
+            more=(b"RegSetValueExW",),
+        )
+    )
+    for rva, text in ((0x1A00, subkey), (0x1B00, value)):
+        raw = text.encode("utf-16-le") + b"\0\0"
+        data[0x200 + rva - 0x1000 : 0x200 + rva - 0x1000 + len(raw)] = raw
+    return bytes(data)
+
+
 def build_code_demo(*, bits=32, **imports):
     """An entry point that calls the import once through each canonical form."""
     return build_code_pe(code_demo_bytes(bits), bits=bits, **imports)

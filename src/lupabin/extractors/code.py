@@ -1,7 +1,7 @@
 import bisect
 from collections.abc import Callable
 
-from lupabin.evidence import argument_forms
+from lupabin.evidence import argument_forms, local_forms
 from lupabin.evidence.api_catalog import Encoding, Function, Parameter, hkey_name, lookup
 from lupabin.evidence.collector import Collector, Progress
 from lupabin.evidence.facts import (
@@ -10,8 +10,10 @@ from lupabin.evidence.facts import (
     CallArgumentData,
     CodeFunctionData,
     ExportEvidence,
+    FrameSlot,
     ImportEvidence,
     Instruction,
+    LocalLinkData,
 )
 from lupabin.evidence.models import ErrorCode
 from lupabin.evidence.primitives import Component, Source
@@ -20,6 +22,7 @@ from lupabin.extractors.code_args import ArgumentFinder, Budget, Found
 from lupabin.extractors.code_calls import Call, CallFinder
 from lupabin.extractors.code_disasm import Region, Targets, walk
 from lupabin.extractors.code_entries import FunctionRanges, entries, regions
+from lupabin.extractors.code_links import Passed, SlotFinder
 from lupabin.extractors.code_switch import SwitchTables
 from lupabin.extractors.pe_layout import InvalidPE, InvalidTable, Layout, parse_layout
 
@@ -228,7 +231,105 @@ def _arguments(
                 refs=(f"code:call:{call.rva}",),
             ):
                 return  # the collector recorded why
+    if not _links(layout, code, targets, catalog, calls, collector, progress, budget):
+        return
     progress.complete("call_arguments")
+
+
+def _links(
+    layout: Layout,
+    code: list[Region],
+    targets: Targets,
+    catalog: dict[int, Function],
+    calls: list[Call],
+    collector: Collector,
+    progress: Progress,
+    budget: Budget,
+) -> bool:
+    """Publishes each handle a call writes into a local variable and a later call
+    reads from it (code_links.py). False when the budget, the deadline or the
+    collector stopped it; the reason is recorded."""
+    finder = SlotFinder(code, targets, layout.bits, budget)
+    writers: list[tuple[Call, int, str, Passed]] = []
+    readers: list[tuple[Call, int, str, Passed]] = []
+    for call in calls:
+        entry = catalog.get(call.slot)
+        if entry is None:
+            continue
+        writer = local_forms.WRITERS.get(entry.name.encode())
+        keys = [p for p in entry.parameters if p.type == "hkey"]
+        if writer is None and not keys:
+            continue
+        if call.via == "tail" and layout.bits == 32:
+            continue  # at a tail jump the pushes are not the callee's arguments
+        passed = finder.passed(call.start, call.rva)
+        if writer is not None and call.via != "tail":
+            held = passed.get(writer[0])
+            if held is not None and held.kind == "address" and held.source is not None:
+                writers.append((call, writer[0], writer[1], held))
+        for parameter in keys:
+            held = passed.get(parameter.position)
+            if held is not None and held.kind == "value":
+                readers.append((call, parameter.position, parameter.name, held))
+    # the writers of each slot by address: the last one before a reader is a bisection,
+    # not a scan of every writer (4,096 published calls would make it ~8 million pairs)
+    by_slot: dict[local_forms.Slot, list[tuple[Call, int, str, Passed]]] = {}
+    for opened in sorted(writers, key=lambda w: w[0].rva):
+        by_slot.setdefault(opened[3].slot, []).append(opened)
+    starts = {slot: [w[0].rva for w in found] for slot, found in by_slot.items()}
+    for call, position, name, held in readers:
+        at = held.instruction[0]
+        before = bisect.bisect_left(starts.get(held.slot, []), at)
+        if before == 0:
+            continue
+        writer_call, writer_position, writer_name, taken = by_slot[held.slot][before - 1]
+        if not finder.keeps(writer_call.rva + writer_call.size, at, held.slot):
+            continue
+        if budget.exhausted or budget.timed_out:
+            break
+        source = taken.source
+        if source is None:
+            continue  # writers are kept only with the lea that took the address
+        try:
+            data = LocalLinkData(
+                slot=FrameSlot(frame=held.slot.frame, displacement=held.slot.displacement),
+                writer_position=writer_position,
+                writer_name=writer_name,
+                reader_position=position,
+                reader_name=name,
+                raw_hex=_bytes(layout, held.instruction),
+                address=_instruction(layout, source),
+                passes=_instruction(layout, taken.instruction),
+            )
+            location = layout.location(*held.instruction)
+        except InvalidTable:
+            continue
+        if not collector.add(
+            f"code:link:{call.rva}:{position}",
+            progress,
+            "call_arguments",
+            data,
+            location,
+            refs=(f"code:call:{writer_call.rva}", f"code:call:{call.rva}"),
+        ):
+            return False
+    if budget.exhausted or budget.timed_out:
+        reason: ErrorCode = "argument_instruction_limit" if budget.exhausted else "code_time_limit"
+        progress.issue("call_arguments", reason, limit=True)
+        return False
+    return True
+
+
+def _bytes(layout: Layout, span: tuple[int, int]) -> str:
+    offset, _ = layout.locate(*span)
+    return layout.data[offset : offset + span[1]].hex()
+
+
+def _instruction(layout: Layout, span: tuple[int, int]) -> Instruction:
+    offset, _ = layout.locate(*span)
+    return Instruction(
+        offset=offset, rva=span[0], raw_hex=layout.data[offset : offset + span[1]].hex()
+    )
 
 
 def _argument(

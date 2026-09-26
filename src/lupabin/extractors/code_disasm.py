@@ -236,10 +236,10 @@ def walk(
                     if role != _END:
                         start = record + _OPERAND
                         target = _target(batch[start : batch.index(b"\0", start)])
-                        # the next instruction is decoded by this run anyway (a jump
-                        # there is a no-op, a call there reads its own address)
+                        # a branch or call to the next instruction adds nothing: this run
+                        # decodes it anyway. A jmp there ends this run, so it is walked.
                         if target is not None and target < _LIMIT:
-                            if target != rva + position + size:
+                            if target != rva + position + size or role == _JUMP:
                                 pending.append(target)
                         elif role == _JUMP and jumped is not None:
                             earlier = range(

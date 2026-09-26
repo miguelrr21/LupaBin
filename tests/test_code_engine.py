@@ -233,3 +233,10 @@ def test_targets_left_pending_by_a_budget_are_marked():
     result, seen = stretches(code, budget=1)
     assert result.limit and seen == [(0x1000, 0x1000)]
     assert result.targets.last(0x1000, 0x1100) == 0x1100
+
+
+def test_code_after_a_jump_to_the_next_instruction_is_walked():
+    """jmp +0 ends its run but lands on the next instruction, which must be walked."""
+    code = b"\xeb\x00" + b"\xff\x15" + struct.pack("<I", BASE32 + IAT) + b"\xc3"
+    _, calls = calls_in(code, 32)
+    assert [(c.via, c.rva) for c in calls] == [("direct", 0x1002)]

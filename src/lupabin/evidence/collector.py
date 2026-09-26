@@ -15,6 +15,7 @@ from lupabin.evidence.facts import (
     ExportData,
     HeaderData,
     ImportData,
+    LocalLinkData,
     Payload,
     SectionData,
     StringData,
@@ -44,6 +45,7 @@ KINDS = {
     ApiCallData: "api_call",
     CallArgumentData: "call_argument",
     CodeFunctionData: "code_function",
+    LocalLinkData: "local_link",
 }
 
 
@@ -121,6 +123,7 @@ class Collector:
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
             "code_function": limits.code.calls,  # at most one per published call
+            "local_link": limits.code.calls,  # at most one per published reader call
         }
         # Coverage of extractors that already ran, for those that depend on them.
         self.coverage: dict[tuple[Source, Component], Coverage] = {}

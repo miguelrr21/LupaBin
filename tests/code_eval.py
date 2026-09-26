@@ -430,6 +430,25 @@ def worst_case(name: str) -> bytes:
             call = CODE_RVA + len(body)
             body += bytes.fromhex("ff15") + struct.pack("<i", 0x1140 - (call + 6))
         return build_code_pe(bytes(body), bits=64, dll=b"advapi32.dll", function=b"RegCreateKeyExW")
+    if name == "local-links":
+        # x64 calls to RegOpenKeyExW, each reading the key the previous one wrote into
+        # the same variable and writing into it again: every reader looks for its writer
+        # among all earlier ones, and every pair is linked. Only as many calls as can be
+        # published: a longer input spends the time walking, not linking
+        head = bytes.fromhex(
+            "488b4df0"  # mov rcx, [rbp-0x10]: hKey, the previous call's key
+            "488d45f0"  # lea rax, [rbp-0x10]
+            "4889442420"  # mov [rsp+0x20], rax: phkResult
+            "41b919000200"  # mov r9d, 0x20019
+            "4531c0"  # xor r8d, r8d
+            "31d2"  # xor edx, edx
+        )
+        body = bytearray()
+        for _ in range(Limits().code.calls):
+            body += head
+            call = CODE_RVA + len(body)
+            body += bytes.fromhex("ff15") + struct.pack("<i", 0x1140 - (call + 6))
+        return build_code_pe(bytes(body), bits=64, dll=b"advapi32.dll", function=b"RegOpenKeyExW")
     unit = units[name]
     code = unit * (size // len(unit))
     if name.startswith("argument"):
@@ -448,6 +467,7 @@ WORST = (
     "switch-x86",
     "switch-x64",
     "relocations",
+    "local-links",
 )
 
 

@@ -169,6 +169,20 @@ Las revisiones manuales, desensamblando cada tramo, dieron 213 correctos de 213:
 
 **Límite conocido.** La línea de órdenes de `CreateProcessW` nunca se lee: Learn exige que esté en memoria escribible, y una cadena escribible puede cambiar antes de la llamada.
 
+### Misma variable local
+
+`RegOpenKeyEx(…, &clave)` deja la clave que abre en una variable local cuya dirección recibe (`phkResult`), y `RegSetValueEx(clave, …)` la usa después. Cuando las dos llamadas nombran la misma variable (un desplazamiento del registro de marco: `[ebp-0x8]` en x86, `[rsp+0x30]` o `[rbp-0x10]` en x64), LupaBin publica un enlace entre ellas (`local_link`), pero solo si el camino entre ambas la conserva:
+- la instrucción que lee la variable solo se alcanza desde la primera llamada, sin otro camino que entre en medio;
+- ninguna instrucción intermedia cambia el registro de marco, escribe en la variable, vuelve a tomar su dirección ni salta de forma incondicional; se admiten otras llamadas;
+- una escritura a través del otro registro de la pila (`esp` para una variable de `ebp`; `rbp` o `rsp` en x64) cuenta como escritura en la variable, porque los dos apuntan al mismo marco a una distancia que el código no dice;
+- en x64 no se admite una variable de las cuatro primeras ranuras de la pila, que según Microsoft pertenecen a la función llamada, y la lectura tiene que estar a menos de 4.096 bytes.
+
+**Medición.** En una muestra de 1 de cada 6 binarios de SysWOW64, el 73 % de las llamadas que abren una clave pasan la dirección de una variable reconocible, y de 1.673 parejas candidatas el camino conserva la variable en 635. Casi todas las rechazadas (892) lo son porque otro camino entra entre las dos llamadas. En 1 de cada 20 binarios de System32 salen 122 enlaces. Revisión manual, desensamblando el tramo entre las dos llamadas: 30 de 30 correctos en x86 y 30 de 30 en x64, incluidos casos con varias llamadas intermedias y con escrituras en variables vecinas.
+
+**Coste.** Cada llamada que lee una clave busca por bisección la última llamada anterior que escribió en esa variable. El peor caso sintético, 4.096 llamadas publicadas en las que cada una lee la variable que escribió la anterior y la vuelve a escribir, tarda 6,5 s en el contenedor y 14,4 s en total, con las explicaciones. Llena el cupo de hechos del informe, y el informe lo declara (`evidence_budget`).
+
+Con el enlace, "abre la clave `Run` y escribe en ella" ya no depende de `.pdata` y funciona también en x86: la frase dice qué clave abre, qué valor escribe y por qué variable pasa el identificador, sin la advertencia de que no se sabe si la escritura usa la clave abierta. En el corpus de capacidades (3.090 binarios benignos) salen 7 casos, 4 en x64 y 3 en x86, todos en `RunOnce`: los 7 se revisaron por desensamblado y en todos la escritura usa la clave que abre la otra llamada. De los 5 pares que antes solo se reconocían por `.pdata`, 4 pasan a tener enlace.
+
 ### Nota de cobertura del recorrido
 
 Cuando el recorrido decodifica pocas instrucciones para el tamaño del código, una explicación lo pone en contexto (`code.walk_density@1`). Solo se aplica con al menos 64 KiB de código nativo, recorrido completo y un binario que no sea .NET. Umbral: 20 instrucciones por KiB, por debajo del cual se queda el 0,28 % de los binarios benignos medidos. Con un mínimo de solo 4 KiB, incluso un umbral de 5 por KiB saltaba en uno de cada quince binarios benignos (distribuciones de teclado, DLL de recursos), y se descartó. No demuestra empaquetado.
@@ -207,26 +221,28 @@ Las capacidades son reglas de explicación del host, no un tipo de hecho. Salen 
 
 ### Catálogo de capacidades
 
-Catálogo `lupabin-capabilities-v3` (`src/lupabin/explain/capabilities.py`), fijado por digest. Las constantes de Windows se copian de las cabeceras del Windows SDK 10.0.26100.0. La frecuencia es el porcentaje de binarios con algún caso sobre 3.087 PE benignos (System32, SysWOW64 y Program Files).
+Catálogo `lupabin-capabilities-v4` (`src/lupabin/explain/capabilities.py`), fijado por digest. Las constantes de Windows se copian de las cabeceras del Windows SDK 10.0.26100.0. La frecuencia es el porcentaje de binarios con algún caso sobre 3.090 PE benignos (System32, SysWOW64 y Program Files).
 
 | Capacidad | Condición | ATT&CK | Binarios benignos |
 | --- | --- | --- | --- |
 | Escribir un valor en una clave `Run` | `RegSetKeyValue` sobre `…\CurrentVersion\Run`, `RunOnce`, `RunServices`, `RunServicesOnce`, `…\Policies\Explorer\Run` o `RunOnceEx` (solo bajo `HKEY_LOCAL_MACHINE`, con sus subclaves) | T1547.001 | 0 |
 | Abrir una clave `Run` para escribir | `RegOpenKeyEx`/`RegCreateKeyEx` con un permiso que incluya `KEY_SET_VALUE`, `GENERIC_WRITE` o `GENERIC_ALL` | — | 9 (0,29 %) |
-| Abrir una clave `Run` y escribir un valor en el mismo rango de función | Las dos llamadas anteriores dentro de un mismo rango de `.pdata` (x64) | T1547.001 | 5 (0,16 %) |
+| Escribir un valor en una clave `Run` que el mismo código abre | `RegSetValueEx` sobre la clave que la llamada anterior dejó en una variable local (sección «Misma variable local») | T1547.001 | 7 (0,23 %) |
+| Abrir una clave `Run` y escribir un valor en el mismo rango de función | Las dos llamadas anteriores dentro de un mismo rango de `.pdata` (x64), si la escritura no tiene enlace | T1547.001 | 1 (0,03 %) |
 | Escribir un valor en `Winlogon` | `RegSetKeyValue` sobre `…\Windows NT\CurrentVersion\Winlogon` | T1547.004 solo para `Shell`, `Userinit` o la subclave `Notify` | 0 |
 | Abrir `Winlogon` para escribir | Como la clave `Run` | — | 1 (0,03 %) |
+| Escribir un valor en `Winlogon` que el mismo código abre | Como la clave `Run` | T1547.004 solo para `Shell` o `Userinit` | 0 |
 | Abrir `Winlogon` y escribir en el mismo rango de función | Como la clave `Run` | T1547.004 solo para `Shell` o `Userinit` | 0 |
-| Crear un servicio | `CreateService` con nombre o binario conocidos | T1543.003 | 2 (0,06 %) |
-| Ejecutar un programa u orden, o pedir al shell que abra algo | `WinExec`, `CreateProcess` o `ShellExecute` con el programa, la orden o el destino conocidos | T1059.003 (`cmd`) o T1059.001 (`powershell`, `pwsh`) | 26 (0,84 %) |
+| Crear un servicio | `CreateService` con nombre o binario conocidos | T1543.003 | 3 (0,10 %) |
+| Ejecutar un programa u orden, o pedir al shell que abra algo | `WinExec`, `CreateProcess` o `ShellExecute` con el programa, la orden o el destino conocidos | T1059.003 (`cmd`) o T1059.001 (`powershell`, `pwsh`) | 25 (0,81 %) |
 | Descargar una URL a un archivo | `URLDownloadToFile` con la URL o el archivo conocidos | T1105 | 0 |
 | Servidor o URL de destino | `InternetConnect`, `WinHttpConnect` o `InternetOpenUrl` | — | 3 (0,10 %) |
-| Agente de usuario | `InternetOpen` o `WinHttpOpen` con agente | — | 39 (1,26 %) |
-| Memoria ejecutable y escribible | `VirtualAlloc(Ex)` o `VirtualProtect(Ex)` con `PAGE_EXECUTE_READWRITE` o `PAGE_EXECUTE_WRITECOPY`; se aceptan los modificadores documentados y se abstiene con cualquier otro bit | — | 72 (2,33 %) |
-| Abrir un proceso con derechos sobre su memoria | `OpenProcess` con `PROCESS_VM_WRITE`, `PROCESS_VM_OPERATION` o `PROCESS_ALL_ACCESS` | — | 22 (0,71 %) |
+| Agente de usuario | `InternetOpen` o `WinHttpOpen` con agente | — | 40 (1,29 %) |
+| Memoria ejecutable y escribible | `VirtualAlloc(Ex)` o `VirtualProtect(Ex)` con `PAGE_EXECUTE_READWRITE` o `PAGE_EXECUTE_WRITECOPY`; se aceptan los modificadores documentados y se abstiene con cualquier otro bit | — | 73 (2,36 %) |
+| Abrir un proceso con derechos sobre su memoria | `OpenProcess` con `PROCESS_VM_WRITE`, `PROCESS_VM_OPERATION` o `PROCESS_ALL_ACCESS` | — | 23 (0,74 %) |
 | Mover o borrar un archivo al reiniciar | `MoveFileEx` con `MOVEFILE_DELAY_UNTIL_REBOOT` | — | 9 (0,29 %) |
 | Mutex con nombre | `CreateMutex`/`OpenMutexW` con nombre | — | 105 (3,40 %) |
-| Algoritmo o proveedor criptográfico | `BCryptOpenAlgorithmProvider` con algoritmo o `CryptAcquireContext` con proveedor | — | 152 (4,92 %) |
+| Algoritmo o proveedor criptográfico | `BCryptOpenAlgorithmProvider` con algoritmo o `CryptAcquireContext` con proveedor | — | 149 (4,82 %) |
 
 Reglas comunes del registro:
 - La raíz de la clave solo se nombra si `hKey` se recuperó. Si no, la frase dice que está bajo una clave que no se pudo determinar.
@@ -250,11 +266,11 @@ Coincidir con una técnica no demuestra intención: muchos programas legítimos 
 
 Abrir una clave y escribir en ella son dos llamadas. Para decir que están en la misma función sin adivinar límites, LupaBin usa la tabla `.pdata` de x64, que escribe el compilador: cada entrada declara el inicio y el fin de un tramo contiguo de una función, y el host comprueba sus 12 bytes contra la muestra. Se descartaron la distancia entre llamadas (adivina límites), la región alcanzable desde un inicio de función (el host no la puede comprobar sin desensamblador) y la tabla de Control Flow Guard (da inicios, no finales).
 
-La frase dice "en el rango 0x…–0x… que declara `.pdata`", porque un archivo puede declarar una tabla falsa, y añade que no se sabe si la escritura usa la clave abierta, porque no se sigue el identificador entre llamadas. En los 5 casos del corpus benigno, revisados por desensamblado, las 6 escrituras usan la clave que la otra llamada abrió. Solo x64: en x86 no hay `.pdata` y esta capacidad nunca se reconoce.
+La frase dice "en el rango 0x…–0x… que declara `.pdata`", porque un archivo puede declarar una tabla falsa, y añade que no se sabe si la escritura usa la clave abierta, porque el identificador no se pudo seguir entre las dos llamadas. Una escritura que tiene enlace de variable local no entra aquí: la describe la capacidad de escritura en la clave abierta. En el corpus benigno queda un caso (`setupapi.dll`, x64, dos escrituras): revisado por desensamblado, las dos usan la clave abierta, pero el enlace se rechaza porque otros caminos entran entre las llamadas. Solo x64: en x86 no hay `.pdata` y esta capacidad nunca se reconoce.
 
 ### Revisión de los casos
 
-Los 821 casos que dan las capacidades en los 3.087 binarios benignos se revisaron uno a uno: **ninguna frase describe algo que sus argumentos no digan**. Abstenciones contadas, que cuestan cobertura y no errores: 190 llamadas a `CreateProcessW` sin nombre de aplicación, cuya línea de órdenes no se lee (el resumen del informe lo avisa), y una clave `Run` cuyo permiso no se recuperó.
+Los 831 casos que dan las capacidades en los 3.090 binarios benignos se revisaron uno a uno: **ninguna frase describe algo que sus argumentos no digan**. Abstenciones contadas, que cuestan cobertura y no errores: 200 llamadas a `CreateProcessW` sin nombre de aplicación, cuya línea de órdenes no se lee (el resumen del informe lo avisa), y una clave `Run` cuyo permiso no se recuperó.
 
 El informe abre con un resumen, "qué contiene el código", que agrupa las capacidades por táctica y termina con los avisos que lo limitan: no se reconoció ninguna (y eso no demuestra nada), el recorrido es incompleto o poco denso, o hay líneas de órdenes que no se leen.
 
@@ -276,7 +292,7 @@ El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. 
 ## Límites conocidos
 
 - **Código.** Solo x86 y x64. De los saltos indirectos solo se siguen las tablas de `switch` de MSVC comprobables; vtables y callbacks no. Tras una llamada que no vuelve, el recorrido sigue en línea recta: en x86 los campos reubicados lo detienen, pero en x64 puede decodificar bytes que no son código. Un binario empaquetado muestra poco más que su desempaquetador.
-- **Argumentos.** No se propagan valores entre registros ni se sigue un identificador entre llamadas. La línea de órdenes de `CreateProcessW` no se lee.
+- **Argumentos.** No se propagan valores entre registros. Un identificador solo se sigue entre dos llamadas a través de una variable local y en un camino recto (sección «Misma variable local»). La línea de órdenes de `CreateProcessW` no se lee.
 - **Decodificación.** Sin una crib del catálogo no hay resultado. Una cadena aislada con clave de 8 bytes se recupera en el 37 % de los casos en ASCII y el 62 % en UTF-16LE.
 - **Familias de APIs.** Solo reconocen imports por nombre exacto, no por ordinal.
 - **Idioma.** Las explicaciones y el glosario están en español.
@@ -288,7 +304,7 @@ El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. 
 Las herramientas están en `tests/` y no forman parte del paquete ni de la CI. Reciben un directorio de binarios benignos que aporte quien evalúa, y los leen como datos:
 
 - `uv run python -m tests.decode_eval false-positives <dir>` y `recall <dir>`: falsos positivos y cobertura de la decodificación.
-- `uv run python -m tests.code_eval corpus <dir>`: llamadas, argumentos, verificación de bytes y tiempos; `worst` mide los peores casos sintéticos de 20 MiB.
+- `uv run python -m tests.code_eval corpus <dir>`: llamadas, argumentos, verificación de bytes y tiempos; `worst` mide los peores casos sintéticos: los de 20 MiB y uno con tantas llamadas enlazadas por una variable local como se pueden publicar.
 - `uv run python -m tests.capability_eval corpus <dir>`: frecuencia de cada capacidad; `review` lista cada caso para revisarlo.
 
 Cambiar un umbral, una condición, un catálogo o una redacción exige una nueva versión fijada por digest, repetir la medición y revisar los casos a mano.
