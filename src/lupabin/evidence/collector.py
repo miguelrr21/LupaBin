@@ -4,6 +4,7 @@ from collections.abc import Mapping
 
 from pydantic import TypeAdapter
 
+from lupabin.evidence import toolchain
 from lupabin.evidence.facts import (
     AnomalyData,
     ApiCallData,
@@ -19,6 +20,7 @@ from lupabin.evidence.facts import (
     Payload,
     SectionData,
     StringData,
+    ToolchainData,
 )
 from lupabin.evidence.models import (
     ComponentRun,
@@ -40,6 +42,7 @@ KINDS = {
     ExportData: "export",
     StringData: "string",
     AnomalyData: "header_anomaly",
+    ToolchainData: "toolchain_marker",
     YaraMatchData: "yara_match",
     DecodedStringData: "decoded_string",
     ApiCallData: "api_call",
@@ -117,6 +120,7 @@ class Collector:
             "import": limits.imports,
             "export": limits.exports,
             "header_anomaly": limits.anomalies,
+            "toolchain_marker": toolchain.QUOTA,
             "string": limits.strings,
             "yara_match": limits.yara.matches,
             "decoded_string": limits.decode.strings + limits.decode.xor,

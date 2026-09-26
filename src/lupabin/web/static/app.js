@@ -153,6 +153,7 @@ function renderHead(data, name) {
     ["Tamaño", bytes(data.sample.size), false],
     ["Tipo", data.sample.type, false],
   ];
+  if (data.made_with) rows.push(["Hecho con", data.made_with, false]);
   for (const [label, value, copy] of rows) {
     hashes.append(el("dt", { text: label }), el("dd", {}, el("span", { text: value }), copy ? copyButton(value) : null));
   }

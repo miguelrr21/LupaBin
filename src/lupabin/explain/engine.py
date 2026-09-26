@@ -16,6 +16,7 @@ from lupabin.evidence.facts import (
     LocalLinkEvidence,
     SectionEvidence,
     StringEvidence,
+    ToolchainEvidence,
     YaraEvidence,
 )
 from lupabin.evidence.models import Report
@@ -79,6 +80,20 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
     for fact in evidence:
         if isinstance(fact, HeaderEvidence):
             yield "pe.header@1", (fact,)
+    idents = tuple(
+        fact
+        for fact in evidence
+        if isinstance(fact, ToolchainEvidence) and fact.data.marker == "gcc_ident"
+    )
+    for fact in evidence:
+        if isinstance(fact, ToolchainEvidence):
+            if fact.data.marker == "gcc_ident":
+                if fact is idents[0]:
+                    yield "toolchain.gcc_ident@1", idents
+            elif fact.data.marker == "go_buildinfo" and fact.data.text is None:
+                yield "toolchain.go_buildinfo_pointer@1", (fact,)
+            else:
+                yield f"toolchain.{fact.data.marker}@1", (fact,)
     for fact in evidence:
         if isinstance(fact, SectionEvidence):
             yield "pe.section@1", (fact,)
