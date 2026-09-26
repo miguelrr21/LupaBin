@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "lupabin_glossary",
- "revision": "1.11.0",
+ "revision": "1.12.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -122,6 +122,11 @@
    "id": "code.reach",
    "filename": "code.reach.toml",
    "sha256": "61d84e6255b3c7373fefadf454855897a556af131a5b6e8f1558203166639198"
+  },
+  {
+   "id": "code.string_reference",
+   "filename": "code.string_reference.toml",
+   "sha256": "da25309b52b88ad3fd5be1aeba59a0d6e5e6c646686a5dfbeedab82d1f5550b8"
   },
   {
    "id": "decode.base64",

@@ -10,7 +10,14 @@ the walk, tested with negative cases, and the reason arguments are `inferred`.
 
 from collections.abc import Sequence
 
-from lupabin.evidence import api_catalog, argument_forms, call_forms, local_forms, main_forms
+from lupabin.evidence import (
+    api_catalog,
+    argument_forms,
+    call_forms,
+    local_forms,
+    main_forms,
+    reference_forms,
+)
 from lupabin.evidence.facts import (
     ApiCallEvidence,
     ArgumentString,
@@ -22,6 +29,8 @@ from lupabin.evidence.facts import (
     LocalLinkEvidence,
     MainCallEvidence,
     SectionData,
+    StringEvidence,
+    StringReferenceEvidence,
 )
 from lupabin.evidence.primitives import Location, Name
 
@@ -385,6 +394,38 @@ def validate_main(
         raise ValueError("argc, argv and envp are three variables")
 
 
+def validate_reference(
+    fact: StringReferenceEvidence,
+    string: Evidence | None,
+    sections: Sequence[SectionData],
+    header: HeaderData | None,
+) -> None:
+    """Raise unless the instruction lies in executable code and its bytes take the address
+    where the cited string starts, in a section that is not writable."""
+    if header is None or not isinstance(string, StringEvidence):
+        raise ValueError("a reference cites a published string")
+    where = fact.location
+    if where.rva is None or where.offset is None or where.length is None:
+        raise ValueError("a reference locates its instruction")
+    _named(where, _mapped(where.rva, where.offset, where.length, sections))
+    bits = 32 if header.optional_magic == 0x10B else 64
+    target = reference_forms.address(
+        bytes.fromhex(fact.data.raw_hex), where.rva, bits, header.image_base
+    )
+    start = string.location.offset
+    holders = [
+        s
+        for s in sections
+        if s.raw_status == "present"
+        and start is not None
+        and s.raw_offset <= start < s.raw_offset + s.raw_size
+    ]
+    if target is None or len(holders) != 1 or "write" in holders[0].permissions:
+        raise ValueError("a reference points into a section that is not writable")
+    if target != holders[0].rva + (start or 0) - holders[0].raw_offset:
+        raise ValueError("a reference points to where its string starts")
+
+
 def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
     """Raise unless the bytes every call, argument and function range cite are the
     sample's bytes at their offsets."""
@@ -401,6 +442,8 @@ def verify_calls(evidence: Sequence[Evidence], data: bytes) -> None:
                 (fact.data.address.offset, fact.data.address.raw_hex),
                 (fact.data.passes.offset, fact.data.passes.raw_hex),
             ]
+        elif isinstance(fact, StringReferenceEvidence):
+            spans = [(fact.location.offset, fact.data.raw_hex)]
         elif isinstance(fact, MainCallEvidence):
             spans = [(fact.location.offset, fact.data.raw_hex)]
             for instruction in (*fact.data.setters, *fact.data.loads):

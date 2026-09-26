@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.10.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.11.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -30,10 +30,10 @@ El host trata la respuesta del worker como entrada no fiable: la valida, comprue
 
 | Campo | Contenido |
 | --- | --- |
-| `schema_version` | Literal `0.10.0`; versiones distintas se rechazan. |
+| `schema_version` | Literal `0.11.0`; versiones distintas se rechazan. |
 | `sample` | SHA-256, MD5, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. MD5 se incluye solo por interoperabilidad. |
 | `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
-| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call` y `code_reach`. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call`, `code_reach` y `string_reference`. |
 | `extractor_runs` | Fuentes `pe`, `strings`, `yara`, `decode` y `code`, con su versión y componentes tipados con cobertura y contadores. |
 | `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
 | `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
@@ -185,6 +185,10 @@ Componente `main_function` de la fuente `code`. Los dos hechos son `inferred`: d
 
 Si el recorrido del código no está completo, no se publica nada (`dependency_omitted`): el código no recorrido podría tener un segundo candidato. Si lo está pero la lista de llamadas publicadas no (por ejemplo, porque hay más de las que caben), se publica `main_call` sin alcances, porque sus cifras engañarían, y el componente queda parcial (`dependency_omitted`). Si un recorrido de alcance se detiene por un límite, tampoco se publican alcances, con el código de ese límite.
 
+## Textos que usa el código (`string_reference`)
+
+Componente `string_references` de la fuente `code`, `observed`. `location` es una instrucción que el recorrido decodificó y `data.raw_hex` sus bytes: `lea r64, [rip+disp32]` en x64, `push imm32` o `mov r32, imm32` en x86. Cita la cadena (`string`) donde apunta. El informe comprueba que la dirección que dan los bytes es exactamente el inicio de esa cadena y que la sección que la contiene no se puede escribir; el host, los bytes. Se publica la primera instrucción de cada cadena. `code_reach.data.strings` lista las referencias cuyas instrucciones decodificó el recorrido de esa raíz, sin repetir entre raíces. Sin recorrido completo o con cadenas sin publicar, el componente queda parcial (`dependency_omitted`).
+
 ## Componentes y límites del código
 
 | Componente | Revisa | Limitaciones propias |
@@ -212,6 +216,7 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 | 0.7.0 | La vía `tail` de `api_call` (saltos en cola a una función importada) | `docs/schemas/0.7.0.json` |
 | 0.8.0 | `local_link` (un identificador que pasa de una llamada a otra por una variable local) | `docs/schemas/0.8.0.json` |
 | 0.9.0 | Componente `toolchain` y `toolchain_marker` (marcas de compilador) | `docs/schemas/0.9.0.json` |
-| 0.10.0 | Componente `main_function`, `main_call` y `code_reach` (la función main y el alcance) | `docs/evidence-schema.json` (activo) |
+| 0.10.0 | Componente `main_function`, `main_call` y `code_reach` (la función main y el alcance) | `docs/schemas/0.10.0.json` |
+| 0.11.0 | Componente `string_references`, `string_reference` y los textos de `code_reach` (textos que usa el código) | `docs/evidence-schema.json` (activo) |
 
 Los consumidores rechazan versiones de esquema no soportadas. La CLI no transforma informes antiguos.

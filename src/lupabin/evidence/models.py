@@ -11,6 +11,7 @@ from lupabin.evidence.code import (
     validate_function,
     validate_link,
     validate_main,
+    validate_reference,
 )
 from lupabin.evidence.facts import ApiCallEvidence, ToolchainEvidence
 from lupabin.evidence.facts import Evidence as Evidence
@@ -74,7 +75,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.10.0"] = "0.10.0"
+    version: Literal["0.11.0"] = "0.11.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -146,7 +147,7 @@ def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | 
 
 
 class Report(Model):
-    schema_version: Literal["0.10.0"] = "0.10.0"
+    schema_version: Literal["0.11.0"] = "0.11.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -181,6 +182,7 @@ class Report(Model):
             "local_link": limits.code.calls,
             "main_call": 1,
             "code_reach": 2,
+            "string_reference": limits.strings,
         }
         if any(counts[kind] > limit for kind, limit in quotas.items()):
             raise ValueError("evidence exceeds effective quota")
@@ -272,6 +274,8 @@ class Report(Model):
         calls = [fact for fact in self.evidence if isinstance(fact, ApiCallEvidence)]
         ranges: set[int] = set()
         roots: dict[str, set[str]] = {}
+        strings_by_root: dict[str, set[str]] = {}
+        referenced: set[str] = set()
         order = {
             fact.id: index for index, fact in enumerate(self.evidence) if fact.kind == "api_call"
         }
@@ -309,6 +313,20 @@ class Report(Model):
                 degrees[fact.id] = 1
                 children[fact.provenance.evidence_ids[0]].append(fact.id)
                 continue
+            if fact.kind == "string_reference":
+                span = fact.location
+                if (span.offset or 0) + (span.length or 0) > self.sample.size:
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have code evidence")
+                string = facts.get(fact.provenance.evidence_ids[0])
+                validate_reference(fact, string, sections, header)
+                if fact.provenance.evidence_ids[0] in referenced:
+                    raise ValueError("a string's first reference is published once")
+                referenced.add(fact.provenance.evidence_ids[0])
+                degrees[fact.id] = 1
+                children[fact.provenance.evidence_ids[0]].append(fact.id)
+                continue
             if fact.kind == "code_reach":
                 main = facts.get(fact.provenance.evidence_ids[0])
                 if main is None or main.kind != "main_call":
@@ -316,6 +334,12 @@ class Report(Model):
                 if fact.data.root in roots:
                     raise ValueError("one reach per root")
                 roots[fact.data.root] = set(fact.data.calls)
+                if any(
+                    getattr(facts.get(ref), "kind", None) != "string_reference"
+                    for ref in fact.data.strings
+                ):
+                    raise ValueError("a reach lists published string references")
+                strings_by_root[fact.data.root] = set(fact.data.strings)
                 positions = [order.get(ref) for ref in fact.data.calls]
                 if any(p is None for p in positions) or positions != sorted(positions):  # type: ignore[type-var]
                     raise ValueError("a reach lists published calls in report order")
@@ -483,6 +507,8 @@ class Report(Model):
             degrees[fact.id] = len(refs)
             for ref in refs:
                 children[ref].append(fact.id)
+        if len(strings_by_root) == 2 and strings_by_root["main"] & strings_by_root["startup"]:
+            raise ValueError("a string reference reached from main is not the startup's alone")
         if len(roots) == 2 and roots["main"] & roots["startup"]:
             raise ValueError("a call reached from main is not the startup's alone")
         validate_markers(

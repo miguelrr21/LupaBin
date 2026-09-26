@@ -27,6 +27,7 @@ from lupabin.evidence.facts import (
     MainCallEvidence,
     SectionEvidence,
     StringEvidence,
+    StringReferenceEvidence,
     ToolchainEvidence,
     YaraEvidence,
 )
@@ -805,6 +806,64 @@ def _reach(root: str) -> Callable[[tuple[Evidence, ...], Report], Derived | None
     return derive
 
 
+TEXTS_SHOWN = 20
+
+
+def _texts(references: list[StringReferenceEvidence], report: Report) -> tuple[str, ...] | None:
+    facts = groups(report).facts
+    texts: list[str] = []
+    for reference in references:
+        string = facts.get(reference.provenance.evidence_ids[0])
+        if not isinstance(string, StringEvidence):
+            return None
+        texts.append(f"«{string.data.text}»")
+    shown = tuple(texts[:TEXTS_SHOWN])
+    if len(texts) > TEXTS_SHOWN:
+        shown += (f"y {number(len(texts) - TEXTS_SHOWN)} más",)
+    return shown
+
+
+def _references(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """Every string reference the report publishes, in report order."""
+    group = [fact for fact in report.evidence if isinstance(fact, StringReferenceEvidence)]
+    if not group or tuple(fact.id for fact in cited) != tuple(fact.id for fact in group):
+        return None
+    texts = _texts(group, report)
+    if texts is None:
+        return None
+    slots: Slots = {
+        "count": number(len(group)),
+        "noun": "cadena" if len(group) == 1 else "cadenas",
+        "texts": texts,
+    }
+    return slots, ("code.string_reference", "strings.literal")
+
+
+def _main_texts(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """The references a walk from main decoded, with the reach that lists them."""
+    if len(cited) < 2:
+        return None
+    reach = cited[0]
+    if not isinstance(reach, CodeReachEvidence) or reach.data.root != "main":
+        return None
+    references = [fact for fact in cited[1:] if isinstance(fact, StringReferenceEvidence)]
+    if tuple(fact.id for fact in references) != reach.data.strings or not references:
+        return None
+    texts = _texts(references, report)
+    if texts is None:
+        return None
+    main = groups(report).facts.get(reach.provenance.evidence_ids[0])
+    if not isinstance(main, MainCallEvidence):
+        return None
+    slots: Slots = {
+        "target": hexadecimal(main.data.target),
+        "count": number(len(references)),
+        "noun": "cadena" if len(references) == 1 else "cadenas",
+        "texts": texts,
+    }
+    return slots, ("code.string_reference", "code.reach")
+
+
 RULES: dict[str, Rule] = {
     rule.id: rule
     for rule in (
@@ -1012,6 +1071,23 @@ RULES: dict[str, Rule] = {
             "nada de lo que hace el programa. Si el autor también la llama por un camino que el "
             "recorrido no ve, no aparece aquí.",
             _reach("startup"),
+        ),
+        Rule(
+            "strings.references@1",
+            "Instrucciones del código recorrido toman la dirección donde empiezan {count} "
+            "{noun} del archivo: son textos que el código usa, no solo bytes que parecen texto.",
+            "Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni "
+            "para qué se usa el texto. No aparecen los textos que el código construye o descifra "
+            "al ejecutarse, ni los que solo alcanza por caminos que el recorrido no ve.",
+            _references,
+        ),
+        Rule(
+            "strings.from_main@1",
+            "Desde main ({target}), el código alcanzable siguiendo llamadas y saltos directos "
+            "usa {count} {noun} del archivo.",
+            "Incluye los textos de las bibliotecas que el programa usa desde main, no solo los "
+            "que escribió el autor. No demuestra que esas instrucciones se ejecuten.",
+            _main_texts,
         ),
         Rule(
             "exports.table@1",
