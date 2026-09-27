@@ -6,9 +6,12 @@ so every value is neutralised exactly like sample text.
 """
 
 from collections.abc import Callable, Iterable
+from dataclasses import asdict
 
 from lupabin.render.safe import code_span, markdown_text, visible
+from lupabin.virustotal import contrast, labels
 from lupabin.virustotal.models import Behaviour, VirusTotalReport
+from lupabin.virustotal.parse import STATS
 
 TITLE = "5. Fuente externa: VirusTotal (no verificada por LupaBin)"
 DISCLAIMER = (
@@ -97,12 +100,19 @@ def _omitted(count: int) -> str:
 
 def _facts(report: VirusTotalReport) -> Iterable[tuple[str, str]]:
     stats = report.stats
-    if stats:
+    if set(stats) == set(STATS):
         total = sum(stats.values())
         yield (
             "Motores",
-            f"{stats.get('malicious', 0)} de {total} lo marcan como malicioso y "
-            f"{stats.get('suspicious', 0)} como sospechoso.",
+            f"{stats['malicious']} de {total} lo marcan como malicioso y "
+            f"{stats['suspicious']} como sospechoso.",
+        )
+    elif report.status == "found":
+        yield (
+            "Motores",
+            f"Maliciosos: {stats.get('malicious', 'no disponible')}; "
+            f"sospechosos: {stats.get('suspicious', 'no disponible')}. "
+            "Total de motores: no disponible (estadísticas incompletas o no válidas).",
         )
     for detection in report.detections[:SHOWN]:
         label = detection.result or "(sin etiqueta)"
@@ -149,12 +159,51 @@ def _status_line(report: VirusTotalReport) -> str | None:
     return None
 
 
-def to_text_lines(report: VirusTotalReport, wrap: Wrap) -> list[str]:
+def _context_rows(
+    report: VirusTotalReport, local: contrast.LocalContext | None
+) -> Iterable[tuple[str, str]]:
+    if report.status != "found":
+        return
+    for detection in report.detections[:SHOWN]:
+        explanation = labels.interpret(detection)
+        yield f"Qué significa la etiqueta de {detection.engine}", explanation.statement
+        for source in explanation.sources:
+            yield "Fuente de nomenclatura", f"{source.publisher}: {source.title} — {source.url}"
+    if report.detections:
+        yield "Límite de las etiquetas", labels.LIMIT
+        yield "Catálogo de nomenclatura", f"{labels.CATALOG_ID} · {labels.catalog_digest()}"
+    comparisons = contrast.compare(report, local)
+    for row in comparisons:
+        yield f"Contraste {row.id}", row.statement
+        if row.evidence:
+            yield "Evidencias locales", ", ".join(row.evidence)
+        for detail in row.details:
+            yield "Caso local y sus límites", detail
+        if row.omitted_details:
+            yield (
+                "Casos locales",
+                f"{row.omitted_details} detalles omitidos por límite de presentación.",
+            )
+    if not comparisons:
+        yield "Contraste", contrast.NO_TECHNIQUES
+    yield "Límite del contraste", contrast.LIMIT
+    yield "Método de contraste", f"{contrast.METHOD} · {contrast.method_digest()}"
+    yield "Fuente del comportamiento externo", contrast.SOURCE
+    if report.behaviour.omitted:
+        yield (
+            "Cobertura del contraste",
+            "Solo se contrastan las técnicas conservadas; hay entradas de comportamiento omitidas.",
+        )
+
+
+def to_text_lines(
+    report: VirusTotalReport, wrap: Wrap, local: contrast.LocalContext | None = None
+) -> list[str]:
     lines = ["", TITLE, *wrap(DISCLAIMER, "   ", "   ")]
     status = _status_line(report)
     if status:
         lines += wrap(visible(status), "     ", "   • ")
-    for label, value in _facts(report):
+    for label, value in (*_facts(report), *_context_rows(report, local)):
         lines += wrap(visible(f"{label}: {value}"), "       ", "   • ")
     behaviour = report.behaviour
     if not behaviour.empty():
@@ -177,12 +226,14 @@ def to_text_lines(report: VirusTotalReport, wrap: Wrap) -> list[str]:
     return lines
 
 
-def to_markdown_lines(report: VirusTotalReport) -> list[str]:
+def to_markdown_lines(
+    report: VirusTotalReport, local: contrast.LocalContext | None = None
+) -> list[str]:
     lines = ["", "## " + TITLE, "", markdown_text(DISCLAIMER), ""]
     status = _status_line(report)
     if status:
         lines.append(f"- {markdown_text(status)}")
-    for label, value in _facts(report):
+    for label, value in (*_facts(report), *_context_rows(report, local)):
         lines.append(f"- {markdown_text(label)}: {code_span(value)}")
     behaviour = report.behaviour
     if not behaviour.empty():
@@ -209,6 +260,21 @@ def structured(report: VirusTotalReport) -> dict[str, object]:
         "note": _status_line(report),
         "stats": dict(report.stats),
         "rows": [{"label": label, "value": value} for label, value in _facts(report)],
+        "context": {
+            "catalog": labels.CATALOG_ID,
+            "digest": labels.catalog_digest(),
+            "labels": [asdict(labels.interpret(d)) for d in report.detections[:SHOWN]]
+            if report.status == "found"
+            else [],
+            "label_limit": labels.LIMIT,
+            "comparisons": [asdict(row) for row in contrast.compare(report, None)],
+            "comparison_method": contrast.METHOD,
+            "comparison_digest": contrast.method_digest(),
+            "comparison_limit": contrast.LIMIT,
+            "no_techniques": contrast.NO_TECHNIQUES,
+            "messages": {str(key): value for key, value in contrast.MESSAGES.items()},
+            "source": contrast.SOURCE,
+        },
         "behaviour": [
             {"label": label, "values": values}
             for name, label in BEHAVIOUR_LABELS

@@ -7,6 +7,7 @@ with render.safe.visible before it leaves the server; the page inserts text only
 text.
 """
 
+from dataclasses import asdict
 from typing import Any
 
 from lupabin.evidence.models import Report
@@ -14,6 +15,7 @@ from lupabin.explain.models import Explanation, Item
 from lupabin.glossary.catalog import Glossary
 from lupabin.render import document, external
 from lupabin.render.safe import visible
+from lupabin.virustotal.contrast import local_context
 from lupabin.virustotal.models import VirusTotalReport
 
 NOT_FOUND = (
@@ -156,6 +158,7 @@ def build(
             }
             for entry in (glossary.entries[ref] for ref in used)
         ],
+        "vt_local_context": asdict(local_context(report)),
         "virustotal": None if vt is None else _virustotal(vt),
         "absence": document.ABSENCE,
     }

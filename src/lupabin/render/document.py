@@ -19,6 +19,7 @@ from lupabin.glossary.catalog import Glossary
 from lupabin.glossary.models import Entry
 from lupabin.render import external as vt
 from lupabin.render.safe import code_span, markdown_text, visible
+from lupabin.virustotal.contrast import local_context
 from lupabin.virustotal.models import VirusTotalReport
 
 WIDTH = 100
@@ -385,7 +386,7 @@ def to_text(
         for source in _source_line(entry):
             lines += wrap(visible(f"Fuente: {source}"), "         ", "       ")
     if external is not None:
-        lines += vt.to_text_lines(external, wrap)
+        lines += vt.to_text_lines(external, wrap, local_context(report))
     lines += ["", *wrap(ABSENCE, "")]
     return "\n".join(lines) + "\n"
 
@@ -511,6 +512,6 @@ def to_markdown(
             )
         lines.append("")
     if external is not None:
-        lines += [*vt.to_markdown_lines(external), ""]
+        lines += [*vt.to_markdown_lines(external, local_context(report)), ""]
     lines += [markdown_text(ABSENCE)]
     return "\n".join(lines) + "\n"

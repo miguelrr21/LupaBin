@@ -163,13 +163,22 @@ function renderHead(data, name) {
   renderScore(data.virustotal);
 }
 
+function vtCounts(stats) {
+  const keys = ["malicious", "suspicious", "undetected", "harmless", "timeout", "confirmed-timeout", "type-unsupported", "failure"];
+  if (!stats || Object.keys(stats).length !== keys.length || keys.some((key) => !Number.isSafeInteger(stats[key]) || stats[key] < 0)) return null;
+  const total = keys.reduce((sum, key) => sum + stats[key], 0);
+  return Number.isSafeInteger(total) ? { total, hits: stats.malicious } : null;
+}
+
 function renderScore(vt) {
   const score = $("vt-score");
-  const stats = vt && vt.stats;
-  const total = stats ? Object.values(stats).reduce((a, b) => a + b, 0) : 0;
-  score.hidden = !total;
-  if (total) {
-    const hits = (stats.malicious || 0);
+  const counts = vtCounts(vt && vt.stats);
+  score.hidden = !counts || !counts.total;
+  score.textContent = "";
+  score.title = "";
+  score.className = "score";
+  if (counts && counts.total) {
+    const { hits, total } = counts;
     score.textContent = `VirusTotal ${hits}/${total}`;
     score.className = `score ${hits ? "hit" : "clean"}`;
     score.title = `${hits} de ${total} motores lo marcan como malicioso (fuente externa)`;
@@ -264,6 +273,54 @@ function renderItems(data) {
     : "";
 }
 
+function contrastRows(data) {
+  const vt = data.virustotal;
+  if (!vt || !vt.context) return [];
+  const local = data.vt_local_context;
+  return vt.context.comparisons.map((row) => {
+    if (!local) return row;
+    if (local.sha256 !== vt.sha256 || !data.sample || local.sha256 !== data.sample.sha256) {
+      return { ...row, status: "identity_mismatch", statement: vt.context.messages.identity_mismatch, evidence: [], rules: [], details: [], omitted_details: 0 };
+    }
+    if (row.status === "invalid_id") return row;
+    const match = Object.hasOwn(local.techniques, row.id) ? local.techniques[row.id] : null;
+    return match ? { ...row, ...match } : { ...row, status: "unsupported", statement: vt.context.messages.unsupported, evidence: [], rules: [], details: [], omitted_details: 0 };
+  });
+}
+
+function renderVTContext(box, data) {
+  const vt = data.virustotal;
+  const context = vt.context;
+  if (!context || vt.status !== "found") return;
+  if (context.labels.length) {
+    box.append(el("h4", { text: "Qué significa la etiqueta (según su fabricante)" }));
+    for (const item of context.labels) {
+      const entry = el("details", { className: "entry" },
+        el("summary", { text: `${item.engine}: ${item.label || "(sin etiqueta)"}` }),
+        el("p", { text: item.statement }));
+      for (const source of item.sources) {
+        entry.append(el("a", { href: source.url, target: "_blank", rel: "noopener noreferrer", text: `${source.publisher}: ${source.title}` }));
+      }
+      box.append(entry);
+    }
+    box.append(el("p", { className: "limit", text: context.label_limit }),
+      el("p", { className: "muted small", text: `Catálogo: ${context.catalog} · ${context.digest}` }));
+  }
+  box.append(el("h4", { text: "Técnicas: contraste con el análisis estático" }));
+  const rows = contrastRows(data);
+  if (!rows.length) box.append(el("p", { text: context.no_techniques }));
+  for (const row of rows) {
+    box.append(el("p", {}, el("strong", { text: `${row.id}: ` }), row.statement));
+    if (row.evidence.length) box.append(el("p", { className: "muted small", text: `Evidencias locales: ${row.evidence.join(", ")}` }));
+    for (const detail of row.details || []) box.append(el("p", { text: detail }));
+    if (row.omitted_details) box.append(el("p", { className: "limit", text: `${row.omitted_details} detalles de casos omitidos por límite de presentación.` }));
+  }
+  box.append(el("p", { className: "limit", text: context.comparison_limit }),
+    el("p", { className: "muted small", text: `Método: ${context.comparison_method} · ${context.comparison_digest}` }),
+    el("a", { href: context.source, target: "_blank", rel: "noopener noreferrer", text: "Fuente: documentación de comportamiento de VirusTotal" }));
+  if (vt.omitted) box.append(el("p", { className: "limit", text: "Solo se contrastan las técnicas conservadas; hay entradas de comportamiento omitidas." }));
+}
+
 function renderVirusTotal(data) {
   const vt = data.virustotal;
   const box = $("vt-report");
@@ -286,7 +343,8 @@ function renderVirusTotal(data) {
     const names = { malicious: "maliciosos", suspicious: "sospechosos", undetected: "sin detección", harmless: "inofensivos", timeout: "sin tiempo", "type-unsupported": "tipo no admitido", failure: "fallos", "confirmed-timeout": "tiempo agotado" };
     const row = el("div", { className: "vt-stats" });
     for (const [key, count] of stats) {
-      row.append(el("div", { className: `vt-stat ${key}${count ? " hit" : ""}` }, el("b", { text: String(count) }), names[key] || key));
+      const known = Number.isSafeInteger(count) && count >= 0;
+      row.append(el("div", { className: `vt-stat ${key}${known && count ? " hit" : ""}` }, el("b", { text: known ? String(count) : "no disponible" }), names[key] || key));
     }
     box.append(row);
   }
@@ -295,6 +353,7 @@ function renderVirusTotal(data) {
     for (const entry of vt.rows) table.append(el("tr", {}, el("th", { text: entry.label }), el("td", { text: entry.value })));
     box.append(table);
   }
+  renderVTContext(box, data);
   if (vt.behaviour.length) {
     box.append(el("h4", { text: "Comportamiento observado en los sandboxes de VirusTotal" }));
     for (const section of vt.behaviour) {
@@ -338,13 +397,16 @@ function showVirusTotalStatus() {
   } else if (state.state === "late") {
     status("", "VirusTotal sigue analizándolo después de 15 minutos. Consulta su ficha más tarde.", true);
   } else if (vt && vt.status === "found") {
-    const stats = vt.stats || {};
-    const total = Object.values(stats).reduce((a, b) => a + b, 0);
-    const hits = stats.malicious || 0;
-    const text = total
-      ? `VirusTotal: ${hits} de ${total} motores lo marcan como malicioso${vt.uploaded ? " (análisis de la subida de ahora)" : ""}.`
-      : "VirusTotal conoce el archivo, pero aún no tiene resultados de motores.";
-    status(total ? (hits ? "hit" : "clean") : "", text, true);
+    const counts = vtCounts(vt.stats);
+    if (!counts) {
+      status("", "VirusTotal conoce el archivo, pero su recuento de motores no está completo o no es válido.", true);
+    } else {
+      const { hits, total } = counts;
+      const text = total
+        ? `VirusTotal: ${hits} de ${total} motores lo marcan como malicioso${vt.uploaded ? " (análisis de la subida de ahora)" : ""}.`
+        : "VirusTotal conoce el archivo, pero aún no tiene resultados de motores.";
+      status(total ? (hits ? "hit" : "clean") : "", text, true);
+    }
   } else if (vt && vt.status === "not_found") {
     status("", "VirusTotal no conoce este archivo (no se subió).", true);
   } else if (vt) {
