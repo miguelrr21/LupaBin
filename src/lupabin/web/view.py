@@ -10,6 +10,7 @@ text.
 from dataclasses import asdict
 from typing import Any
 
+from lupabin.challenge.engine import web_challenge
 from lupabin.evidence.models import Report
 from lupabin.explain.models import Explanation, Item
 from lupabin.glossary.catalog import Glossary
@@ -120,7 +121,10 @@ def build(
     vt: VirusTotalReport | None,
 ) -> dict[str, Any]:
     used = document._glossary_order(explanation, items)
+    practice = web_challenge(report)
     view = {
+        "report_schema": report.schema_version,
+        "report_digest": practice["challenge"]["report_digest"],
         "sample": {
             "sha256": report.sample.sha256,
             "md5": report.sample.md5,
@@ -158,6 +162,7 @@ def build(
             }
             for entry in (glossary.entries[ref] for ref in used)
         ],
+        "challenge": practice,
         "vt_local_context": asdict(local_context(report)),
         "virustotal": None if vt is None else _virustotal(vt),
         "absence": document.ABSENCE,

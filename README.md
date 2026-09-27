@@ -102,6 +102,24 @@ También contrasta las técnicas de comportamiento que comunica VirusTotal con l
 
 Más detalle: [VirusTotal](docs/metodo.md#virustotal).
 
+## Modo reto: practicar con tu informe
+
+En la web, **Practicar con este informe** abre preguntas tipo test sin salir del resultado. Selecciona una opción por pregunta y pulsa **Corregir respuestas**: verás la respuesta correcta, su explicación, los campos y evidencias que la sustentan y qué conviene repasar. El informe y sus descargas no cambian. No se guardan respuestas en el servidor.
+
+En la CLI, parte de un informe de hechos guardado:
+
+```text
+uv run --frozen lupabin challenge informe.json --practice
+uv run --frozen lupabin challenge informe.json --json
+uv run --frozen lupabin challenge informe.json --answers respuestas.json --json
+```
+
+Sin opciones muestra las preguntas. `--practice` permite contestar A/B/C (Enter omite); `--json` genera `challenge` y `answers_template`. Guarda **solo el objeto `answers_template`** en `respuestas.json`, conservando sus identificadores y cambiando cada `option_id` de `null` a `"A"`, `"B"` o `"C"`. `--answers` corrige regenerando las preguntas desde `informe.json`, no desde un solucionario editable. Opcionalmente, `--sample archivo.bin` aplica las comprobaciones de contraste disponibles; sin él se advierte que el informe guardado no se ha contrastado con la muestra. Este comando nunca consulta VirusTotal ni vuelve a lanzar el análisis.
+
+El banco inicial ofrece como máximo siete preguntas: cabecera y secciones PE, imports frente a llamadas, cadenas literales, decodificación y cobertura incompleta. No fuerza preguntas sin datos suficientes y distingue `observed`, `inferred` y conocimiento `general`. Una pregunta omitida cuenta como sin responder, no como un dato ausente de la muestra. El código de salida del comando es 0 si generó/corrigió el reto, 1 si no pudo cargar o contrastar el informe y 2 si las respuestas o las opciones son inválidas; acertar no cambia ese código.
+
+**Es práctica educativa, no un examen protegido.** Las alternativas incorrectas no son hechos adicionales del informe. La puntuación mide respuestas, nunca peligrosidad. Las soluciones web se calculan en el host y viajan al navegador: pueden inspeccionarse y una modificación del cliente puede falsear su nota local. No hay importación de retos en la web ni corrección de archivos de preguntas arbitrarios; en CLI se importan únicamente respuestas vinculadas al informe y al banco actual. Los retos no llevan firma ni acreditan autenticidad del informe. [Método y límites](docs/metodo.md#retos-autocorregibles).
+
 ## Salida y abstención
 
 La salida `--json` es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
@@ -194,7 +212,7 @@ uv run --frozen ruff format --check .
 uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
-node --test tests/test_web_vt.cjs
+node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs
 uv run --frozen python -m lupabin.evidence.schema --check
 uv run --frozen python -m lupabin.explain.schema --check
 uv build

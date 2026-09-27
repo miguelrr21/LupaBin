@@ -538,7 +538,132 @@ function paint(pane) {
   PAINTERS[pane](lastResult.data);
 }
 
+function challenge_grade(data, selections) {
+  const packet = data.challenge;
+  const challenge = packet && packet.challenge;
+  const digest = (value) => typeof value === "string" && value.length === 64 && /^[a-f0-9]{64}$/.test(value);
+  if (!challenge || !digest(challenge.id) || !digest(challenge.sample_sha256) ||
+      !digest(challenge.report_digest) || challenge.sample_sha256 !== data.sample.sha256 ||
+      challenge.report_digest !== data.report_digest || challenge.id !== packet.challenge_id ||
+      challenge.schema_version !== "0.1.0" || challenge.report_schema !== "0.11.0" ||
+      challenge.report_schema !== data.report_schema || challenge.catalog !== "lupabin-challenges-v1") {
+    throw new Error("El reto no corresponde a este informe.");
+  }
+  if (!Array.isArray(challenge.questions) || challenge.questions.length > 7 ||
+      !Array.isArray(packet.feedback) || packet.feedback.length > 7 ||
+      !selections || typeof selections !== "object" || Array.isArray(selections)) {
+    throw new Error("Preguntas o respuestas inválidas.");
+  }
+  const questions = new Map(challenge.questions.map((question) => [question.id, question]));
+  const feedback = new Map(packet.feedback.map((item) => [item.question_id, item]));
+  if (questions.size !== challenge.questions.length || feedback.size !== packet.feedback.length ||
+      feedback.size !== questions.size || Object.keys(selections).some((id) => !questions.has(id))) {
+    throw new Error("Preguntas o respuestas inválidas.");
+  }
+  const items = challenge.questions.map((question) => {
+    const solution = feedback.get(question.id);
+    const options = new Set(question.options.map((option) => option.id));
+    const selected = Object.hasOwn(selections, question.id) ? selections[question.id] : null;
+    if (typeof question.id !== "string" || question.id.length !== 2 || !/^Q[1-7]$/.test(question.id) ||
+        !solution || question.options.length !== 3 ||
+        options.size !== 3 || !["A", "B", "C"].every((id) => options.has(id)) ||
+        !options.has(solution.correct_option) ||
+        (selected !== null && !options.has(selected))) throw new Error("Opción inválida.");
+    return { ...solution, selected_option: selected,
+      outcome: selected === null ? "unanswered" : selected === solution.correct_option ? "correct" : "incorrect" };
+  });
+  return { challenge_id: challenge.id, sample_sha256: challenge.sample_sha256,
+    correct: items.filter((item) => item.outcome === "correct").length,
+    unanswered: items.filter((item) => item.outcome === "unanswered").length,
+    total: items.length, items };
+}
+
+function challenge_citations(citations) {
+  const list = el("ul", { className: "challenge-citations" });
+  for (const citation of citations) {
+    list.append(el("li", { text: `${citation.evidence_id || "informe"} · ${citation.path} = ${citation.value}` }));
+  }
+  return el("details", {}, el("summary", { text: "Citas y campos del informe" }), list);
+}
+
+function challenge_render(data) {
+  const box = $("challenge-content");
+  clear(box);
+  const challenge = data.challenge && data.challenge.challenge;
+  if (!challenge) {
+    box.append(el("p", { text: "No hay un reto disponible para este informe." }));
+    return;
+  }
+  try { challenge_grade(data, {}); } catch (_) {
+    box.append(el("p", { text: "No se puede validar el reto de este informe." }));
+    return;
+  }
+  box.append(el("p", { text: challenge.notice }),
+    el("p", { className: "muted small", text: `Banco: ${challenge.catalog} · SHA-256: ${challenge.sample_sha256}` }));
+  if (!challenge.questions.length) {
+    box.append(el("p", { text: challenge.empty_reason || "Sin preguntas sustentadas." }));
+    return;
+  }
+  const challengeId = challenge.id;
+  const reportDigest = challenge.report_digest;
+  const selections = Object.create(null);
+  const feedbackBox = el("div", { className: "challenge-feedback", "aria-live": "polite" });
+  for (const question of challenge.questions) {
+    selections[question.id] = null;
+    const fieldset = el("fieldset", { className: "challenge-question" },
+      el("legend", { text: `${question.id} [${question.level}] ${question.prompt}` }));
+    for (const option of question.options) {
+      const input = el("input", { type: "radio", name: `challenge-${question.id}`, value: option.id,
+        onchange: () => {
+          selections[question.id] = option.id;
+          clear(feedbackBox);
+          feedbackBox.append(el("p", { text: "Respuestas cambiadas; vuelve a corregir." }));
+        } });
+      fieldset.append(el("label", { className: "challenge-option" }, input, ` ${option.id}. ${option.text}`));
+    }
+    fieldset.append(challenge_citations(question.citations));
+    box.append(fieldset);
+  }
+  const correct = el("button", { type: "button", className: "button primary", text: "Corregir respuestas", onclick: () => {
+    clear(feedbackBox);
+    let result;
+    try {
+      result = challenge_grade(data, selections);
+      if (result.challenge_id !== challengeId || data.report_digest !== reportDigest) {
+        throw new Error("El informe cambió; inicia un nuevo reto.");
+      }
+    } catch (_) {
+      feedbackBox.append(el("p", { text: "No se pudo corregir: respuestas o reto inválidos." }));
+      return;
+    }
+    const labels = { correct: "Correcta", incorrect: "Incorrecta", unanswered: "Sin responder" };
+    feedbackBox.append(el("h4", { text: `${result.correct}/${result.total} correctas · ${result.unanswered} sin responder` }));
+    const review = [];
+    for (const item of result.items) {
+      const question = challenge.questions.find((question) => question.id === item.question_id);
+      const option = question.options.find((option) => option.id === item.correct_option);
+      if (item.outcome !== "correct") review.push(question.rule);
+      feedbackBox.append(el("div", { className: "challenge-answer" },
+        el("h4", { text: `${item.question_id}: ${labels[item.outcome]}` }),
+        el("p", { text: `Respuesta: ${option.id}. ${option.text}` }),
+        el("p", { text: item.explanation }), el("p", { className: "muted", text: item.not_proven }),
+        challenge_citations(item.citations)));
+    }
+    feedbackBox.append(el("p", { text: review.length ? `Repasa: ${[...new Set(review)].join(", ")}.` : "Has acertado las preguntas disponibles." }),
+      el("p", { className: "muted", text: "La puntuación mide tus respuestas, no el riesgo de la muestra. No se guardan las respuestas al salir de esta página." }));
+  } });
+  box.append(el("div", { className: "actions" }, correct,
+    el("button", { type: "button", className: "button", text: "Repetir reto", onclick: () => challenge_render(data) })), feedbackBox);
+}
+
+function challenge_reset() {
+  clear($("challenge-content"));
+  $("challenge-panel").hidden = true;
+  $("challenge-open").setAttribute("aria-expanded", "false");
+}
+
 function render(data, name) {
+  challenge_reset();
   painted = new Set();
   renderHead(data, name);
   renderSummary(data);
@@ -598,6 +723,16 @@ function download(text, name, type) {
 // --- wiring ----------------------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
+  $("challenge-open").addEventListener("click", () => {
+    if (!lastResult) return;
+    const panel = $("challenge-panel");
+    const opening = panel.hidden;
+    if (opening) challenge_render(lastResult.data);
+    else challenge_reset();
+    panel.hidden = !opening;
+    $("challenge-open").setAttribute("aria-expanded", opening ? "true" : "false");
+    if (opening) panel.scrollIntoView({ block: "start" });
+  });
   loadConfig();
   const drop = $("drop");
   $("file").addEventListener("change", (event) => choose(event.target.files[0]));
@@ -621,6 +756,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("form").addEventListener("submit", submit);
   $("error-back").addEventListener("click", () => show("upload"));
   $("again").addEventListener("click", () => {
+    challenge_reset();
     stopFollowing();
     lastResult = null;
     $("vt-status").hidden = true;

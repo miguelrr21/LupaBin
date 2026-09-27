@@ -80,9 +80,16 @@
       <div class="actions">
         <button type="button" class="button" id="download-json">Descargar informe (JSON)</button>
         <button type="button" class="button" id="download-md">Descargar informe (Markdown)</button>
+        <button type="button" class="button" id="challenge-open" aria-controls="challenge-panel" aria-expanded="false">Practicar con este informe</button>
         <button type="button" class="button primary" id="again">Analizar otro archivo</button>
       </div>
     </div>
+
+    <section class="panel" id="challenge-panel" aria-labelledby="challenge-title" hidden>
+      <h3 id="challenge-title">Modo reto: aprender con evidencias</h3>
+      <p class="muted">Observado (observed): lectura de bytes. Inferido (inferred): resultado de un método. General (general): criterio educativo, no un hecho adicional sobre la muestra.</p>
+      <div id="challenge-content"></div>
+    </section>
 
     <div class="tabs" role="tablist" aria-label="Secciones del informe">
       <button role="tab" id="tab-summary" aria-controls="pane-summary" aria-selected="true">Resumen</button>
