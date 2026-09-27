@@ -46,6 +46,14 @@
   }
 }
 
+.challenge-question { min-width: 0; margin: 1.2rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; }
+.challenge-question legend { font-weight: 600; overflow-wrap: anywhere; }
+.challenge-option { display: block; padding: .6rem 0; cursor: pointer; }
+.challenge-option input { accent-color: var(--blue); }
+.challenge-citations { font-family: var(--mono); font-size: .85rem; overflow-wrap: anywhere; }
+.challenge-answer { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: .5rem; }
+#challenge-content { overflow-wrap: anywhere; }
+
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {

@@ -31,7 +31,7 @@ jobs:
       - run: uv run --frozen ruff check .
       - run: uv run --frozen mypy src
       - run: uv run --frozen pytest -m "not docker"
-      - run: node --test tests/test_web_vt.cjs
+      - run: node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs
       - run: uv run --frozen python -m lupabin.evidence.schema --check
       - run: uv run --frozen python -m lupabin.explain.schema --check
       - run: uv build

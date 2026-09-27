@@ -8,6 +8,7 @@ from typing import IO, Annotated
 
 import typer
 
+from lupabin.challenge.cli import challenge_command
 from lupabin.errors import LupaBinError
 from lupabin.evidence.models import Limits, Report
 from lupabin.explain.engine import ExplanationError, explain, validate
@@ -25,6 +26,9 @@ app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_enable=False,
     add_completion=False,
+)
+app.command(name="challenge", help="Práctica autocorregible desde evidencias, sin red ni LLM.")(
+    challenge_command
 )
 EXIT = {"completed": 0, "partial": 3, "failed": 1}
 
