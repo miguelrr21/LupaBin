@@ -264,3 +264,31 @@ def test_the_families_reachable_from_main_are_named_with_those_not_seen():
     assert areas.slots["untouched"] == tuple(label for label, _ in FAMILIES.values())
     assert areas_line(items).startswith("con llamadas: ninguna · sin llamadas vistas: ")
     assert "puede usar funciones que no están en la lista" in areas.not_proven
+
+
+@pytest.mark.parametrize("render", ["text", "markdown"])
+def test_the_report_folds_shared_limits_and_groups_the_startup_calls(render):
+    import re
+
+    from lupabin.render.document import STARTUP_TITLE, to_markdown, to_text
+
+    report = analyze_bytes(build_main_demo())
+    explanation = explain(report, GLOSSARY)
+    items = validate(explanation, report, GLOSSARY)
+    shown = (to_text if render == "text" else to_markdown)(explanation, items, report, GLOSSARY)
+    for item in items:  # nothing is dropped: every item keeps its own line
+        assert re.search(rf"(^|\W){item.id}(\W|$)", shown)
+    startup = next(item for item in items if item.rule == "code.reach_startup@1")
+    heading = STARTUP_TITLE + f" (ver {startup.id})"
+    assert heading in shown.replace("\\", "")
+    calls = [item for item in items if item.rule == "code.calls@1"]
+    exit_call = next(item for item in calls if "exit" in item.statement)
+    puts_call = next(item for item in calls if "puts" in item.statement)
+    # puts is reachable from main, exit only from the startup: exit comes after the heading
+    plain = shown.replace("\\", "")
+    at = plain.index(heading)
+
+    def where(item_id):
+        return re.search(rf"\b{item_id}\b", plain).start()
+
+    assert where(puts_call.id) < at < where(exit_call.id)
