@@ -129,7 +129,7 @@ class Client:
         if status == 404:
             return self._report(sha256, status="not_found", uploaded=uploaded)
         try:
-            fields = summary(file_attributes(payload))
+            fields = summary(file_attributes(payload, sha256))
         except ValueError:
             raise VirusTotalError("invalid_response") from None
         problem: Problem | None = None

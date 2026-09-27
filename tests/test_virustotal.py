@@ -19,7 +19,16 @@ FILE = {
         "id": SHA,
         "type": "file",
         "attributes": {
-            "last_analysis_stats": {"malicious": 2, "suspicious": 1, "undetected": 60},
+            "last_analysis_stats": {
+                "malicious": 2,
+                "suspicious": 1,
+                "undetected": 60,
+                "harmless": 0,
+                "timeout": 0,
+                "confirmed-timeout": 0,
+                "type-unsupported": 0,
+                "failure": 0,
+            },
             "last_analysis_results": {
                 "EngineB": {"category": "malicious", "result": "Training.Sample"},
                 "EngineA": {"category": "suspicious", "result": None},
@@ -98,7 +107,7 @@ def test_hash_lookup_reads_verdicts_and_behaviour_and_only_sends_the_hash():
     fake = Fake(lookup_routes())
     report = consult(SHA, b"MZ bytes that must not leave", transport=fake, environ=KEY)
     assert report.status == "found" and report.problem is None and not report.uploaded
-    assert report.stats == {"malicious": 2, "suspicious": 1, "undetected": 60}
+    assert report.stats == FILE["data"]["attributes"]["last_analysis_stats"]
     assert [(d.engine, d.category) for d in report.detections] == [
         ("EngineA", "suspicious"),
         ("EngineB", "malicious"),
@@ -210,6 +219,122 @@ def test_malformed_responses_are_rejected_not_guessed(payload):
     assert (report.status, report.problem) == ("unavailable", "invalid_response")
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("id", "b" * 64), ("id", None), ("id", 7), ("type", "url"), ("type", None)],
+)
+@pytest.mark.parametrize("operation", ["consult", "submit", "follow"])
+def test_file_identity_mismatch_is_rejected_without_upload_or_behaviour(field, value, operation):
+    from lupabin.virustotal.client import follow, submit
+
+    payload = json.loads(json.dumps(FILE))
+    if value is None:
+        payload["data"].pop(field)
+    else:
+        payload["data"][field] = value
+    routes = lookup_routes(file=(200, payload))
+    routes[("GET", "/analyses/training")] = [
+        (200, {"data": {"attributes": {"status": "completed"}}})
+    ]
+    fake = Fake(routes)
+    if operation == "consult":
+        report = consult(SHA, b"synthetic", upload=True, transport=fake, environ=KEY)
+    elif operation == "submit":
+        report, analysis = submit(SHA, b"synthetic", transport=fake, environ=KEY)
+        assert analysis is None
+    else:
+        report = follow(SHA, "training", transport=fake, environ=KEY)
+    assert (report.status, report.problem) == ("unavailable", "invalid_response")
+    assert report.sample_sha256 == SHA
+    assert not report.stats and not report.detections and report.behaviour.empty()
+    assert all(
+        r.method == "GET" and not r.path.endswith("/behaviour_summary") for r in fake.requests
+    )
+
+
+@pytest.mark.parametrize("value", ["b" * 64, None, 7])
+def test_file_attribute_hash_must_agree_when_present(value):
+    payload = json.loads(json.dumps(FILE))
+    payload["data"]["attributes"]["sha256"] = value
+    report = consult(SHA, transport=Fake(lookup_routes(file=(200, payload))), environ=KEY)
+    assert (report.status, report.problem) == ("unavailable", "invalid_response")
+
+
+def test_file_attribute_hash_can_confirm_the_requested_file():
+    payload = json.loads(json.dumps(FILE))
+    payload["data"]["attributes"]["sha256"] = SHA
+    report = consult(SHA, transport=Fake(lookup_routes(file=(200, payload))), environ=KEY)
+    assert report.status == "found" and report.problem is None
+
+
+@pytest.mark.parametrize(
+    "stats",
+    [
+        {"suspicious": 0, "undetected": 60},
+        {"malicious": "2", "suspicious": 0, "undetected": 60},
+        {"malicious": True, "suspicious": 0, "undetected": 60},
+        {"malicious": -1, "suspicious": 0, "undetected": 60},
+        {"malicious": 1.5, "suspicious": 0, "undetected": 60},
+        {"malicious": 2, "suspicious": 0, "undetected": 60},
+        {},
+        None,
+    ],
+)
+def test_incomplete_statistics_never_invent_counts_or_totals(stats):
+    from lupabin.render.external import structured, to_markdown_lines, to_text_lines
+    from lupabin.web.view import virustotal
+
+    payload = json.loads(json.dumps(FILE))
+    payload["data"]["attributes"]["last_analysis_stats"] = stats
+    report = consult(SHA, transport=Fake(lookup_routes(file=(200, payload))), environ=KEY)
+    assert report.status == "found" and report.detections
+    for rendered in (
+        " ".join(to_text_lines(report, lambda text, *args: [text])),
+        " ".join(to_markdown_lines(report)),
+        json.dumps(structured(report), ensure_ascii=False),
+        json.dumps(virustotal(report), ensure_ascii=False),
+    ):
+        assert "Total de motores: no disponible" in rendered
+        assert " de 60 " not in rendered and " de 62 " not in rendered
+        assert "Training.Sample" in rendered
+        expected = (
+            2
+            if isinstance(stats, dict)
+            and type(stats.get("malicious")) is int
+            and stats["malicious"] == 2
+            else "no disponible"
+        )
+        assert f"Maliciosos: {expected}" in rendered
+
+
+def test_each_missing_statistic_prevents_a_total():
+    from lupabin.render.external import structured
+    from lupabin.virustotal.parse import STATS
+
+    for key in STATS:
+        payload = json.loads(json.dumps(FILE))
+        stats = dict.fromkeys(STATS, 0) | {"malicious": 2, "undetected": 60}
+        del stats[key]
+        payload["data"]["attributes"]["last_analysis_stats"] = stats
+        report = consult(SHA, transport=Fake(lookup_routes(file=(200, payload))), environ=KEY)
+        rows = json.dumps(structured(report), ensure_ascii=False)
+        assert "Total de motores: no disponible" in rows
+
+
+def test_unknown_statistic_prevents_a_fabricated_total():
+    from lupabin.render.external import structured
+    from lupabin.virustotal.parse import STATS
+
+    payload = json.loads(json.dumps(FILE))
+    payload["data"]["attributes"]["last_analysis_stats"] = dict.fromkeys(STATS, 0) | {
+        "malicious": 2,
+        "undetected": 60,
+        "new_category": 3,
+    }
+    report = consult(SHA, transport=Fake(lookup_routes(file=(200, payload))), environ=KEY)
+    assert "Total de motores: no disponible" in json.dumps(structured(report), ensure_ascii=False)
+
+
 def test_wrong_types_are_dropped_and_lists_are_bounded():
     attributes = FILE["data"]["attributes"] | {
         "last_analysis_stats": {"malicious": "2", "undetected": -1, "harmless": True},
@@ -218,7 +343,8 @@ def test_wrong_types_are_dropped_and_lists_are_bounded():
     }
     behaviour = {"data": {"files_written": [f"f{i}" for i in range(MAX_ITEMS + 25)]}}
     routes = lookup_routes(
-        file=(200, {"data": {"attributes": attributes}}), behaviour=(200, behaviour)
+        file=(200, {"data": {"id": SHA, "type": "file", "attributes": attributes}}),
+        behaviour=(200, behaviour),
     )
     report = consult(SHA, transport=Fake(routes), environ=KEY)
     assert report.stats == {}
@@ -278,8 +404,12 @@ def patch(monkeypatch, file=(200, FILE), behaviour=(200, BEHAVIOUR), environ=KEY
     calls = []
 
     def fake(sha256, data=None, *, upload=False, **_):
+        code, payload = file
+        if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+            payload = json.loads(json.dumps(payload))
+            payload["data"]["id"] = sha256
         routes = {
-            ("GET", f"/files/{sha256}"): [file],
+            ("GET", f"/files/{sha256}"): [(code, payload)],
             ("GET", f"/files/{sha256}/behaviour_summary"): [behaviour],
         }
         calls.append((sha256, upload))

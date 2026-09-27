@@ -96,6 +96,10 @@ uv run --frozen lupabin virustotal --sha256 <sha256> --format json
 - Todo ocurre en el host: el worker sigue sin red. Una etiqueta es la opinión de un motor, y el comportamiento se observó en los sandboxes de VirusTotal, no en tu equipo. "VirusTotal no conoce este archivo" no dice nada sobre su peligrosidad.
 - La API pública admite 500 consultas al día y 4 por minuto, y no puede usarse en productos o servicios comerciales.
 
+El informe añade el significado documentado de algunas etiquetas de Microsoft y F-Secure, con sus fuentes. Para otras, incluido `ti!`, indica que no hay una interpretación respaldada en el catálogo. No traduce cualquier `!ml` automáticamente ni adivina la causa exacta de una detección.
+
+También contrasta las técnicas de comportamiento que comunica VirusTotal con las seis técnicas cubiertas por las capacidades locales: exige el mismo SHA-256 y el mismo identificador, cita las evidencias del caso estático y distingue lo no observado de lo no analizable. Una coincidencia no confirma ejecución ni explica el veredicto del antivirus; una ausencia no lo refuta.
+
 Más detalle: [VirusTotal](docs/metodo.md#virustotal).
 
 ## Salida y abstención
@@ -190,6 +194,7 @@ uv run --frozen ruff format --check .
 uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
+node --test tests/test_web_vt.cjs
 uv run --frozen python -m lupabin.evidence.schema --check
 uv run --frozen python -m lupabin.explain.schema --check
 uv build
@@ -198,6 +203,8 @@ docker compose config --quiet
 docker build --load -f docker/Dockerfile -t lupabin-worker:0.11.0 .
 uv run --frozen pytest -m docker
 ```
+
+Las regresiones del JavaScript de la web requieren Node.js 22 o posterior y usan su ejecutor de pruebas integrado, sin instalar paquetes npm. Node.js no es necesario para ejecutar LupaBin.
 
 Las pruebas Docker fallan si se solicitan sin motor o imagen; no se omiten silenciosamente. La suite ordinaria excluye explícitamente ese marcador. `docker compose build worker` es una alternativa de build; el servicio Compose es el worker de consola. La web se sirve con `lupabin-web` (ver más arriba).
 
