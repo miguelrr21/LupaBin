@@ -23,6 +23,7 @@ from starlette.staticfiles import StaticFiles
 from lupabin.errors import MESSAGES, FailureCode, LupaBinError
 from lupabin.evidence.models import Limits
 from lupabin.explain.engine import ExplanationError, explain, validate
+from lupabin.ghidra import build_bundle as ghidra_bundle
 from lupabin.glossary.catalog import load_glossary
 from lupabin.runner import IMAGE, run_isolated
 from lupabin.transport import DockerCLI, Transport
@@ -184,6 +185,10 @@ def create_app(
         try:
             async with slots:
                 report = await run_isolated(data, limits, transport())
+                try:
+                    archive = await asyncio.to_thread(ghidra_bundle, report, data)
+                except (LupaBinError, ValueError, OSError):
+                    archive = None
         except Busy:
             return failure(
                 "busy",
@@ -198,7 +203,12 @@ def create_app(
         except ExplanationError:
             return failure("invalid_worker_output", 500)
         # VirusTotal is asked separately (/api/virustotal), so the report never waits for it
-        return JSONResponse(view.build(report, explanation, items, glossary, None))
+        shown = view.build(report, explanation, items, glossary, None)
+        if archive is not None:
+            view.ghidra_download(shown, archive)
+        else:
+            shown["downloads"]["ghidra_error"] = "No se pudo crear una exportación Ghidra válida."
+        return JSONResponse(shown)
 
     def vt_refused(request: Request, limit: RateLimit) -> Response | None:
         if not settings.virustotal:

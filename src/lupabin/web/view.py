@@ -7,6 +7,7 @@ with render.safe.visible before it leaves the server; the page inserts text only
 text.
 """
 
+import base64
 from dataclasses import asdict
 from typing import Any
 
@@ -110,6 +111,10 @@ def virustotal(report: VirusTotalReport) -> dict[str, Any]:
     """The external section on its own, neutralised (the page asks for it separately)."""
     shown: dict[str, Any] = neutral(_virustotal(report))
     return shown
+
+
+def ghidra_download(shown: dict[str, Any], archive: bytes) -> None:
+    shown["downloads"]["ghidra"] = base64.b64encode(archive).decode("ascii")
 
 
 def build(

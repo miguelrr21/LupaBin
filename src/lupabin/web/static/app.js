@@ -140,7 +140,17 @@ function copyButton(text) {
   });
 }
 
+function ghidra_download() {
+  if (!lastResult || !lastResult.data.downloads.ghidra) return;
+  const raw = atob(lastResult.data.downloads.ghidra);
+  const archive = Uint8Array.from(raw, (character) => character.charCodeAt(0));
+  download(archive, `${lastResult.data.sample.sha256}.lupabin-ghidra.zip`, "application/zip");
+}
+
 function renderHead(data, name) {
+  $("ghidra-download").disabled = !data.downloads || !data.downloads.ghidra;
+  $("ghidra-download").title = data.downloads && data.downloads.ghidra_error ||
+    "Extrae el ZIP y ejecuta ImportLupaBin.java desde el gestor de scripts de Ghidra. Exige hash y revisión previa.";
   $("result-name").textContent = name;
   const badge = $("result-status");
   badge.textContent = STATUS[data.status] || data.status;
@@ -628,6 +638,7 @@ document.addEventListener("DOMContentLoaded", () => {
     choose(null);
     show("upload");
   });
+  $("ghidra-download").addEventListener("click", ghidra_download);
   $("download-json").addEventListener("click", () => {
     if (lastResult) download(lastResult.data.downloads.report, `${lastResult.data.sample.sha256}.lupabin.json`, "application/json");
   });
