@@ -80,6 +80,26 @@ uv run lupabin-web
 
 y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker.
 
+## Llevar las evidencias a Ghidra
+
+La CLI exporta un informe existente y la web ofrece **Exportar a Ghidra (ZIP)** después del análisis:
+
+```text
+uv run lupabin export-ghidra informe.json --sample "ruta/al/archivo.exe" --output evidencias-ghidra.zip
+```
+
+El archivo original es obligatorio: se contrastan hashes y evidencias antes de exportar. No se reanaliza ni se consulta VirusTotal. El ZIP contiene `lupabin-ghidra.json` (contrato de exportación 1.0.0, con el informe de hechos íntegro) e `ImportLupaBin.java` (código fijo, sin texto de la muestra incrustado). No sobrescribe un ZIP existente. Los códigos de salida conservan el estado del informe: 0 completo, 3 parcial, 1 fallido.
+
+1. Extrae ambos archivos. Abre el programa correspondiente en Ghidra; el importador no importa, ejecuta, emula ni desensambla la muestra.
+2. En **Window → Script Manager**, añade la carpeta extraída a los directorios de scripts y ejecuta `ImportLupaBin.java`. La compilación se comprobó con las APIs de Ghidra 12.1.3 y Java 21; no necesita Jython ni dependencias adicionales en Python.
+3. Selecciona el JSON. El script exige que el SHA-256 del programa y el de sus bytes originales conservados coincidan con el informe. Si Ghidra no conserva el archivo original completo, se abstiene.
+4. Elige un archivo **nuevo** para la revisión previa. Léelo: muestra cada anotación preparada y cada ubicación que no pudo trasladarse, con su motivo. Confirma solo después de revisarlo. La revisión dice `applied: false`: no es un justificante de aplicación.
+5. Se añaden comentarios previos y marcadores `Note` de categoría `LupaBin/...`, sin borrar anotaciones humanas. Reimportar el mismo JSON no duplica las anotaciones. Los conflictos se omiten y un fallo o cancelación durante la escritura revierte la transacción. Guarda el programa si deseas conservar los cambios.
+
+Un offset de archivo no es una RVA. El script usa el mapa de bytes de Ghidra y contrasta las RVA explícitas con la base actual, también después de un rebase. Las coincidencias YARA conservan cada instancia; las decodificaciones se marcan en sus **bytes codificados**, no en una dirección inventada del texto resultante. Overlays, rangos ambiguos, bytes modificados y otros casos no verificables quedan sin anotación y se declaran en la revisión; nunca se envían a dirección cero. El JSON conserva también los hechos sin dirección, la cobertura y las limitaciones. El hash acredita identidad de bytes, no autoría ni veracidad semántica del informe.
+
+Las pruebas Java automatizadas usan un programa simulado: no equivalen a ejecutar el script en una instalación real de Ghidra. Detalles de comprobación y límites: [método](docs/metodo.md#exportación-a-ghidra).
+
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
 Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), LupaBin añade por defecto los resultados de VirusTotal como **fuente externa, no verificada por LupaBin**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).

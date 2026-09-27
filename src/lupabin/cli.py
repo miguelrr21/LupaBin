@@ -206,6 +206,45 @@ def explain_saved(
     raise typer.Exit(EXIT[report.analysis.status])
 
 
+@app.command(name="export-ghidra")
+def ghidra_export(
+    report_file: Annotated[Path, typer.Argument(help="Informe de hechos JSON guardado.")],
+    sample: Annotated[
+        Path, typer.Option("--sample", help="Archivo original para verificar hashes y bytes.")
+    ],
+    output: Annotated[
+        Path, typer.Option("--output", help="ZIP nuevo; nunca se sobrescribe un archivo existente.")
+    ],
+) -> None:
+    """Exporta evidencias e importador Java para Ghidra, sin ejecutar ni reanalizar la muestra."""
+    from lupabin.ghidra import build_bundle
+
+    if sample is None or output is None:
+        raise typer.BadParameter("se requieren --sample y --output")
+    try:
+        report = load_report(report_file, Limits())
+        blob = read_sample(sample, report.analysis.limits)
+        bundle = build_bundle(report, blob.data)
+    except LupaBinError as error:
+        raise fail(error) from None
+    except ValueError:
+        raise typer.BadParameter("no se pudo construir una exportación válida") from None
+    try:
+        with output.open("xb") as stream:
+            stream.write(bundle)
+    except OSError:
+        raise typer.BadParameter(
+            "el ZIP debe ser un archivo nuevo en un directorio escribible"
+        ) from None
+    write_utf8(
+        "ZIP creado: extrae ambos archivos, abre el programa en Ghidra "
+        "y ejecuta ImportLupaBin.java. "
+        "Exige el SHA-256 original, guarda una revisión previa y pide confirmación.",
+        buffer=sys.stdout.buffer,
+    )
+    raise typer.Exit(EXIT[report.analysis.status])
+
+
 @app.command(name="virustotal")
 def virustotal_only(
     file: Annotated[Path | None, typer.Argument(help="Archivo cuyo SHA-256 se consulta.")] = None,
