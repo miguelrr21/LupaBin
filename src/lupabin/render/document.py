@@ -38,6 +38,8 @@ EXTRA = {
     "description": "Qué significa, según el catálogo",
     "text": "Texto",
     "texts": "Textos",
+    "touched": "Con llamadas desde main",
+    "untouched": "Sin llamadas vistas desde main",
 }
 
 
@@ -112,6 +114,20 @@ def main_line(items: tuple[Item, ...]) -> str | None:
     if startup is not None:
         parts.append(f"{startup.slots['count']} solo del arranque ({startup.id})")
     return " · ".join(parts)
+
+
+def areas_line(items: tuple[Item, ...]) -> str | None:
+    """The families the calls reachable from main touch, and those they do not."""
+    found = next((item for item in items if item.rule == "code.areas@1"), None)
+    if found is None:
+        return None
+    touched, untouched = found.slots["touched"], found.slots["untouched"]
+    if not isinstance(touched, tuple) or not isinstance(untouched, tuple):
+        return None
+    return (
+        f"con llamadas: {', '.join(touched)} · sin llamadas vistas: {', '.join(untouched)} "
+        f"({found.id})"
+    )
 
 
 HEADER_TEXTS = 4
@@ -243,6 +259,9 @@ def to_text(
     used = main_texts(items)
     if used:
         lines += wrap(visible(f"{' · '.join(used[1])} ({used[0]})"), "          ", "Textos    ")
+    areas = areas_line(items)
+    if areas:
+        lines += wrap(areas, "          ", "Familias  ")
     lines += ["", SUMMARY_TITLE, *wrap(SUMMARY_INTRO, "   ")]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:
@@ -347,6 +366,9 @@ def to_markdown(
     if used:
         shown = " · ".join(code_span(text) for text in used[1])
         lines.append(f"- **Textos**: {shown} ({used[0]})")
+    areas = areas_line(items)
+    if areas:
+        lines.append(f"- **Familias**: {markdown_text(areas)}")
     lines += ["", f"## {SUMMARY_TITLE}", "", markdown_text(SUMMARY_INTRO)]
     overview = summary(items, report)
     for tactic, chosen in overview.groups:

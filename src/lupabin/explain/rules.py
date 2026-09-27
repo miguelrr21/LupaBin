@@ -864,6 +864,39 @@ def _main_texts(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("code.string_reference", "code.reach")
 
 
+def _areas(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    """The curated families the calls reachable from main belong to, and those none does."""
+    if len(cited) != 1 or not isinstance(cited[0], CodeReachEvidence):
+        return None
+    reach = cited[0]
+    if reach.data.root != "main":
+        return None
+    facts = groups(report).facts
+    main = facts.get(reach.provenance.evidence_ids[0])
+    if not isinstance(main, MainCallEvidence):
+        return None
+    seen: set[str] = set()
+    for call_id in reach.data.calls:
+        call = facts.get(call_id)
+        callee = None if call is None else facts.get(call.provenance.evidence_ids[0])
+        if not isinstance(callee, ImportEvidence):
+            return None
+        if callee.data.function is not None:
+            family = family_of(name(callee.data.function))
+            if family is not None:
+                seen.add(family)
+    touched = tuple(FAMILIES[family][0] for family in FAMILIES if family in seen)
+    untouched = tuple(FAMILIES[family][0] for family in FAMILIES if family not in seen)
+    slots: Slots = {
+        "target": hexadecimal(main.data.target),
+        "count": number(len(touched)),
+        "total": number(len(FAMILIES)),
+        "touched": touched or ("ninguna",),
+        "untouched": untouched or ("ninguna",),
+    }
+    return slots, ("code.reach", "code.import_call")
+
+
 RULES: dict[str, Rule] = {
     rule.id: rule
     for rule in (
@@ -1088,6 +1121,16 @@ RULES: dict[str, Rule] = {
             "Incluye los textos de las bibliotecas que el programa usa desde main, no solo los "
             "que escribió el autor. No demuestra que esas instrucciones se ejecuten.",
             _main_texts,
+        ),
+        Rule(
+            "code.areas@1",
+            "Las llamadas alcanzables desde main ({target}) son de {count} de las {total} "
+            "familias de funciones de la lista curada de LupaBin.",
+            "Una llamada alcanzable no demuestra que se ejecute. Que no se vea ninguna llamada "
+            "de una familia no demuestra que el programa no haga eso: puede usar funciones que "
+            "no están en la lista, cargarlas al ejecutarse o llegar a ellas por caminos que el "
+            "recorrido no ve.",
+            _areas,
         ),
         Rule(
             "exports.table@1",
