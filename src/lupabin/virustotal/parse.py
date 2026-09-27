@@ -70,18 +70,22 @@ def records[T](
     return tuple(kept[:MAX_ITEMS]), dropped + max(0, len(kept) - MAX_ITEMS)
 
 
-def file_attributes(payload: Any) -> dict[str, Any]:
+def file_attributes(payload: Any, sha256: str) -> dict[str, Any]:
     data = payload.get("data") if isinstance(payload, dict) else None
-    attributes = data.get("attributes") if isinstance(data, dict) else None
+    if not isinstance(data, dict) or data.get("type") != "file" or data.get("id") != sha256:
+        raise ValueError("response file identity does not match")
+    attributes = data.get("attributes")
     if not isinstance(attributes, dict):
         raise ValueError("response has no file attributes")
+    if "sha256" in attributes and attributes["sha256"] != sha256:
+        raise ValueError("response file hash does not match")
     return attributes
 
 
 def summary(attributes: dict[str, Any]) -> dict[str, Any]:
     stats_in = attributes.get("last_analysis_stats")
     stats = {}
-    if isinstance(stats_in, dict):
+    if isinstance(stats_in, dict) and stats_in.keys() <= set(STATS):
         stats = {k: v for k in STATS if (v := integer(stats_in.get(k))) is not None and v >= 0}
     detections = []
     results = attributes.get("last_analysis_results")
