@@ -31,6 +31,8 @@ No hay umbral que afirme "empaquetado", "cifrado" o "malicioso". La explicación
 
 Secuencias de al menos cuatro caracteres ASCII imprimibles (U+0020–U+007E), en ASCII y en UTF-16LE con ambos alineamientos. Cada aparición es un hecho distinto, con su desplazamiento real y sus bytes; el modelo comprueba que los bytes decodifican exactamente al texto. Una secuencia de más de 1.024 caracteres conserva un prefijo marcado `complete=false`. No se promete recuperar todo Unicode, cadenas cifradas ni cadenas construidas en la pila, y no se interpreta el texto: una URL no es una conexión ni una ruta un archivo creado.
 
+El host compara también los bytes conservados de cada cadena con el intervalo original, tanto al recibir al worker como al contrastar un informe guardado mediante `--sample`. Modificar texto y hexadecimal en un informe manteniendo sus hashes no evita esta comprobación. Se verifica el fragmento publicado, no la maximalidad de la cadena, su longitud total no capturada ni que el extractor haya publicado todas las cadenas.
+
 ### Anomalías estructurales
 
 Comprobaciones de campos declarados, no una reproducción del cargador de Windows:

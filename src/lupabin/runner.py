@@ -11,6 +11,7 @@ from lupabin.evidence.models import Limits, Report
 from lupabin.evidence.toolchain_checks import verify_markers
 from lupabin.evidence.yara import validate_matches
 from lupabin.extractors.decode import verify_decodings
+from lupabin.extractors.strings import verify_strings
 from lupabin.ingest.reader import from_bytes
 from lupabin.rules.catalog import CatalogError, load_catalog
 from lupabin.transport import Completed as Completed
@@ -127,6 +128,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         if tuple(run.source for run in report.extractor_runs) != SOURCES:
             raise LupaBinError("invalid_worker_output")
         try:
+            verify_strings(report.evidence, blob.data)
             verify_decodings(report.evidence, blob.data)
             verify_calls(report.evidence, blob.data)
             verify_markers(report.evidence, blob.data)

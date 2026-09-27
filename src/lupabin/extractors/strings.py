@@ -1,14 +1,24 @@
 import heapq
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Literal
 
 from lupabin.evidence.collector import Collector, Progress
-from lupabin.evidence.facts import StringData
+from lupabin.evidence.facts import Evidence, StringData, StringEvidence
 from lupabin.evidence.primitives import COMPONENTS, Component, Location, Source
 from lupabin.extractors.base import Extraction
 
 Candidate = tuple[int, Literal["ascii", "utf-16-le"], int]
+
+
+def verify_strings(evidence: Sequence[Evidence], data: bytes) -> None:
+    for fact in evidence:
+        if isinstance(fact, StringEvidence):
+            start, length = fact.location.offset, fact.location.length
+            if start is None or length is None:
+                raise ValueError("literal string has no physical range")
+            if data[start : start + length] != bytes.fromhex(fact.data.raw_hex):
+                raise ValueError("literal string bytes do not match the sample")
 
 
 def ascii_runs(data: bytes) -> Iterator[Candidate]:

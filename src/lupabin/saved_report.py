@@ -16,6 +16,7 @@ from lupabin.evidence.models import Limits, Report
 from lupabin.evidence.toolchain_checks import verify_markers
 from lupabin.evidence.yara import validate_matches
 from lupabin.extractors.decode import verify_decodings
+from lupabin.extractors.strings import verify_strings
 from lupabin.ingest.reader import Blob
 from lupabin.rules.catalog import CatalogError, load_catalog
 
@@ -25,8 +26,9 @@ UNCHECKED = (
     "pero nada garantiza que sus datos procedan de ella (usa --sample para contrastarlo)."
 )
 CHECKED = (
-    "Informe cargado de un archivo y contrastado con la muestra: coinciden los hashes, cada "
-    "decodificación se rederivó de los bytes y cada coincidencia YARA se comprobó."
+    "Informe cargado de un archivo y contrastado con la muestra: coinciden los hashes, "
+    "se cotejaron los bytes conservados de las cadenas literales, cada decodificación "
+    "se rederivó de los bytes y cada coincidencia YARA se comprobó."
 )
 
 
@@ -57,6 +59,7 @@ def check_against_sample(report: Report, blob: Blob) -> None:
     ):
         raise LupaBinError("report_mismatch")
     try:
+        verify_strings(report.evidence, blob.data)
         verify_decodings(report.evidence, blob.data)
         verify_calls(report.evidence, blob.data)
         verify_markers(report.evidence, blob.data)
