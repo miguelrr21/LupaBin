@@ -42,11 +42,13 @@ uv run lupabin-web          # http://127.0.0.1:8080
 
 To deploy it on a server (Ubuntu 24.04/22.04 or Debian 12, x86_64 or ARM64, e.g. Oracle Cloud Free Tier or Hetzner), follow [docs/deploy.md](docs/deploy.md) (in Spanish). Use a dedicated server: the service controls Docker.
 
+## Ghidra export
+
+After an analysis, the web page offers **Exportar a Ghidra (ZIP)**; from the CLI, run `uv run lupabin export-ghidra report.json --sample file.exe --output evidence.zip`. The ZIP holds the full fact report as JSON and a fixed Java script, `ImportLupaBin.java`, to run from Ghidra's Script Manager (tested with Ghidra 12.1.3 and Java 21). The script refuses a program whose SHA-256 differs from the report's, saves a review file listing every annotation and every piece of evidence it cannot place, and only after you confirm adds comments and `Note` bookmarks. It never removes your own annotations, a second import adds nothing, and a failure or cancellation leaves the program unchanged.
+
 ## Self-graded practice
 
-In the web report, **Practicar con este informe** opens multiple-choice questions, with explanations, evidence citations and a learning summary after grading. From a saved fact report, run `uv run --frozen lupabin challenge report.json --practice`. Use `--json` to obtain questions and an `answers_template`; save only that template object, fill its `option_id` values with `A`, `B`, `C` or `null`, then pass it with `--answers answers.json` to grade against the original report.
-
-The deterministic, versioned bank covers PE structure, imports versus calls, literal and decoded strings, and incomplete coverage. No LLM, network access or persistent answer storage is needed. Missing evidence means no corresponding question. Grading is about the learner's answers, never sample risk. This is open educational practice, not a cheat-resistant exam: web solutions can be inspected and local scores altered. Questions are not imported as grading authority, reports are not authenticated by challenge hashes, and saved reports retain their verification warning (`--sample` applies the available byte checks). See the [Spanish usage guide](README.md#modo-reto-practicar-con-tu-informe).
+In the web report, **Practicar con este informe** opens up to seven multiple-choice questions about that report (PE structure, imports versus calls, literal and decoded strings, incomplete coverage), each graded with its explanation and the evidence behind it. From the CLI, `uv run --frozen lupabin challenge report.json --practice` asks in the terminal, and `--json` gives an `answers_template` to fill in and grade with `--answers`. Grading is always recomputed from the report. It is practice, not a cheat-proof exam, and the score is about your answers, never about the sample's risk.
 
 ## Safety
 

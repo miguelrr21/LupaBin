@@ -82,23 +82,21 @@ y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Fr
 
 ## Llevar las evidencias a Ghidra
 
-La CLI exporta un informe existente y la web ofrece **Exportar a Ghidra (ZIP)** después del análisis:
+Después del análisis, la web ofrece **Exportar a Ghidra (ZIP)**. Desde la CLI se exporta un informe guardado:
 
 ```text
 uv run lupabin export-ghidra informe.json --sample "ruta/al/archivo.exe" --output evidencias-ghidra.zip
 ```
 
-El archivo original es obligatorio: se contrastan hashes y evidencias antes de exportar. No se reanaliza ni se consulta VirusTotal. El ZIP contiene `lupabin-ghidra.json` (contrato de exportación 1.0.0, con el informe de hechos íntegro) e `ImportLupaBin.java` (código fijo, sin texto de la muestra incrustado). No sobrescribe un ZIP existente. Los códigos de salida conservan el estado del informe: 0 completo, 3 parcial, 1 fallido.
+El archivo original es obligatorio: antes de exportar se comprueba que el informe corresponde a sus bytes. No se repite el análisis, no se consulta VirusTotal y nunca se sobrescribe un ZIP existente. El ZIP trae `lupabin-ghidra.json`, con el informe completo, e `ImportLupaBin.java`, un script fijo que no incorpora texto de la muestra.
 
-1. Extrae ambos archivos. Abre el programa correspondiente en Ghidra; el importador no importa, ejecuta, emula ni desensambla la muestra.
-2. En **Window → Script Manager**, añade la carpeta extraída a los directorios de scripts y ejecuta `ImportLupaBin.java`. La compilación se comprobó con las APIs de Ghidra 12.1.3 y Java 21; no necesita Jython ni dependencias adicionales en Python.
-3. Selecciona el JSON. El script exige que el SHA-256 del programa y el de sus bytes originales conservados coincidan con el informe. Si Ghidra no conserva el archivo original completo, se abstiene.
-4. Elige un archivo **nuevo** para la revisión previa. Léelo: muestra cada anotación preparada y cada ubicación que no pudo trasladarse, con su motivo. Confirma solo después de revisarlo. La revisión dice `applied: false`: no es un justificante de aplicación.
-5. Se añaden comentarios previos y marcadores `Note` de categoría `LupaBin/...`, sin borrar anotaciones humanas. Reimportar el mismo JSON no duplica las anotaciones. Los conflictos se omiten y un fallo o cancelación durante la escritura revierte la transacción. Guarda el programa si deseas conservar los cambios.
+1. Extrae el ZIP y abre el programa en Ghidra.
+2. En **Window → Script Manager**, añade la carpeta extraída y ejecuta `ImportLupaBin.java`. Está probado con Ghidra 12.1.3 y Java 21, y no necesita Python.
+3. Elige `lupabin-ghidra.json`. Si el SHA-256 del programa abierto no coincide con el del informe, el script no cambia nada.
+4. Guarda la revisión previa en un archivo nuevo y léela: lista cada anotación que se va a añadir y cada evidencia que no se puede situar, con su motivo. Después, confirma.
+5. El script añade comentarios y marcadores `Note` en la categoría `LupaBin/...`. No borra ni sustituye tus anotaciones, importar dos veces el mismo JSON no añade nada y, si algo falla o cancelas, el programa queda como estaba. Guarda el programa para conservar los cambios.
 
-Un offset de archivo no es una RVA. El script usa el mapa de bytes de Ghidra y contrasta las RVA explícitas con la base actual, también después de un rebase. Las coincidencias YARA conservan cada instancia; las decodificaciones se marcan en sus **bytes codificados**, no en una dirección inventada del texto resultante. Overlays, rangos ambiguos, bytes modificados y otros casos no verificables quedan sin anotación y se declaran en la revisión; nunca se envían a dirección cero. El JSON conserva también los hechos sin dirección, la cobertura y las limitaciones. El hash acredita identidad de bytes, no autoría ni veracidad semántica del informe.
-
-Las pruebas Java automatizadas usan un programa simulado: no equivalen a ejecutar el script en una instalación real de Ghidra. Detalles de comprobación y límites: [método](docs/metodo.md#exportación-a-ghidra).
+Cada evidencia se sitúa con el mapa de bytes de Ghidra, sin suponer que un offset del archivo sea una dirección, y sigue en su sitio si cambias la base de la imagen. Las decodificaciones se anotan sobre los bytes codificados. Lo que no se puede situar con certeza (overlays, rangos ambiguos, bytes modificados) no se anota y aparece en la revisión. [Detalles y límites](docs/metodo.md#exportación-a-ghidra).
 
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
@@ -124,21 +122,17 @@ Más detalle: [VirusTotal](docs/metodo.md#virustotal).
 
 ## Modo reto: practicar con tu informe
 
-En la web, **Practicar con este informe** abre preguntas tipo test sin salir del resultado. Selecciona una opción por pregunta y pulsa **Corregir respuestas**: verás la respuesta correcta, su explicación, los campos y evidencias que la sustentan y qué conviene repasar. El informe y sus descargas no cambian. No se guardan respuestas en el servidor.
+En la web, **Practicar con este informe** abre hasta siete preguntas tipo test sobre el propio informe: cabecera y secciones PE, importaciones frente a llamadas, cadenas literales y decodificadas, y cobertura incompleta. Al corregir, cada pregunta muestra la respuesta correcta, por qué lo es y las evidencias que la respaldan. Si el informe no tiene datos para una pregunta, esa pregunta no aparece. No se guarda nada en el servidor.
 
-En la CLI, parte de un informe de hechos guardado:
+Desde la CLI, con un informe guardado:
 
 ```text
 uv run --frozen lupabin challenge informe.json --practice
-uv run --frozen lupabin challenge informe.json --json
-uv run --frozen lupabin challenge informe.json --answers respuestas.json --json
 ```
 
-Sin opciones muestra las preguntas. `--practice` permite contestar A/B/C (Enter omite); `--json` genera `challenge` y `answers_template`. Guarda **solo el objeto `answers_template`** en `respuestas.json`, conservando sus identificadores y cambiando cada `option_id` de `null` a `"A"`, `"B"` o `"C"`. `--answers` corrige regenerando las preguntas desde `informe.json`, no desde un solucionario editable. Opcionalmente, `--sample archivo.bin` aplica las comprobaciones de contraste disponibles; sin él se advierte que el informe guardado no se ha contrastado con la muestra. Este comando nunca consulta VirusTotal ni vuelve a lanzar el análisis.
+`--practice` pregunta en la terminal (A, B o C; Enter la deja sin responder). Para contestar en un archivo, `--json` genera las preguntas y una plantilla `answers_template`: guárdala en `respuestas.json`, cambia cada `option_id` de `null` a `"A"`, `"B"` o `"C"` y corrige con `--answers respuestas.json`. La corrección se recalcula siempre desde `informe.json`, así que no admite un solucionario propio. `--sample archivo.exe` contrasta además el informe con la muestra. El comando no consulta VirusTotal ni repite el análisis, y termina con 0 si generó o corrigió el reto, 1 si no pudo cargar o contrastar el informe y 2 si las respuestas no son válidas.
 
-El banco inicial ofrece como máximo siete preguntas: cabecera y secciones PE, imports frente a llamadas, cadenas literales, decodificación y cobertura incompleta. No fuerza preguntas sin datos suficientes y distingue `observed`, `inferred` y conocimiento `general`. Una pregunta omitida cuenta como sin responder, no como un dato ausente de la muestra. El código de salida del comando es 0 si generó/corrigió el reto, 1 si no pudo cargar o contrastar el informe y 2 si las respuestas o las opciones son inválidas; acertar no cambia ese código.
-
-**Es práctica educativa, no un examen protegido.** Las alternativas incorrectas no son hechos adicionales del informe. La puntuación mide respuestas, nunca peligrosidad. Las soluciones web se calculan en el host y viajan al navegador: pueden inspeccionarse y una modificación del cliente puede falsear su nota local. No hay importación de retos en la web ni corrección de archivos de preguntas arbitrarios; en CLI se importan únicamente respuestas vinculadas al informe y al banco actual. Los retos no llevan firma ni acreditan autenticidad del informe. [Método y límites](docs/metodo.md#retos-autocorregibles).
+Es práctica, no un examen: en la web, las soluciones viajan al navegador y se pueden consultar. La nota mide tus respuestas, no el riesgo del archivo. [Método y límites](docs/metodo.md#retos-autocorregibles).
 
 ## Salida y abstención
 
