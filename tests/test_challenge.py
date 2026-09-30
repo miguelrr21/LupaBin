@@ -58,6 +58,21 @@ def test_correct_options_agree_with_fields_not_just_answer_key(reports):
     assert seen == {rule.id for rule in RULES}
 
 
+def test_section_count_answer_is_not_given_away_by_its_rank():
+    from lupabin.challenge.engine import _alternatives
+
+    ranks = []
+    for count in (0, 1, 2, 3, 65533, 65534, 65535, *range(4, 400)):
+        first, second = _alternatives("E1", count)
+        options = {count, first, second}
+        assert len(options) == 3
+        assert all(0 <= value <= 65535 for value in options)
+        ranks.append(sorted(options).index(count))
+    assert {rank: ranks.count(rank) for rank in (0, 1, 2)} == pytest.approx(
+        {0: len(ranks) / 3, 1: len(ranks) / 3, 2: len(ranks) / 3}, rel=0.2
+    )
+
+
 def test_web_projection_contains_regenerated_feedback_without_changing_downloads(reports):
     from lupabin.explain.engine import explain
     from lupabin.explain.engine import validate as validate_explanation

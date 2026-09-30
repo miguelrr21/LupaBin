@@ -37,6 +37,17 @@ def _citation(fact: Evidence, path: str) -> Citation:
     return Citation(evidence_id=fact.id, path=path, value=visible(text))
 
 
+def _alternatives(fact_id: str, count: int) -> tuple[int, int]:
+    # The right count is the smallest, middle or largest option with equal odds, so the
+    # position of the value alone never gives the answer away.
+    shapes = [
+        pair
+        for pair in ((count + 1, count + 2), (count - 1, count + 1), (count - 2, count - 1))
+        if 0 <= min(pair) and max(pair) <= 65535
+    ]
+    return shapes[int(_digest([fact_id, count]), 16) % len(shapes)]
+
+
 def _candidates(report: Report) -> dict[RuleId, tuple[dict[str, str], tuple[Citation, ...]]]:
     chosen: dict[RuleId, tuple[dict[str, str], tuple[Citation, ...]]] = {}
     facts = {fact.id: fact for fact in report.evidence}
@@ -52,11 +63,8 @@ def _candidates(report: Report) -> dict[RuleId, tuple[dict[str, str], tuple[Cita
         if fact.kind == "pe_header":
             rule, paths = "header", ("data.number_of_sections",)
             count = fact.data.number_of_sections
-            slots.update(
-                value=str(count),
-                alternative1=str(count % 65535 + 1),
-                alternative2=str((count + 1) % 65535 + 1),
-            )
+            first, second = _alternatives(fact.id, count)
+            slots.update(value=str(count), alternative1=str(first), alternative2=str(second))
         elif fact.kind == "section":
             rule, paths = "section", ("data.raw_size",)
             slots["value"] = str(fact.data.raw_size)
