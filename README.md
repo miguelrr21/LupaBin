@@ -4,9 +4,19 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables. C
 
 **Si no hay evidencia suficiente, no se afirma.** Una importación no demuestra ejecución ni intención maliciosa; un resultado vacío no significa que el archivo sea seguro.
 
-## Estado y alcance
+## Qué hace
 
-Contrato de hechos 0.11.0: ingesta acotada, cabeceras y secciones PE32/PE32+, entropía de bytes, imports normales/retardados, exports, anomalías estructurales, marcas de compilador (cabecera Rich del enlazador de Microsoft, GCC y MinGW-w64, Go, .NET y PyInstaller), cadenas literales, coincidencias YARA, decodificación estática acotada (Base64/hex y XOR de clave repetida de 1 a 8 bytes) y qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes (72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía), producidos en un worker Docker aislado. Un informe didáctico legible por defecto, con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas. Un resumen de lo que contiene el código (capacidades como crear un servicio, escribir en una clave `Run` o pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos. VirusTotal se consulta por defecto como fuente externa (ver más abajo), y hay una web con el mismo análisis. No ejecuta ni emula la muestra. No incluye LLM, capa, FLOSS ni desempaquetado.
+LupaBin lee un ejecutable de Windows sin ejecutarlo nunca, dice qué contienen sus bytes y explica cada afirmación: qué evidencia cita, qué no demuestra y dónde leer más. No es un antivirus y no da veredictos.
+
+- **Hechos de los bytes** (contrato 0.11.0), obtenidos en un worker Docker aislado y sin red: hashes, cabeceras y secciones PE32/PE32+, entropía, importaciones normales y retardadas, exportaciones, anomalías estructurales, marcas de compilador (cabecera Rich del enlazador de Microsoft, GCC y MinGW-w64, Go, .NET y PyInstaller), cadenas literales, coincidencias con las reglas YARA propias y decodificación estática acotada (Base64, hexadecimal y XOR de clave repetida de 1 a 8 bytes).
+- **Qué llama el código.** Qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes, en 72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía.
+- **Un informe didáctico** con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas.
+- **Capacidades:** lo que contiene el código (crear un servicio, escribir en una clave `Run`, pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos.
+- **VirusTotal** como fuente externa, separada de los hechos (activo por defecto y desactivable), y **una web** con el mismo análisis.
+
+No ejecuta ni emula la muestra, y no incluye LLM, capa, FLOSS ni desempaquetado.
+
+## Estado y alcance
 
 Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
 

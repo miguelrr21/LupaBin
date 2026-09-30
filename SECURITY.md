@@ -34,6 +34,6 @@ Un parser comprometido puede emitir datos engañosos que cumplan un esquema. La 
 
 ## Informar de problemas
 
-No publiques muestras reales ni datos sensibles en issues. Para informar de una vulnerabilidad, usa el aviso privado de GitHub (*Security → Report a vulnerability*) si el repositorio lo tiene activado. Si no, abre un issue sin detalles pidiendo un canal privado. No se inventa aquí una dirección de contacto.
+No publiques muestras reales ni datos sensibles en issues. Para informar de una vulnerabilidad, usa el aviso privado de GitHub: pestaña *Security*, *Report a vulnerability*.
 
-Incluye versiones, plataforma, comportamiento esperado/observado y un caso sintético mínimo, si es posible. No adjuntes un binario malicioso para demostrar el fallo. No se declara un plazo de respuesta ni una versión de producción soportada durante esta etapa inicial.
+Incluye versiones, plataforma, comportamiento esperado y observado y, si es posible, un caso sintético mínimo. No adjuntes un binario malicioso para demostrar el fallo. Durante esta etapa inicial no hay un plazo de respuesta comprometido ni una versión con soporte.
