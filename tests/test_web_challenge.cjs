@@ -41,6 +41,7 @@ function page() {
       querySelector: get, querySelectorAll: () => [],
       createTextNode(text) { return { ...element(), textContent: text }; } },
     window: { scrollTo() {} }, clearTimeout() {}, clearInterval() {},
+    atob: (value) => Buffer.from(value, "base64").toString("binary"),
     payload,
   });
   vm.runInContext(source, context);
@@ -181,6 +182,53 @@ test("closing practice or leaving the report clears the grade immediately", () =
   assert.equal(get("challenge-content").children.length, 0);
   assert.equal(get("challenge-panel").hidden, true);
   assert.equal(vm.runInContext("lastResult", context), null);
+});
+
+test("practice and all three downloads coexist and never reuse a previous report", () => {
+  const { context, get, payload, ready } = page();
+  const archive = Buffer.from([0x50, 0x4b, 0xff, 0, 0x80]);
+  payload.downloads = { ghidra: archive.toString("base64"), report: '{"facts":true}', markdown: "# Informe" };
+  context.captures = [];
+  const before = JSON.stringify(payload);
+  vm.runInContext(`
+    loadConfig = () => {};
+    renderSummary = renderItems = showVirusTotalStatus = select = () => {};
+    download = (data, name, type) => captures.push({ data, name, type });
+    lastResult = { data: payload };
+    render(payload, "first.exe");
+  `, context);
+  ready[0]();
+  get("challenge-open").events.click();
+  descendants(get("challenge-content")).find((node) => node.textContent === "Corregir respuestas").events.click();
+  get("ghidra-download").events.click();
+  get("download-json").events.click();
+  get("download-md").events.click();
+  assert.deepEqual(Buffer.from(context.captures[0].data), archive);
+  assert.equal(context.captures[1].data, payload.downloads.report);
+  assert.equal(context.captures[2].data, payload.downloads.markdown);
+  assert.equal(JSON.stringify(payload), before);
+  assert.match(text(get("challenge-content")), /0\/1 correctas/);
+  get("again").events.click();
+  get("ghidra-download").events.click();
+  get("download-json").events.click();
+  get("download-md").events.click();
+  assert.equal(context.captures.length, 3);
+  context.next = JSON.parse(before);
+  context.next.downloads = { report: "new report", markdown: "new markdown", ghidra_error: "Exportación no disponible" };
+  context.next.sample.sha256 = "f".repeat(64);
+  context.next.challenge.challenge.sample_sha256 = context.next.sample.sha256;
+  vm.runInContext('lastResult = { data: next }; render(next, "second.exe");', context);
+  assert.equal(get("challenge-content").children.length, 0);
+  assert.equal(get("challenge-panel").hidden, true);
+  assert.equal(get("ghidra-download").disabled, true);
+  assert.equal(get("ghidra-download").title, context.next.downloads.ghidra_error);
+  get("ghidra-download").events.click();
+  get("download-json").events.click();
+  assert.equal(context.captures.length, 4);
+  assert.equal(context.captures[3].data, "new report");
+  assert.equal(context.captures[3].name, `${"f".repeat(64)}.lupabin.json`);
+  get("challenge-open").events.click();
+  assert.doesNotMatch(text(get("challenge-content")), /0\/1 correctas/);
 });
 
 test("empty challenge abstains and does not offer a correction button", () => {
