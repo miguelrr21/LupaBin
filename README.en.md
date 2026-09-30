@@ -15,7 +15,7 @@ The didactic report, the glossary and the web interface are in Spanish (the stru
 - **Explanations you can verify.** Every sentence is regenerated from the evidence it cites before it is shown; an altered sentence is dropped and counted.
 - **VirusTotal, kept apart.** Optional lookup by SHA-256, and upload if VirusTotal does not know the file, shown as an external source and never mixed with LupaBin's facts.
 
-LupaBin favours **the lowest error rate over coverage**. Every threshold and catalogue entry was measured on benign binaries before being adopted, including the variants that were rejected, and those measurements are written up in [docs/metodo.md](docs/metodo.md) (in Spanish).
+LupaBin favours **the lowest error rate over coverage**. Its extraction and inference methods were measured on benign binaries before being adopted, including the variants that were rejected, and those measurements are written up in [docs/metodo.md](docs/metodo.md) (in Spanish).
 
 ## Quick start
 
@@ -41,6 +41,14 @@ uv run lupabin-web          # http://127.0.0.1:8080
 ```
 
 To deploy it on a server (Ubuntu 24.04/22.04 or Debian 12, x86_64 or ARM64, e.g. Oracle Cloud Free Tier or Hetzner), follow [docs/deploy.md](docs/deploy.md) (in Spanish). Use a dedicated server: the service controls Docker.
+
+## Ghidra export
+
+After an analysis, the web page offers **Exportar a Ghidra (ZIP)**; from the CLI, run `uv run lupabin export-ghidra report.json --sample file.exe --output evidence.zip`. The ZIP holds the full fact report as JSON and a fixed Java script, `ImportLupaBin.java`, to run from Ghidra's Script Manager (tested with Ghidra 12.1.3 and Java 21). The script refuses a program whose SHA-256 differs from the report's, saves a review file listing every annotation and every piece of evidence it cannot place, and only after you confirm adds comments and `Note` bookmarks. It never removes your own annotations, a second import adds nothing, and a failure or cancellation leaves the program unchanged.
+
+## Self-graded practice
+
+In the web report, **Practicar con este informe** opens up to seven multiple-choice questions about that report (PE structure, imports versus calls, literal and decoded strings, incomplete coverage), each graded with its explanation and the evidence behind it. From the CLI, `uv run --frozen lupabin challenge report.json --practice` asks in the terminal, and `--json` gives an `answers_template` to fill in and grade with `--answers`. Grading is always recomputed from the report. It is practice, not a cheat-proof exam, and the score is about your answers, never about the sample's risk.
 
 ## Safety
 

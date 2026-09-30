@@ -26,12 +26,17 @@ jobs:
         with:
           version: "0.8.22"
           enable-cache: true
+      - name: Setup Java v4.9.1 (JDK 21, as Ghidra 12 requires)
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "21"
       - run: uv sync --frozen
       - run: uv run --frozen ruff format --check .
       - run: uv run --frozen ruff check .
       - run: uv run --frozen mypy src
       - run: uv run --frozen pytest -m "not docker"
-      - run: node --test tests/test_web_vt.cjs
+      - run: node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs
       - run: uv run --frozen python -m lupabin.evidence.schema --check
       - run: uv run --frozen python -m lupabin.explain.schema --check
       - run: uv build

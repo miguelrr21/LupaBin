@@ -44,6 +44,16 @@ Cada evidencia tiene `id` (`E1`, `E2`…, único y local al informe), `source`, 
 
 **Determinismo.** Para los mismos bytes, versiones, reglas y configuración, las extracciones que completan producen los mismos hechos, en el mismo orden y con los mismos IDs. Los timestamps y las duraciones no forman parte de los hechos. Los límites de tiempo (ver «Componentes y límites del código») pueden producir resultados parciales distintos en una máquina más lenta: lo publicado sigue siendo cierto, y la diferencia se declara con su código.
 
+## Documentos de práctica separados
+
+El modo reto no añade campos ni evidencias a este contrato. Sus modelos del host (`src/lupabin/challenge/models.py`) tienen versión propia **0.1.0** y banco `lupabin-challenges-v1`:
+
+- `Challenge`: `id`, `sample_sha256`, `report_schema`, `report_digest`, preguntas (`id`, `rule`, `level`, `prompt`, tres `options`, `citations`), aviso y motivo de abstención si no hay preguntas. Cada cita identifica `evidence_id` y ruta de campo dentro de esa evidencia, o `evidence_id=null` con ruta en el informe para cobertura; su `value` es una representación neutralizada para mostrar, no un nuevo hecho.
+- `Answers`: identidad del reto, hash de muestra, contrato y banco, más `selections` con `question_id` y `option_id` (`A`, `B`, `C` o `null`). Una selección omitida equivale a no responder; preguntas duplicadas, desconocidas u opciones ajenas se rechazan. La CLI rechaza también claves JSON repetidas en cualquier objeto de respuestas.
+- `Result`: identidad, contadores de respuestas y corrección por pregunta (`correct`, `incorrect`, `unanswered`), respuesta esperada, explicación, límite y citas. La corrección se regenera desde el informe; no valida autenticidad de la muestra ni puntúa su riesgo.
+
+La CLI envuelve `challenge` y `answers_template`, o `result`, junto con `origin` para preservar si el informe se contrastó con la muestra. No importa el archivo de preguntas para puntuarlo. Los documentos no están firmados y no son intercambiables entre versiones del banco o informes modificados. La web recibe una proyección con soluciones para práctica local, no un examen protegido. Véase [el método de retos](metodo.md#retos-autocorregibles).
+
 ## Hechos del PE y cadenas
 
 - **`pe_header`**: los enteros declarados de la cabecera. El timestamp es un entero declarado, no una fecha de compilación acreditada.

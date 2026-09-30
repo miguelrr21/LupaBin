@@ -90,6 +90,24 @@ uv run lupabin-web
 
 y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker.
 
+## Llevar las evidencias a Ghidra
+
+Después del análisis, la web ofrece **Exportar a Ghidra (ZIP)**. Desde la CLI se exporta un informe guardado:
+
+```text
+uv run lupabin export-ghidra informe.json --sample "ruta/al/archivo.exe" --output evidencias-ghidra.zip
+```
+
+El archivo original es obligatorio: antes de exportar se comprueba que el informe corresponde a sus bytes. No se repite el análisis, no se consulta VirusTotal y nunca se sobrescribe un ZIP existente. El ZIP trae `lupabin-ghidra.json`, con el informe completo, e `ImportLupaBin.java`, un script fijo que no incorpora texto de la muestra.
+
+1. Extrae el ZIP y abre el programa en Ghidra.
+2. En **Window → Script Manager**, añade la carpeta extraída y ejecuta `ImportLupaBin.java`. Está probado con Ghidra 12.1.3 y Java 21, y no necesita Python.
+3. Elige `lupabin-ghidra.json`. Si el SHA-256 del programa abierto no coincide con el del informe, el script no cambia nada.
+4. Guarda la revisión previa en un archivo nuevo y léela: lista cada anotación que se va a añadir y cada evidencia que no se puede situar, con su motivo. Después, confirma.
+5. El script añade comentarios y marcadores `Note` en la categoría `LupaBin/...`. No borra ni sustituye tus anotaciones, importar dos veces el mismo JSON no añade nada y, si algo falla o cancelas, el programa queda como estaba. Guarda el programa para conservar los cambios.
+
+Cada evidencia se sitúa con el mapa de bytes de Ghidra, sin suponer que un offset del archivo sea una dirección, y sigue en su sitio si cambias la base de la imagen. Las decodificaciones se anotan sobre los bytes codificados. Lo que no se puede situar con certeza (overlays, rangos ambiguos, bytes modificados) no se anota y aparece en la revisión. [Detalles y límites](docs/metodo.md#exportación-a-ghidra).
+
 ## Qué aporta VirusTotal (activo por defecto, desactivable)
 
 Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), LupaBin añade por defecto los resultados de VirusTotal como **fuente externa, no verificada por LupaBin**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
@@ -111,6 +129,20 @@ El informe añade el significado documentado de algunas etiquetas de Microsoft y
 También contrasta las técnicas de comportamiento que comunica VirusTotal con las seis técnicas cubiertas por las capacidades locales: exige el mismo SHA-256 y el mismo identificador, cita las evidencias del caso estático y distingue lo no observado de lo no analizable. Una coincidencia no confirma ejecución ni explica el veredicto del antivirus; una ausencia no lo refuta.
 
 Más detalle: [VirusTotal](docs/metodo.md#virustotal).
+
+## Modo reto: practicar con tu informe
+
+En la web, **Practicar con este informe** abre hasta siete preguntas tipo test sobre el propio informe: cabecera y secciones PE, importaciones frente a llamadas, cadenas literales y decodificadas, y cobertura incompleta. Al corregir, cada pregunta muestra la respuesta correcta, por qué lo es y las evidencias que la respaldan. Si el informe no tiene datos para una pregunta, esa pregunta no aparece. No se guarda nada en el servidor.
+
+Desde la CLI, con un informe guardado:
+
+```text
+uv run --frozen lupabin challenge informe.json --practice
+```
+
+`--practice` pregunta en la terminal (A, B o C; Enter la deja sin responder). Para contestar en un archivo, `--json` genera las preguntas y una plantilla `answers_template`: guárdala en `respuestas.json`, cambia cada `option_id` de `null` a `"A"`, `"B"` o `"C"` y corrige con `--answers respuestas.json`. La corrección se recalcula siempre desde `informe.json`, así que no admite un solucionario propio. `--sample archivo.exe` contrasta además el informe con la muestra. El comando no consulta VirusTotal ni repite el análisis, y termina con 0 si generó o corrigió el reto, 1 si no pudo cargar o contrastar el informe y 2 si las respuestas no son válidas.
+
+Es práctica, no un examen: en la web, las soluciones viajan al navegador y se pueden consultar. La nota mide tus respuestas, no el riesgo del archivo. [Método y límites](docs/metodo.md#retos-autocorregibles).
 
 ## Salida y abstención
 
@@ -204,7 +236,7 @@ uv run --frozen ruff format --check .
 uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
-node --test tests/test_web_vt.cjs
+node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs
 uv run --frozen python -m lupabin.evidence.schema --check
 uv run --frozen python -m lupabin.explain.schema --check
 uv build

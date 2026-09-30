@@ -21,8 +21,9 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from lupabin.errors import MESSAGES, FailureCode, LupaBinError
-from lupabin.evidence.models import Limits
+from lupabin.evidence.models import Limits, Report
 from lupabin.explain.engine import ExplanationError, explain, validate
+from lupabin.ghidra import build_bundle as ghidra_bundle
 from lupabin.glossary.catalog import load_glossary
 from lupabin.runner import IMAGE, run_isolated
 from lupabin.transport import DockerCLI, Transport
@@ -165,6 +166,24 @@ def create_app(
             settings.cloudflare,
         )
 
+    def build_response(report: Report, data: bytes) -> Response:
+        try:
+            archive = ghidra_bundle(report, data)
+        except (LupaBinError, ValueError, OSError):
+            archive = None
+        try:
+            explanation = explain(report, glossary)
+            items = validate(explanation, report, glossary)
+        except ExplanationError:
+            return failure("invalid_worker_output", 500)
+        # VirusTotal is asked separately (/api/virustotal), so the report never waits for it
+        shown = view.build(report, explanation, items, glossary, None)
+        if archive is not None:
+            view.ghidra_download(shown, archive)
+        else:
+            shown["downloads"]["ghidra_error"] = "No se pudo crear una exportación Ghidra válida."
+        return JSONResponse(shown)
+
     async def analyze(request: Request) -> Response:
         client = visitor(request)
         if not rate.allow(client):
@@ -184,6 +203,21 @@ def create_app(
         try:
             async with slots:
                 report = await run_isolated(data, limits, transport())
+                pending = asyncio.gather(
+                    asyncio.to_thread(build_response, report, data), return_exceptions=True
+                )
+                cancelled = False
+                while not pending.done():
+                    try:
+                        await asyncio.shield(pending)
+                    except asyncio.CancelledError:
+                        cancelled = True
+                result = pending.result()[0]
+                if cancelled:
+                    raise asyncio.CancelledError
+                if isinstance(result, BaseException):
+                    raise result
+                return result
         except Busy:
             return failure(
                 "busy",
@@ -192,13 +226,6 @@ def create_app(
             )
         except LupaBinError as error:
             return failure(error.code, STATUS.get(error.code, 500))
-        try:
-            explanation = await asyncio.to_thread(explain, report, glossary)
-            items = validate(explanation, report, glossary)
-        except ExplanationError:
-            return failure("invalid_worker_output", 500)
-        # VirusTotal is asked separately (/api/virustotal), so the report never waits for it
-        return JSONResponse(view.build(report, explanation, items, glossary, None))
 
     def vt_refused(request: Request, limit: RateLimit) -> Response | None:
         if not settings.virustotal:
