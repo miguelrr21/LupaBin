@@ -1,6 +1,6 @@
 [Unit]
 Description=LupaBin web: static analysis of Windows executables (the sample is never run)
-Documentation=file:///opt/lupabin/docs/deploy.md
+Documentation=https://github.com/miguelrr21/LupaBin
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
