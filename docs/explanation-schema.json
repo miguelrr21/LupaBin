@@ -149,6 +149,7 @@
                 "entropy_limit",
                 "anomaly_limit",
                 "toolchain_limit",
+                "upx_layout_unrecognized",
                 "evidence_budget",
                 "dependency_omitted",
                 "output_limit",
@@ -206,6 +207,7 @@
                 "exports",
                 "anomalies",
                 "toolchain",
+                "upx",
                 "ascii",
                 "utf16le",
                 "yara_rules",
@@ -281,7 +283,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "0.11.0",
+          "const": "0.12.0",
           "title": "Schema Version",
           "type": "string"
         }

@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "lupabin_glossary",
- "revision": "1.12.0",
+ "revision": "1.13.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -292,6 +292,16 @@
    "id": "toolchain.rich_header",
    "filename": "toolchain.rich_header.toml",
    "sha256": "72e2db84839603b5d29a96e981cca2ac34d84d80d74f64c1fcae080a1d43b515"
+  },
+  {
+   "id": "upx.import_list",
+   "filename": "upx.import_list.toml",
+   "sha256": "2d68b961e83d67eb40f239c5b271372aeae392bd03fe888643549a44a5a2189a"
+  },
+  {
+   "id": "upx.packing",
+   "filename": "upx.packing.toml",
+   "sha256": "c470875d91c5c6f25d1f0a8a9fcf2bbcb8d35659baf73848e990c6fe1403200f"
   },
   {
    "id": "yara.match",

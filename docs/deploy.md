@@ -184,5 +184,5 @@ La actualización conserva tu `web.env` y un `Caddyfile` con tu dominio.
 sudo systemctl disable --now lupabin-web
 sudo rm -rf /opt/lupabin /etc/lupabin /var/lib/lupabin /etc/systemd/system/lupabin-web.service
 sudo cp /etc/caddy/Caddyfile.antes-de-lupabin /etc/caddy/Caddyfile 2>/dev/null; sudo systemctl reload caddy
-sudo docker rmi lupabin-worker:0.11.0
+sudo docker rmi lupabin-worker:0.12.0
 ```

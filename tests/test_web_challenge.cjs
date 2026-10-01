@@ -20,12 +20,12 @@ function page() {
   });
   const get = (id) => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   const payload = {
-    sample: { sha256: "a".repeat(64) }, report_digest: "c".repeat(64), report_schema: "0.11.0",
+    sample: { sha256: "a".repeat(64) }, report_digest: "c".repeat(64), report_schema: "0.12.0",
     challenge: {
       challenge_id: "b".repeat(64),
       challenge: {
         id: "b".repeat(64), sample_sha256: "a".repeat(64), report_digest: "c".repeat(64),
-        schema_version: "0.1.0", report_schema: "0.11.0", catalog: "lupabin-challenges-v1",
+        schema_version: "0.1.0", report_schema: "0.12.0", catalog: "lupabin-challenges-v1",
         notice: "Práctica, no examen protegido.", empty_reason: null,
         questions: [{ id: "Q1", rule: "string", level: "observed", prompt: "<script>hostile</script>",
           citations: [{ evidence_id: "E1", path: "data.text", value: "<img src=x>" }],

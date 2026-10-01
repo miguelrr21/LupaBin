@@ -201,6 +201,17 @@ def _evidence(item: Item) -> str:
     return f"Evidencia: {shown}" + (f" y {more} más" if more > 0 else "")
 
 
+PACKED_WITH_NOTE = "descomprimido sin ejecutarlo; el código analizado es el del cargador de UPX"
+
+
+def packed_with(items: tuple[Item, ...]) -> str | None:
+    """The UPX block the validated items show, with its item, or None."""
+    for item in items:
+        if item.rule in ("upx.image@1", "upx.image_plain@1"):
+            return f"UPX, método {item.slots['method']} ({item.id}): {PACKED_WITH_NOTE}."
+    return None
+
+
 class Summary(NamedTuple):
     groups: list[tuple[str, list[Item]]]  # (tactic, its capability items), design order
     warnings: list[str | Item]  # what limits the summary; an Item is the density note
@@ -303,6 +314,9 @@ def to_text(
     tools = made_with(items)
     if tools:
         lines += wrap(tools, "          ", "Hecho con ")
+    packed = packed_with(items)
+    if packed:
+        lines += wrap(packed.removeprefix("UPX, "), "          ", "UPX       ")
     entered = main_line(items)
     if entered:
         lines += wrap(entered, "          ", "main      ")
@@ -428,6 +442,9 @@ def to_markdown(
     tools = made_with(items)
     if tools:
         lines.append(f"- **Hecho con**: {markdown_text(tools)}")
+    packed = packed_with(items)
+    if packed:
+        lines.append(f"- **Empaquetado**: {markdown_text(packed)}")
     entered = main_line(items)
     if entered:
         lines.append(f"- **main**: {markdown_text(entered)}")

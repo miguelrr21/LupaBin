@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.12.0",
-          "default": "0.12.0",
+          "const": "0.11.0",
+          "default": "0.11.0",
           "title": "Version",
           "type": "string"
         }
@@ -91,7 +91,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -755,7 +754,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -998,7 +996,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1146,7 +1143,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1237,7 +1233,6 @@
                 "entropy_limit",
                 "anomaly_limit",
                 "toolchain_limit",
-                "upx_layout_unrecognized",
                 "evidence_budget",
                 "dependency_omitted",
                 "output_limit",
@@ -1289,7 +1284,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1454,7 +1448,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1587,7 +1580,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -2209,7 +2201,7 @@
           "items": {
             "$ref": "#/$defs/ComponentRun"
           },
-          "maxItems": 9,
+          "maxItems": 8,
           "title": "Components",
           "type": "array"
         },
@@ -2399,7 +2391,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -2541,7 +2532,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -2737,7 +2727,6 @@
             "exports",
             "anomalies",
             "toolchain",
-            "upx",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -2833,379 +2822,6 @@
         "name"
       ],
       "title": "Transform",
-      "type": "object"
-    },
-    "UpxImageData": {
-      "additionalProperties": false,
-      "description": "A UPX 5 block (evidence/upx.py): its header, where its packed bytes are, and what\nthe unpacked bytes declare about the original program. The unpacked bytes are\nidentified by their size, Adler-32 and SHA-256, and the host derives them again.",
-      "properties": {
-        "format": {
-          "enum": [
-            "win32/pe",
-            "win64/pe"
-          ],
-          "title": "Format",
-          "type": "string"
-        },
-        "header_hex": {
-          "pattern": "^(?:[a-f0-9]{2}){32}$",
-          "title": "Header Hex",
-          "type": "string"
-        },
-        "imports": {
-          "anyOf": [
-            {
-              "maximum": 10000,
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Imports"
-        },
-        "level": {
-          "maximum": 255,
-          "minimum": 0,
-          "title": "Level",
-          "type": "integer"
-        },
-        "method": {
-          "enum": [
-            "nrv2b",
-            "nrv2d",
-            "nrv2e",
-            "lzma"
-          ],
-          "title": "Method",
-          "type": "string"
-        },
-        "method_id": {
-          "const": "upx5-pe-v1",
-          "default": "upx5-pe-v1",
-          "title": "Method Id",
-          "type": "string"
-        },
-        "original_entry_rva": {
-          "anyOf": [
-            {
-              "maximum": 4294967295,
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Original Entry Rva"
-        },
-        "original_image_base": {
-          "anyOf": [
-            {
-              "maximum": 18446744073709551615,
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Original Image Base"
-        },
-        "original_sections": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/UpxSection"
-              },
-              "maxItems": 96,
-              "minItems": 1,
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Original Sections"
-        },
-        "original_size": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Original Size",
-          "type": "integer"
-        },
-        "packed_adler32": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Packed Adler32",
-          "type": "integer"
-        },
-        "packed_offset": {
-          "minimum": 0,
-          "title": "Packed Offset",
-          "type": "integer"
-        },
-        "packed_size": {
-          "exclusiveMinimum": 0,
-          "title": "Packed Size",
-          "type": "integer"
-        },
-        "unpacked_adler32": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Unpacked Adler32",
-          "type": "integer"
-        },
-        "unpacked_sha256": {
-          "pattern": "^[a-f0-9]{64}$",
-          "title": "Unpacked Sha256",
-          "type": "string"
-        },
-        "unpacked_size": {
-          "exclusiveMinimum": 0,
-          "maximum": 33554432,
-          "title": "Unpacked Size",
-          "type": "integer"
-        },
-        "version": {
-          "maximum": 255,
-          "minimum": 0,
-          "title": "Version",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "header_hex",
-        "version",
-        "format",
-        "method",
-        "level",
-        "packed_offset",
-        "packed_size",
-        "packed_adler32",
-        "unpacked_size",
-        "unpacked_adler32",
-        "unpacked_sha256",
-        "original_size"
-      ],
-      "title": "UpxImageData",
-      "type": "object"
-    },
-    "UpxImageEvidence": {
-      "additionalProperties": false,
-      "properties": {
-        "component": {
-          "const": "upx",
-          "default": "upx",
-          "title": "Component",
-          "type": "string"
-        },
-        "confidence": {
-          "const": "inferred",
-          "default": "inferred",
-          "title": "Confidence",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/UpxImageData"
-        },
-        "id": {
-          "maxLength": 16,
-          "pattern": "^E[1-9][0-9]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "upx_image",
-          "default": "upx_image",
-          "title": "Kind",
-          "type": "string"
-        },
-        "location": {
-          "$ref": "#/$defs/Location"
-        },
-        "provenance": {
-          "$ref": "#/$defs/Provenance"
-        },
-        "source": {
-          "const": "pe",
-          "default": "pe",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "location",
-        "data"
-      ],
-      "title": "UpxImageEvidence",
-      "type": "object"
-    },
-    "UpxImportData": {
-      "additionalProperties": false,
-      "description": "A function in the import list of a UPX block: the loader resolves it and writes\nits address in the original program's import slot `iat_rva`. The entry lies in the\nunpacked bytes; the DLL's name, in the packed file.",
-      "properties": {
-        "dll": {
-          "$ref": "#/$defs/Name"
-        },
-        "dll_rva": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Dll Rva",
-          "type": "integer"
-        },
-        "function": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Name"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "iat_rva": {
-          "exclusiveMinimum": 0,
-          "maximum": 4294967295,
-          "title": "Iat Rva",
-          "type": "integer"
-        },
-        "ordinal": {
-          "anyOf": [
-            {
-              "maximum": 65535,
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Ordinal"
-        },
-        "stream_length": {
-          "maximum": 4098,
-          "minimum": 2,
-          "title": "Stream Length",
-          "type": "integer"
-        },
-        "stream_offset": {
-          "minimum": 0,
-          "title": "Stream Offset",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "dll",
-        "dll_rva",
-        "iat_rva",
-        "stream_offset",
-        "stream_length"
-      ],
-      "title": "UpxImportData",
-      "type": "object"
-    },
-    "UpxImportEvidence": {
-      "additionalProperties": false,
-      "properties": {
-        "component": {
-          "const": "upx",
-          "default": "upx",
-          "title": "Component",
-          "type": "string"
-        },
-        "confidence": {
-          "const": "inferred",
-          "default": "inferred",
-          "title": "Confidence",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/UpxImportData"
-        },
-        "id": {
-          "maxLength": 16,
-          "pattern": "^E[1-9][0-9]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "upx_import",
-          "default": "upx_import",
-          "title": "Kind",
-          "type": "string"
-        },
-        "location": {
-          "default": null,
-          "title": "Location",
-          "type": "null"
-        },
-        "provenance": {
-          "$ref": "#/$defs/Provenance"
-        },
-        "source": {
-          "const": "pe",
-          "default": "pe",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "data"
-      ],
-      "title": "UpxImportEvidence",
-      "type": "object"
-    },
-    "UpxSection": {
-      "additionalProperties": false,
-      "description": "A section of the original program, as the header copy in the block lists it.",
-      "properties": {
-        "name_raw_hex": {
-          "pattern": "^[a-f0-9]{16}$",
-          "title": "Name Raw Hex",
-          "type": "string"
-        },
-        "name_text": {
-          "anyOf": [
-            {
-              "maxLength": 8,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Name Text"
-        },
-        "rva": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Rva",
-          "type": "integer"
-        },
-        "virtual_size": {
-          "maximum": 4294967295,
-          "minimum": 0,
-          "title": "Virtual Size",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "name_raw_hex",
-        "name_text",
-        "rva",
-        "virtual_size"
-      ],
-      "title": "UpxSection",
       "type": "object"
     },
     "XorAnchor": {
@@ -3620,8 +3236,6 @@
             "string": "#/$defs/StringEvidence",
             "string_reference": "#/$defs/StringReferenceEvidence",
             "toolchain_marker": "#/$defs/ToolchainEvidence",
-            "upx_image": "#/$defs/UpxImageEvidence",
-            "upx_import": "#/$defs/UpxImportEvidence",
             "yara_match": "#/$defs/YaraEvidence"
           },
           "propertyName": "kind"
@@ -3650,12 +3264,6 @@
           },
           {
             "$ref": "#/$defs/ToolchainEvidence"
-          },
-          {
-            "$ref": "#/$defs/UpxImageEvidence"
-          },
-          {
-            "$ref": "#/$defs/UpxImportEvidence"
           },
           {
             "$ref": "#/$defs/YaraEvidence"
@@ -3721,8 +3329,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.12.0",
-      "default": "0.12.0",
+      "const": "0.11.0",
+      "default": "0.11.0",
       "title": "Schema Version",
       "type": "string"
     },

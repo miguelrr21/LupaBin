@@ -714,6 +714,139 @@ def build_toolchain_demo(*, bits=32, go_inline=True, rich_key=None, idents=(GCC_
     return bytes(data) + archive
 
 
+UPX_METHOD_CODES = {"nrv2b": 2, "nrv2d": 5, "nrv2e": 8, "lzma": 14}
+UPX_FUNCTIONS = (b"ExitProcess", b"GetTickCount")
+UPX_ORDINAL = 5
+UPX_IAT = 0x40  # relative to the image: the original slots start at RVA 0x1040
+
+
+class _NrvWriter:
+    """Bits most significant first in 32-bit little-endian words, each word placed in
+    the stream when its first bit is written, between the literal bytes."""
+
+    def __init__(self):
+        self.out = bytearray()
+        self.word_at = 0
+        self.used = 32
+
+    def bit(self, value):
+        if self.used == 32:
+            self.word_at = len(self.out)
+            self.out += bytes(4)
+            self.used = 0
+        if value:
+            word = int.from_bytes(self.out[self.word_at : self.word_at + 4], "little")
+            word |= 1 << (31 - self.used)
+            self.out[self.word_at : self.word_at + 4] = word.to_bytes(4, "little")
+        self.used += 1
+
+    def byte(self, value):
+        self.out.append(value)
+
+
+def _nrv_end_bits(method):
+    """The bits of the end marker's offset number, 0x1000002: followed by the byte 0xFF
+    it reads as (0x1000002 - 3) * 256 + 0xFF = 0xFFFFFFFF."""
+    target = 0x1000002
+    if method == "nrv2b":
+        digits = bin(target)[3:]
+        return [b for i, d in enumerate(digits) for b in (int(d), int(i == len(digits) - 1))]
+    # NRV2D/2E: x = 2x + bit, then a stop bit, else x = 2(x - 1) + bit; from x = 1
+    steps = []
+    value, stop = target, 1
+    while True:
+        steps.append((value & 1, stop))
+        stop, value = 0, value >> 1
+        if value == 1:
+            break
+        steps.append((None, value & 1))
+        value = (value >> 1) + 1
+    bits = []
+    for first, second in reversed(steps):
+        bits += [second] if first is None else [first, second]
+    return bits
+
+
+def nrv_literals(data, method):
+    """An NRV2B/2D/2E stream that holds `data` as literals only, then the end marker."""
+    writer = _NrvWriter()
+    for value in data:
+        writer.bit(1)
+        writer.byte(value)
+    writer.bit(0)
+    for value in _nrv_end_bits(method):
+        writer.bit(value)
+    writer.byte(0xFF)
+    return bytes(writer.out)
+
+
+def upx_stream(*, bits=32, tail=True, functions=UPX_FUNCTIONS):
+    """Unpacked bytes in UPX's layout: an inert image from RVA 0x1000, the import list,
+    an empty relocation stream, a copy of the original header and the offsets."""
+    image = (b"LUPABIN UPX PRACTICE IMAGE\0" * 18).ljust(0x200, b"\0")
+    imports_at = len(image)
+    entries = b"".join(b"\x01" + name + b"\0" for name in functions)
+    entries += b"\xff" + struct.pack("<H", UPX_ORDINAL) + b"\0"
+    listed = struct.pack("<II", 0x100, UPX_IAT) + entries + struct.pack("<I", 0)
+    relocations_at = imports_at + len(listed)
+    copy_at = relocations_at + 1
+    optional_size = 224 if bits == 32 else 240
+    machine = 0x14C if bits == 32 else 0x8664
+    header = bytearray(b"PE\0\0")
+    header += struct.pack("<HHIIIHH", machine, 2, 0, 0, 0, optional_size, 0x102)
+    optional = bytearray(optional_size)
+    struct.pack_into("<H", optional, 0, 0x10B if bits == 32 else 0x20B)
+    struct.pack_into("<I", optional, 16, 0x1123)
+    if bits == 32:
+        struct.pack_into("<I", optional, 28, 0x400000)
+    else:
+        struct.pack_into("<Q", optional, 24, 0x140000000)
+    header += optional
+    for name, rva, size in ((b".text", 0x1000, 0x180), (b".data", 0x2000, 0x40)):
+        row = bytearray(40)
+        row[:8] = name.ljust(8, b"\0")
+        struct.pack_into("<II", row, 8, size, rva)
+        header += row
+    header += struct.pack("<III", imports_at, 0, relocations_at) + b"\0"
+    stream = image + listed + b"\0" + bytes(header)
+    return stream + struct.pack("<I", copy_at if tail else len(stream) + 1)
+
+
+def build_upx_demo(*, bits=32, method="lzma", tail=True, damage=False, functions=UPX_FUNCTIONS):
+    """build_pe plus a section .upx at RVA 0x2000 that holds a UPX header and its packed
+    block. The block is made here from inert bytes; nothing was packed with UPX.
+    `damage` flips one packed byte, so the declared Adler-32 no longer holds."""
+    import lzma
+    import zlib
+
+    stream = upx_stream(bits=bits, tail=tail, functions=functions)
+    if method == "lzma":
+        lc, lp, pb = 3, 0, 2
+        filters = [{"id": lzma.FILTER_LZMA1, "lc": lc, "lp": lp, "pb": pb, "dict_size": 1 << 16}]
+        packed = bytes([(lc + lp) << 3 | pb, lp << 4 | lc])
+        packed += lzma.compress(stream, format=lzma.FORMAT_RAW, filters=filters)
+    else:
+        packed = nrv_literals(stream, method)
+    header = b"UPX!" + bytes([13, 9 if bits == 32 else 36, UPX_METHOD_CODES[method], 8])
+    header += struct.pack(
+        "<5I", zlib.adler32(stream), zlib.adler32(packed), len(stream), len(packed), 0x1400
+    )
+    header += bytes(4)
+    if damage:
+        packed = packed[:-1] + bytes([packed[-1] ^ 1])
+    body = header + packed
+    raw = (len(body) + 0x1FF) // 0x200 * 0x200
+    data = bytearray(build_pe(bits=bits))
+    opt = 0x98
+    section = opt + (224 if bits == 32 else 240) + 40
+    struct.pack_into("<H", data, 0x86, 2)
+    data[section : section + 8] = b".upx\0\0\0\0"
+    struct.pack_into("<IIII", data, section + 8, raw, 0x2000, raw, len(data))
+    struct.pack_into("<I", data, section + 36, 0x60000020)
+    struct.pack_into("<I", data, opt + 56, 0x2000 + raw)
+    return bytes(data) + body.ljust(raw, b"\0")
+
+
 def main():
     import argparse
     from pathlib import Path
@@ -733,6 +866,7 @@ def main():
             "args-demo",
             "capability-demo",
             "toolchain-demo",
+            "upx-demo",
         ),
         default="basic",
     )
@@ -745,6 +879,8 @@ def main():
         data = build_capability_demo()
     elif args.scenario == "args-demo":
         data = build_args_demo(bits=args.bits)
+    elif args.scenario == "upx-demo":
+        data = build_upx_demo(bits=args.bits)
     elif args.scenario == "toolchain-demo":
         data = build_toolchain_demo(bits=args.bits)
     elif args.scenario == "decode-demo":

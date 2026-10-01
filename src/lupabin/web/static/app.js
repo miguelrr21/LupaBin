@@ -164,6 +164,7 @@ function renderHead(data, name) {
     ["Tipo", data.sample.type, false],
   ];
   if (data.made_with) rows.push(["Hecho con", data.made_with, false]);
+  if (data.packed_with) rows.push(["Empaquetado", data.packed_with, false]);
   if (data.main) rows.push(["main", data.main, false]);
   if (data.texts) rows.push(["Textos", data.texts, false]);
   if (data.areas) rows.push(["Familias", data.areas, false]);
@@ -555,7 +556,7 @@ function challenge_grade(data, selections) {
   if (!challenge || !digest(challenge.id) || !digest(challenge.sample_sha256) ||
       !digest(challenge.report_digest) || challenge.sample_sha256 !== data.sample.sha256 ||
       challenge.report_digest !== data.report_digest || challenge.id !== packet.challenge_id ||
-      challenge.schema_version !== "0.1.0" || challenge.report_schema !== "0.11.0" ||
+      challenge.schema_version !== "0.1.0" || challenge.report_schema !== "0.12.0" ||
       challenge.report_schema !== data.report_schema || challenge.catalog !== "lupabin-challenges-v1") {
     throw new Error("El reto no corresponde a este informe.");
   }

@@ -1,0 +1,13 @@
+id = "upx.packing"
+title = "Empaquetado con UPX"
+revision = "1.0.0"
+lang = "es"
+summary = "UPX es un empaquetador de ejecutables libre: comprime el programa y le añade un pequeño cargador que, al arrancar, lo descomprime en memoria y le pasa el control."
+body = "En un archivo empaquetado con UPX, casi todo el programa original está en un único bloque comprimido. Sin descomprimirlo solo se ven el cargador de UPX y unas pocas funciones importadas que ese cargador necesita, como LoadLibraryA, GetProcAddress o VirtualProtect: por eso el análisis del archivo tal cual dice muy poco del programa.\n\nLupaBin lee la cabecera de UPX, que empieza por «UPX!», descomprime el bloque sin ejecutar nada y comprueba las dos sumas Adler-32 que declara la cabecera: la de los bytes comprimidos y la de los descomprimidos. Si alguna no coincide, no publica nada. Al final del bloque, UPX guarda una copia de la cabecera PE original, con sus secciones y su punto de entrada, y la lista de funciones que el cargador tiene que resolver.\n\nMITRE ATT&CK describe el empaquetado como una forma de ocultar código (T1027.002) y cita UPX como ejemplo, pero muchos programas legítimos también lo usan para ocupar menos."
+not_proven = "Estar empaquetado no indica intención maliciosa. Descomprimir no es ejecutar, y LupaBin aún no analiza el código descomprimido: las llamadas y capacidades del informe son las del cargador de UPX, no las del programa."
+related = ["upx.import_list", "toolchain.marker"]
+sources = [
+  { title = "UPX: the Ultimate Packer for eXecutables", publisher = "Proyecto UPX", url = "https://upx.github.io/", verified_on = 2026-10-01 },
+  { title = "Obfuscated Files or Information: Software Packing (T1027.002)", publisher = "MITRE ATT&CK", url = "https://attack.mitre.org/techniques/T1027/002/", verified_on = 2026-10-01 },
+  { title = "Cómo trabaja LupaBin: UPX", publisher = "Proyecto LupaBin", document = "docs/metodo.md#upx", verified_on = 2026-10-01 },
+]

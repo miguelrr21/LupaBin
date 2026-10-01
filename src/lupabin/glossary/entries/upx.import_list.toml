@@ -1,0 +1,11 @@
+id = "upx.import_list"
+title = "Lista de importaciones de UPX"
+revision = "1.0.0"
+lang = "es"
+summary = "UPX quita la tabla de importaciones del programa original y guarda dentro del bloque comprimido una lista propia: para cada DLL, las funciones que el cargador busca al arrancar y la casilla del programa original donde escribe cada dirección."
+body = "Al arrancar, el cargador de UPX recorre esa lista, carga cada DLL, obtiene la dirección de cada función por su nombre o por su ordinal y la escribe en la tabla de direcciones de importación (IAT) del programa original, en la casilla que indica la lista.\n\nSon, por tanto, las importaciones del programa original: las que en un archivo sin empaquetar se verían en su tabla de importaciones. LupaBin las lee del bloque descomprimido, sin ejecutarlo, y toma el nombre de cada DLL de la pequeña tabla de importaciones que conserva el archivo empaquetado."
+not_proven = "Una importación no demuestra que el código llame a esa función, ni cuándo, ni con qué intención."
+related = ["upx.packing", "pe.imports"]
+sources = [
+  { title = "Cómo trabaja LupaBin: UPX", publisher = "Proyecto LupaBin", document = "docs/metodo.md#upx", verified_on = 2026-10-01 },
+]

@@ -9,6 +9,7 @@ from lupabin.errors import LupaBinError
 from lupabin.evidence.code import verify_calls
 from lupabin.evidence.models import Limits, Report
 from lupabin.evidence.toolchain_checks import verify_markers
+from lupabin.evidence.upx_checks import verify_upx
 from lupabin.evidence.yara import validate_matches
 from lupabin.extractors.decode import verify_decodings
 from lupabin.extractors.strings import verify_strings
@@ -17,7 +18,7 @@ from lupabin.rules.catalog import CatalogError, load_catalog
 from lupabin.transport import Completed as Completed
 from lupabin.transport import DockerCLI, Transport
 
-IMAGE = "lupabin-worker:0.11.0"
+IMAGE = "lupabin-worker:0.12.0"
 SOURCES = ("pe", "strings", "yara", "decode", "code")
 LABEL = "org.lupabin.analysis"
 
@@ -111,7 +112,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
         try:
             envelope = json.loads(response.stdout)
             if isinstance(envelope, dict) and isinstance(envelope.get("schema_version"), str):
-                if envelope["schema_version"] != "0.11.0":
+                if envelope["schema_version"] != "0.12.0":
                     raise LupaBinError("incompatible_worker")
             report = Report.model_validate_json(response.stdout)
         except (ValidationError, ValueError, RecursionError):
@@ -132,6 +133,7 @@ async def run_isolated(data: bytes, limits: Limits, transport: Transport) -> Rep
             verify_decodings(report.evidence, blob.data)
             verify_calls(report.evidence, blob.data)
             verify_markers(report.evidence, blob.data)
+            verify_upx(report.evidence, blob.data)
         except ValueError:
             raise LupaBinError("invalid_worker_output") from None
         context = report.yara_context
