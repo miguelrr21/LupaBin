@@ -556,7 +556,7 @@ function challenge_grade(data, selections) {
   if (!challenge || !digest(challenge.id) || !digest(challenge.sample_sha256) ||
       !digest(challenge.report_digest) || challenge.sample_sha256 !== data.sample.sha256 ||
       challenge.report_digest !== data.report_digest || challenge.id !== packet.challenge_id ||
-      challenge.schema_version !== "0.1.0" || challenge.report_schema !== "0.12.0" ||
+      challenge.schema_version !== "0.1.0" || challenge.report_schema !== "0.13.0" ||
       challenge.report_schema !== data.report_schema || challenge.catalog !== "lupabin-challenges-v1") {
     throw new Error("El reto no corresponde a este informe.");
   }

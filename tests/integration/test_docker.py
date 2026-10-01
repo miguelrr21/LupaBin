@@ -20,7 +20,7 @@ def require_docker():
         info = await client.run(("info", "--format", "{{.OSType}}"))
         assert info.code == 0 and info.stdout.strip() == b"linux", "Linux Docker is required"
         image = await client.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
-        assert image.code == 0, "Build lupabin-worker:0.12.0 before integration tests"
+        assert image.code == 0, "Build lupabin-worker:0.13.0 before integration tests"
 
     asyncio.run(check())
 
@@ -47,7 +47,7 @@ def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
     result = CliRunner().invoke(app, ["analyze", str(path), "--json"])
     assert result.exit_code == (3 if corrupt else 0)
     report = json.loads(result.stdout)
-    assert report["schema_version"] == "0.12.0"
+    assert report["schema_version"] == "0.13.0"
     kinds = {fact["kind"] for fact in report["evidence"]}
     assert {"pe_header", "section", "entropy", "string"} <= kinds
     assert ("header_anomaly" in kinds) == corrupt

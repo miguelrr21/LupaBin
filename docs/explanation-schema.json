@@ -150,6 +150,7 @@
                 "anomaly_limit",
                 "toolchain_limit",
                 "upx_layout_unrecognized",
+                "upx_rebuild_unrecognized",
                 "evidence_budget",
                 "dependency_omitted",
                 "output_limit",
@@ -283,7 +284,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "0.12.0",
+          "const": "0.13.0",
           "title": "Schema Version",
           "type": "string"
         }

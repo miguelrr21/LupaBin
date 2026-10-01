@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from lupabin.analysis import analyze_bytes
 from lupabin.evidence import upx
 from lupabin.evidence.facts import UpxImageEvidence, UpxImportEvidence
-from lupabin.evidence.models import Report
+from lupabin.evidence.models import Limits, Report
 from lupabin.evidence.primitives import Name
 from lupabin.evidence.upx_checks import verify_upx
 from lupabin.explain.engine import explain, validate
@@ -26,6 +26,7 @@ from tests.fixtures.pe_builder import (
 )
 
 GLOSSARY = load_glossary()
+CHARACTERS = Limits().string_characters
 METHODS = ("nrv2b", "nrv2d", "nrv2e", "lzma")
 
 
@@ -46,7 +47,7 @@ def test_every_method_and_width_unpacks_and_the_host_agrees(bits, method):
     data = build_upx_demo(bits=bits, method=method)
     report = analyze_bytes(data)
     Report.model_validate(report.model_dump())
-    verify_upx(report.evidence, data)
+    verify_upx(report.evidence, data, CHARACTERS)
     (image,), imports = upx_facts(report)
     block = image.data
     assert (block.method, block.version, block.format) == (
@@ -136,15 +137,15 @@ def test_the_host_rejects_altered_upx_facts():
     )
     altered = tuple(renamed if fact is imports[0] else fact for fact in report.evidence)
     with pytest.raises(ValueError, match="import list"):
-        verify_upx(altered, data)
+        verify_upx(altered, data, CHARACTERS)
     other = image.model_copy(
         update={"data": image.data.model_copy(update={"unpacked_sha256": "0" * 64})}
     )
     altered = tuple(other if fact is image else fact for fact in report.evidence)
     with pytest.raises(ValueError, match="block differs"):
-        verify_upx(altered, data)
+        verify_upx(altered, data, CHARACTERS)
     with pytest.raises(ValueError, match="no UPX block"):
-        verify_upx(report.evidence, build_upx_demo(damage=True))
+        verify_upx(report.evidence, build_upx_demo(damage=True), CHARACTERS)
 
 
 def test_the_report_rejects_an_incomplete_list_that_claims_complete_coverage():
@@ -233,7 +234,7 @@ def test_long_names_and_long_lists_keep_statements_within_their_limit():
     names = tuple(b"F" * 300 + str(index).encode() for index in range(40))
     data = build_upx_demo(functions=names)
     report = analyze_bytes(data)
-    verify_upx(report.evidence, data)
+    verify_upx(report.evidence, data, CHARACTERS)
     explanation = explain(report, GLOSSARY)
     items = validate(explanation, report, GLOSSARY)
     statement = next(item for item in items if item.rule == "upx.imports@1").statement
@@ -242,3 +243,82 @@ def test_long_names_and_long_lists_keep_statements_within_their_limit():
 
 def test_fixture_functions_are_the_documented_ones():
     assert UPX_FUNCTIONS == (b"ExitProcess", b"GetTickCount")
+
+
+def test_the_rebuilt_image_gives_the_strings_and_the_host_agrees():
+    data = build_upx_demo()
+    report = analyze_bytes(data)
+    verify_upx(report.evidence, data, CHARACTERS)
+    texts = [f for f in report.evidence if f.kind == "upx_string"]
+    assert len(texts) == 18
+    assert texts[0].data.text == "LUPABIN UPX PRACTICE IMAGE"
+    assert texts[0].data.rva == 0x1000 and texts[1].data.rva == 0x1000 + 27
+    items = validate(explain(report, GLOSSARY), report, GLOSSARY)
+    statement = next(item for item in items if item.rule == "upx.strings@1").statement
+    assert "18 cadenas de texto (18 ASCII y 0 UTF-16LE)" in statement
+    assert "«LUPABIN UPX PRACTICE IMAGE»" in statement and "y 6 más" in statement
+    altered = tuple(
+        fact.model_copy(update={"data": fact.data.model_copy(update={"rva": 0x1001})})
+        if fact is texts[0]
+        else fact
+        for fact in report.evidence
+    )
+    with pytest.raises(ValueError, match="strings of the rebuilt image"):
+        verify_upx(altered, data, CHARACTERS)
+
+
+def test_the_jump_filter_is_undone_where_the_marker_byte_says_so():
+    image = bytearray(
+        b"\x90" * 16 + b"\xe8" + bytes(4) + b"\x0f\x85" + bytes(4) + b"\xe8\x01\x02\x03\x04"
+    )
+    stored = (5 << 24) + 17 + 0x40  # field at 17, rel32 0x40
+    image[17:21] = stored.to_bytes(4, "big")
+    image[23:27] = ((5 << 24) + 23 + 0x10).to_bytes(4, "big")
+    x86, x64 = bytearray(image), bytearray(image)
+    upx._unfilter(x86, 0x26, 5)
+    upx._unfilter(x64, 0x49, 5)
+    assert x86[17:21] == (0x40).to_bytes(4, "little") == x64[17:21]
+    assert x86[23:27] == image[23:27]  # 0x26 leaves conditional jumps alone
+    assert x64[23:27] == (0x10).to_bytes(4, "little")
+    assert x86[27:] == x64[27:] == b"\xe8\x01\x02\x03\x04"  # no marker byte: unchanged
+
+
+def test_relocation_streams_follow_the_measured_steps():
+    stream = (
+        bytes([4, 4, 0xF0, 0x00, 0x10, 0xF3, 0x00, 0xE6, 0xF0, 0, 0])
+        + (0x20000).to_bytes(4, "little")
+        + b"\0"
+    )
+    assert upx._relocations(stream, 0, len(stream)) == [
+        0,
+        4,
+        4 + 0x1000,
+        4 + 0x1000 + 0x3E600,
+        4 + 0x1000 + 0x3E600 + 0x20000,
+    ]
+    with pytest.raises(ValueError):
+        upx._relocations(stream + b"\0", 0, len(stream) + 1)  # must end at the header copy
+
+
+def test_an_unmeasured_filter_publishes_no_strings():
+    data = bytearray(build_upx_demo())
+    data[0x1200 + 28] = 0x16  # a filter id that was not measured
+    report = analyze_bytes(bytes(data))
+    assert [f.kind for f in report.evidence if f.kind.startswith("upx")].count("upx_string") == 0
+    assert any(issue.code == "upx_rebuild_unrecognized" for issue in report.limitations)
+
+
+def test_strings_skip_the_areas_upx_changes():
+    sections = (
+        upx.Section(b".text\0\0\0", 0x1000, 0x2000, 0x60000020),
+        upx.Section(b".rdata\0\0", 0x3000, 0x1000, 0x40000040),
+        upx.Section(b".rsrc\0\0\0", 0x4000, 0x800, 0x40000040),
+    )
+    directories = ((0, 0), (0x3100, 0x28), (0x4000, 0x80), (0, 0), (0, 0), (0, 0), (0x3800, 0x1C))
+    tail = upx.Tail(0x14C, 0x1000, 0x400000, sections, (), 0x3800, None, 0x3900, directories)
+    assert sorted(upx.excluded(tail, 0x1000)) == [
+        (0x2100, 0x2128),  # imports
+        (0x2800, 0x281C),  # debug
+        (0x3000, 0x3080),  # resource directory
+        (0x3000, 0x3800),  # the whole resource section
+    ]

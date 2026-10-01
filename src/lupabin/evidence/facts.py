@@ -609,6 +609,7 @@ class UpxSection(Model):
     name_text: Annotated[str, Field(max_length=8)] | None
     rva: UInt
     virtual_size: UInt
+    characteristics: UInt
 
     @model_validator(mode="after")
     def faithful(self) -> Self:
@@ -721,6 +722,30 @@ class UpxImportData(Model):
         return self
 
 
+class UpxStringData(StringData):
+    """A literal string of the rebuilt image of a UPX block (evidence/upx.py, `rebuild`),
+    found with the same method as the sample's strings, at `rva` of the original program."""
+
+    rva: UInt
+
+
+class UpxStringEvidence(Model):
+    id: EvidenceId
+    source: Literal["pe"] = "pe"
+    component: Literal["upx"] = "upx"
+    kind: Literal["upx_string"] = "upx_string"
+    location: None = None
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: UpxStringData
+
+    @model_validator(mode="after")
+    def cites_its_block(self) -> Self:
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a UPX string cites its block")
+        return self
+
+
 class UpxImportEvidence(Model):
     id: EvidenceId
     source: Literal["pe"] = "pe"
@@ -768,6 +793,7 @@ Evidence = Annotated[
     | ToolchainEvidence
     | UpxImageEvidence
     | UpxImportEvidence
+    | UpxStringEvidence
     | YaraEvidence
     | DecodedStringEvidence
     | ApiCallEvidence
@@ -790,6 +816,7 @@ Payload = (
     | ToolchainData
     | UpxImageData
     | UpxImportData
+    | UpxStringData
     | YaraMatchData
     | DecodedStringData
     | ApiCallData

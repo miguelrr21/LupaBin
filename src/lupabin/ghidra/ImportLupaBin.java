@@ -79,7 +79,7 @@ public class ImportLupaBin extends GhidraScript {
         }
         require(string(document, "schema_version").equals("1.0.0"), "Versión de exportación no soportada");
         JsonObject report = document.getAsJsonObject("report");
-        require(string(report, "schema_version").equals("0.12.0"), "Contrato de hechos no soportado");
+        require(string(report, "schema_version").equals("0.13.0"), "Contrato de hechos no soportado");
         JsonObject sample = report.getAsJsonObject("sample");
         String sha = string(sample, "sha256");
         require(sha.matches("[a-f0-9]{64}"), "SHA-256 inválido");

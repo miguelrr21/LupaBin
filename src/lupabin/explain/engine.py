@@ -21,6 +21,7 @@ from lupabin.evidence.facts import (
     StringReferenceEvidence,
     ToolchainEvidence,
     UpxImageEvidence,
+    UpxStringEvidence,
     YaraEvidence,
 )
 from lupabin.evidence.models import Report
@@ -104,6 +105,9 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
             yield ("upx.image@1" if described else "upx.image_plain@1"), (fact,)
     for listed in upx_groups(report):
         yield "upx.imports@1", listed
+    hidden = tuple(fact for fact in evidence if isinstance(fact, UpxStringEvidence))
+    if hidden:
+        yield "upx.strings@1", hidden
     for fact in evidence:
         if isinstance(fact, SectionEvidence):
             yield "pe.section@1", (fact,)

@@ -11,7 +11,7 @@ Creado por [Miguel Ángel Rodríguez Romero](https://github.com/miguelrr21). *En
 - **Hechos de los bytes**, obtenidos en un contenedor Docker sin red: hashes, cabeceras y secciones PE32/PE32+, entropía, importaciones y exportaciones, anomalías estructurales, marcas de compilador (Microsoft, GCC y MinGW-w64, Go, .NET, PyInstaller), cadenas, reglas YARA propias y decodificación acotada (Base64, hexadecimal y XOR anclado en texto conocido).
 - **Qué llama el código.** Un recorrido del código x86/x64 encuentra qué funciones importadas se llaman, desde dónde y con qué argumentos constantes, en 72 funciones de Windows (claves de registro, servicios, líneas de órdenes, URL, permisos de memoria…). En los programas que arrancan con `__getmainargs`, como los de MinGW-w64, separa lo que se alcanza desde `main` de lo que solo hace el arranque del compilador.
 - **Capacidades**: frases como «el código contiene 1 llamada que escribe en una clave de arranque automático (Run)», con la técnica de MITRE ATT&CK solo cuando el mecanismo coincide con su definición y con su frecuencia en 3.090 binarios benignos.
-- **Programas empaquetados con UPX 5**: descomprime el bloque sin ejecutarlo y muestra las secciones, el punto de entrada y las funciones importadas que esconde.
+- **Programas empaquetados con UPX 5**: descomprime el bloque sin ejecutarlo y muestra las secciones, el punto de entrada, las funciones importadas y las cadenas de texto que esconde.
 - **VirusTotal**, como fuente externa separada de los hechos, con el significado documentado de algunas etiquetas y el contraste de sus técnicas con las capacidades observadas.
 - **Para aprender**: explicaciones que citan cada evidencia, un glosario con fuentes, preguntas de práctica autocorregibles sobre el propio informe y exportación de las evidencias a Ghidra.
 
@@ -42,7 +42,7 @@ Requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/) y Docker con motor Lin
 
 ```text
 uv sync --frozen
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.12.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.13.0 .
 uv run --frozen lupabin analyze "ruta/al/archivo.exe"
 ```
 

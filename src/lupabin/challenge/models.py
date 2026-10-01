@@ -42,7 +42,7 @@ class Challenge(Model):
     catalog: Catalog = "lupabin-challenges-v1"
     id: Digest
     sample_sha256: Digest
-    report_schema: Literal["0.12.0"] = "0.12.0"
+    report_schema: Literal["0.13.0"] = "0.13.0"
     report_digest: Digest
     questions: Annotated[tuple[Question, ...], Field(max_length=7)]
     notice: str = NOTICE
@@ -59,7 +59,7 @@ class Answers(Model):
     catalog: Catalog = "lupabin-challenges-v1"
     challenge_id: Digest
     sample_sha256: Digest
-    report_schema: Literal["0.12.0"] = "0.12.0"
+    report_schema: Literal["0.13.0"] = "0.13.0"
     selections: Annotated[tuple[Selection, ...], Field(max_length=7)] = ()
 
 
@@ -82,7 +82,7 @@ class Result(Model):
     catalog: Catalog = "lupabin-challenges-v1"
     challenge_id: Digest
     sample_sha256: Digest
-    report_schema: Literal["0.12.0"] = "0.12.0"
+    report_schema: Literal["0.13.0"] = "0.13.0"
     correct: Annotated[int, Field(ge=0, le=7)]
     answered: Annotated[int, Field(ge=0, le=7)]
     total: Annotated[int, Field(ge=0, le=7)]

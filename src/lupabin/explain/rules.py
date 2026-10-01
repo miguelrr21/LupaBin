@@ -10,7 +10,7 @@ import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from lupabin.evidence import toolchain
+from lupabin.evidence import toolchain, upx
 from lupabin.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
@@ -31,6 +31,7 @@ from lupabin.evidence.facts import (
     ToolchainEvidence,
     UpxImageEvidence,
     UpxImportEvidence,
+    UpxStringEvidence,
     YaraEvidence,
 )
 from lupabin.evidence.models import Report
@@ -960,6 +961,41 @@ def _upx_image(described: bool) -> Callable[[tuple[Evidence, ...], Report], Deri
     return derive
 
 
+UPX_STRINGS_SHOWN = 12
+UPX_STRING_MINIMUM = 8  # characters of the strings an item quotes
+
+
+def _upx_strings(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    texts = [fact for fact in cited if isinstance(fact, UpxStringEvidence)]
+    if not texts or len(texts) != len(cited):
+        return None
+    everything = tuple(f.id for f in report.evidence if isinstance(f, UpxStringEvidence))
+    if tuple(fact.id for fact in texts) != everything:
+        return None
+    ascii_count = sum(1 for fact in texts if fact.data.encoding == "ascii")
+    block = next((f for f in report.evidence if isinstance(f, UpxImageEvidence)), None)
+    if block is None or block.data.original_sections is None:
+        return None
+    code = [
+        (s.rva, s.rva + s.virtual_size)
+        for s in block.data.original_sections
+        if s.characteristics & upx.CODE
+    ]
+    long = [
+        f"«{fact.data.text}»"
+        for fact in texts
+        if fact.data.characters >= UPX_STRING_MINIMUM
+        and not any(low <= fact.data.rva < high for low, high in code)
+    ]
+    slots: Slots = {
+        "count": number(len(texts)),
+        "ascii": number(ascii_count),
+        "utf16": number(len(texts) - ascii_count),
+        "shown": _first(long, UPX_STRINGS_SHOWN) if long else "ninguna",
+    }
+    return slots, ("upx.packing", "strings.literal")
+
+
 def upx_groups(report: Report) -> list[tuple[UpxImportEvidence, ...]]:
     """The UPX imports in report order, one group per run of the same DLL entry."""
     groups: list[list[UpxImportEvidence]] = []
@@ -1091,6 +1127,16 @@ RULES: dict[str, Rule] = {
             "original. Una importación no demuestra que el código la llame, ni cuándo, ni para "
             "qué.",
             _upx_imports,
+        ),
+        Rule(
+            "upx.strings@1",
+            "La imagen reconstruida del programa original contiene {count} cadenas de texto "
+            "({ascii} ASCII y {utf16} UTF-16LE), buscadas igual que las del archivo. Fuera de "
+            "las secciones de código, las de al menos 8 caracteres son, en orden: {shown}.",
+            "Son bytes de la imagen descomprimida, deshechos el filtro de saltos y las "
+            "reubicaciones de UPX. Una cadena no demuestra que el código la use. Los nombres de "
+            "las importaciones y los recursos no están en esta parte de la imagen.",
+            _upx_strings,
         ),
         Rule(
             "pe.section@1",

@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.12.0",
-          "default": "0.12.0",
+          "const": "0.13.0",
+          "default": "0.13.0",
           "title": "Version",
           "type": "string"
         }
@@ -1238,6 +1238,7 @@
                 "anomaly_limit",
                 "toolchain_limit",
                 "upx_layout_unrecognized",
+                "upx_rebuild_unrecognized",
                 "evidence_budget",
                 "dependency_omitted",
                 "output_limit",
@@ -3169,6 +3170,12 @@
       "additionalProperties": false,
       "description": "A section of the original program, as the header copy in the block lists it.",
       "properties": {
+        "characteristics": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Characteristics",
+          "type": "integer"
+        },
         "name_raw_hex": {
           "pattern": "^[a-f0-9]{16}$",
           "title": "Name Raw Hex",
@@ -3203,9 +3210,133 @@
         "name_raw_hex",
         "name_text",
         "rva",
-        "virtual_size"
+        "virtual_size",
+        "characteristics"
       ],
       "title": "UpxSection",
+      "type": "object"
+    },
+    "UpxStringData": {
+      "additionalProperties": false,
+      "description": "A literal string of the rebuilt image of a UPX block (evidence/upx.py, `rebuild`),\nfound with the same method as the sample's strings, at `rva` of the original program.",
+      "properties": {
+        "characters": {
+          "maximum": 1024,
+          "minimum": 4,
+          "title": "Characters",
+          "type": "integer"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "encoding": {
+          "enum": [
+            "ascii",
+            "utf-16-le"
+          ],
+          "title": "Encoding",
+          "type": "string"
+        },
+        "raw_hex": {
+          "maxLength": 4096,
+          "pattern": "^(?:[a-f0-9]{2})+$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "repertoire": {
+          "const": "ascii-printable-v1",
+          "default": "ascii-printable-v1",
+          "title": "Repertoire",
+          "type": "string"
+        },
+        "rva": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Rva",
+          "type": "integer"
+        },
+        "text": {
+          "maxLength": 1024,
+          "minLength": 4,
+          "title": "Text",
+          "type": "string"
+        },
+        "total_characters": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Characters"
+        }
+      },
+      "required": [
+        "encoding",
+        "text",
+        "raw_hex",
+        "characters",
+        "complete",
+        "rva"
+      ],
+      "title": "UpxStringData",
+      "type": "object"
+    },
+    "UpxStringEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "const": "upx",
+          "default": "upx",
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "inferred",
+          "default": "inferred",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/UpxStringData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "upx_string",
+          "default": "upx_string",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "default": null,
+          "title": "Location",
+          "type": "null"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "const": "pe",
+          "default": "pe",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "data"
+      ],
+      "title": "UpxStringEvidence",
       "type": "object"
     },
     "XorAnchor": {
@@ -3622,6 +3753,7 @@
             "toolchain_marker": "#/$defs/ToolchainEvidence",
             "upx_image": "#/$defs/UpxImageEvidence",
             "upx_import": "#/$defs/UpxImportEvidence",
+            "upx_string": "#/$defs/UpxStringEvidence",
             "yara_match": "#/$defs/YaraEvidence"
           },
           "propertyName": "kind"
@@ -3656,6 +3788,9 @@
           },
           {
             "$ref": "#/$defs/UpxImportEvidence"
+          },
+          {
+            "$ref": "#/$defs/UpxStringEvidence"
           },
           {
             "$ref": "#/$defs/YaraEvidence"
@@ -3721,8 +3856,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.12.0",
-      "default": "0.12.0",
+      "const": "0.13.0",
+      "default": "0.13.0",
       "title": "Schema Version",
       "type": "string"
     },

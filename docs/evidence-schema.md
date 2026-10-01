@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.12.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`). Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.13.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`). Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -30,10 +30,10 @@ El host trata la respuesta del worker como entrada no fiable: la valida, comprue
 
 | Campo | Contenido |
 | --- | --- |
-| `schema_version` | Literal `0.12.0`; versiones distintas se rechazan. |
+| `schema_version` | Literal `0.13.0`; versiones distintas se rechazan. |
 | `sample` | SHA-256, MD5, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. MD5 se incluye solo por interoperabilidad. |
 | `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
-| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `upx_image`, `upx_import`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call`, `code_reach` y `string_reference`. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `upx_image`, `upx_import`, `upx_string`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call`, `code_reach` y `string_reference`. |
 | `extractor_runs` | Fuentes `pe`, `strings`, `yara`, `decode` y `code`, con su versión y componentes tipados con cobertura y contadores. |
 | `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
 | `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
@@ -87,6 +87,8 @@ Componente `upx` de la fuente `pe`. LupaBin solo reconoce UPX 5 (versión de cab
 `upx_image` sitúa en `location` los 32 bytes de la cabecera `UPX!`. `data` lleva `method_id` (`upx5-pe-v1`), `header_hex` y sus campos (`version`, `format`, `method`, `level`, `packed_size`, `packed_adler32`, `unpacked_size`, `unpacked_adler32`, `original_size`), `packed_offset` (dónde empieza el bloque comprimido en el archivo) y `unpacked_sha256`. Si el final de los bytes descomprimidos tiene la forma medida, añade lo que declara del programa original: `original_entry_rva`, `original_image_base`, `original_sections` (nombre en bytes y en texto, RVA y tamaño en memoria) e `imports` (cuántas funciones tiene su lista). Si no, esos cuatro campos son nulos y el componente queda parcial (`upx_layout_unrecognized`).
 
 `upx_import` es una función de esa lista: `dll` (el nombre, que se lee de la tabla de importaciones del archivo empaquetado, en `dll_rva`), `function` u `ordinal`, `iat_rva` (la casilla del programa original donde el cargador de UPX escribe su dirección), y `stream_offset` y `stream_length` (dónde está la entrada en los bytes descomprimidos). No tiene `location`, porque esos bytes no están en el archivo; cita su `upx_image` en `provenance`.
+
+`upx_string` es una cadena de la imagen reconstruida: los bytes descomprimidos desde la primera sección hasta la lista de importaciones, con el filtro de saltos deshecho y cada campo reubicado devuelto a su dirección. Se buscan igual que las cadenas del archivo (mismos repertorios, longitud mínima y truncado) y llevan la RVA del programa original. No tienen `location` y citan su `upx_image`. Si el filtro o las reubicaciones no tienen una forma medida, no se publica ninguna y el componente queda parcial (`upx_rebuild_unrecognized`).
 
 El informe comprueba que los campos coinciden con la cabecera, que el bloque cabe en la muestra y que el número de importaciones publicadas es coherente con la cobertura. El host repite toda la derivación con la muestra y la tabla de secciones del informe, y rechaza la respuesta si algo difiere. Un archivo sin una cabecera que se verifique no tiene hechos de este componente: eso no demuestra que no esté empaquetado.
 ## Coincidencias YARA (`yara_match`)
@@ -239,5 +241,6 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 | 0.10.0 | Componente `main_function`, `main_call` y `code_reach` (la función main y el alcance) |
 | 0.11.0 | Componente `string_references`, `string_reference` y los textos de `code_reach` (textos que usa el código) |
 | 0.12.0 | Componente `upx`, `upx_image` y `upx_import` (programas empaquetados con UPX 5) |
+| 0.13.0 | `upx_string`: las cadenas de la imagen reconstruida de un bloque UPX |
 
 Solo el esquema activo se publica (`docs/evidence-schema.json`); los anteriores siguen en el historial de git. Los consumidores rechazan versiones de esquema no soportadas y la CLI no transforma informes antiguos.
