@@ -5,7 +5,7 @@ from lupabin.evidence import upx
 from lupabin.evidence.collector import Collector, Progress
 from lupabin.evidence.facts import SectionEvidence
 from lupabin.evidence.primitives import Location
-from lupabin.evidence.upx_checks import image_data, import_data, spans
+from lupabin.evidence.upx_checks import image_data, import_data, spans, string_data
 from lupabin.extractors.pe_layout import Layout
 
 
@@ -30,4 +30,17 @@ def read_upx(layout: Layout, collector: Collector, progress: Progress) -> None:
     for index, item in enumerate(import_data(derived)):
         if not collector.add(f"pe:upx:{index}", progress, "upx", item, None, refs=("pe:upx",)):
             return
+    if derived.image is None:
+        progress.issue("upx", "upx_rebuild_unrecognized", limit=True)
+        return
+    limits = collector.limits
+    texts = string_data(derived, limits.string_characters, limits.strings + 1)
+    for index, text in enumerate(texts[: limits.strings]):
+        if not text.complete:
+            progress.issue("upx", "string_length_limit", limit=True)
+        if not collector.add(f"pe:upx:s{index}", progress, "upx", text, None, refs=("pe:upx",)):
+            return
+    if len(texts) > limits.strings:
+        progress.issue("upx", "string_limit", limit=True)
+        return
     progress.complete("upx")

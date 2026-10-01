@@ -54,6 +54,7 @@ ErrorCode = (
         "anomaly_limit",
         "toolchain_limit",
         "upx_layout_unrecognized",
+        "upx_rebuild_unrecognized",
         "evidence_budget",
         "dependency_omitted",
         "output_limit",
@@ -76,7 +77,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.12.0"] = "0.12.0"
+    version: Literal["0.13.0"] = "0.13.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -148,7 +149,7 @@ def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | 
 
 
 class Report(Model):
-    schema_version: Literal["0.12.0"] = "0.12.0"
+    schema_version: Literal["0.13.0"] = "0.13.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -178,6 +179,7 @@ class Report(Model):
             "toolchain_marker": toolchain.QUOTA,
             "upx_image": 1,
             "upx_import": limits.imports,
+            "upx_string": limits.strings,
             "yara_match": limits.yara.matches,
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
@@ -303,6 +305,15 @@ class Report(Model):
                 ):
                     raise ValueError("UPX imports disagree with the block's list")
                 degrees[fact.id] = 0
+                continue
+            if fact.kind == "upx_string":
+                block = facts.get(fact.provenance.evidence_ids[0])
+                if not isinstance(block, UpxImageEvidence) or block.data.original_sections is None:
+                    raise ValueError("a UPX string cites a block with an original layout")
+                if fact.data.characters > limits.string_characters:
+                    raise ValueError("string exceeds character limit")
+                degrees[fact.id] = 1
+                children[block.id].append(fact.id)
                 continue
             if fact.kind == "upx_import":
                 block = facts.get(fact.provenance.evidence_ids[0])

@@ -75,6 +75,10 @@ MESSAGES: dict[str, str] = {
     ),
     "anomaly_limit": "Se alcanzó el máximo de anomalías conservadas.",
     "toolchain_limit": "Se alcanzó el máximo de marcas de GCC distintas conservadas.",
+    "upx_rebuild_unrecognized": (
+        "El bloque de UPX usa un filtro o unas reubicaciones que no se han medido: no se "
+        "reconstruye la imagen original ni se publican sus cadenas."
+    ),
     "upx_layout_unrecognized": (
         "El bloque de UPX se descomprimió y verificó, pero su final no tiene la forma medida: "
         "no se publican las secciones originales, el punto de entrada ni las importaciones."

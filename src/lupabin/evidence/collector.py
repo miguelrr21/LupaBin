@@ -26,6 +26,7 @@ from lupabin.evidence.facts import (
     ToolchainData,
     UpxImageData,
     UpxImportData,
+    UpxStringData,
 )
 from lupabin.evidence.models import (
     ComponentRun,
@@ -50,6 +51,7 @@ KINDS = {
     ToolchainData: "toolchain_marker",
     UpxImageData: "upx_image",
     UpxImportData: "upx_import",
+    UpxStringData: "upx_string",
     YaraMatchData: "yara_match",
     DecodedStringData: "decoded_string",
     ApiCallData: "api_call",
@@ -133,6 +135,7 @@ class Collector:
             "toolchain_marker": toolchain.QUOTA,
             "upx_image": 1,
             "upx_import": limits.imports,
+            "upx_string": limits.strings,
             "string": limits.strings,
             "yara_match": limits.yara.matches,
             "decoded_string": limits.decode.strings + limits.decode.xor,
@@ -167,6 +170,7 @@ class Collector:
             codes: dict[str, ErrorCode] = {
                 "import": "import_limit",
                 "upx_import": "import_limit",
+                "upx_string": "string_limit",
                 "export": "export_limit",
                 "string": "string_limit",
                 "header_anomaly": "anomaly_limit",

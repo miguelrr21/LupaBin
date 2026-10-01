@@ -115,7 +115,7 @@ def test_deterministic_round_trip_and_report_preserved(reports, name):
     assert Challenge.model_validate_json(challenge.model_dump_json()) == challenge
     assert validate(challenge, report) == challenge
     assert challenge.sample_sha256 == report.sample.sha256
-    assert challenge.report_schema == "0.12.0"
+    assert challenge.report_schema == "0.13.0"
     assert len(challenge.questions) <= 7
     assert len({q.id for q in challenge.questions}) == len(challenge.questions)
     facts = {f.id: f for f in report.evidence}

@@ -111,7 +111,7 @@ def test_worker_response_must_match_original_input(change):
     with pytest.raises(LupaBinError) as caught:
         asyncio.run(run_isolated(build_pe(), Limits(), docker))
     expected = (
-        "incompatible_worker" if report["schema_version"] != "0.12.0" else "invalid_worker_output"
+        "incompatible_worker" if report["schema_version"] != "0.13.0" else "invalid_worker_output"
     )
     assert caught.value.code == expected
 

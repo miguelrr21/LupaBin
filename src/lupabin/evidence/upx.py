@@ -64,6 +64,8 @@ class Header:
     unpacked_size: int
     packed_size: int
     original_size: int
+    filter: int  # how UPX changed the image before packing it
+    cto: int  # the filter's parameter
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ class Section:
     name: bytes  # the 8 bytes of the table, padding included
     rva: int
     virtual_size: int
+    characteristics: int = 0
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,10 @@ class Tail:
     image_base: int
     sections: tuple[Section, ...]
     imports: tuple[Import, ...]
+    imports_at: int  # where the image ends and the import list starts
+    relocations_at: int | None  # where the relocation stream starts, if there is one
+    copy_at: int  # where the header copy starts
+    directories: tuple[tuple[int, int], ...] = ()  # the original data directories (RVA, size)
 
 
 @dataclass(frozen=True)
@@ -132,6 +139,8 @@ def decode_header(raw: bytes, at: int = 0) -> Header | None:
         unpacked,
         packed,
         original,
+        raw[28],
+        raw[29],
     )
 
 
@@ -288,6 +297,12 @@ def read_tail(stream: bytes, header: Header, base: int) -> Tail:
         if magic == 0x10B
         else struct.unpack_from("<Q", stream, body + 24)[0]
     )
+    fixed = 96 if magic == 0x10B else 112
+    declared = struct.unpack_from("<I", stream, body + fixed - 4)[0]
+    directories = tuple(
+        struct.unpack_from("<II", stream, body + fixed + 8 * index)
+        for index in range(min(declared, 16, (optional - fixed) // 8))
+    )
     table = body + optional
     after = table + 40 * count
     offsets = stream[after : len(stream) - 4]
@@ -297,7 +312,8 @@ def read_tail(stream: bytes, header: Header, base: int) -> Tail:
     for index in range(count):
         at = table + 40 * index
         virtual_size, rva = struct.unpack_from("<II", stream, at + 8)
-        sections.append(Section(stream[at : at + 8], rva, virtual_size))
+        flags = struct.unpack_from("<I", stream, at + 36)[0]
+        sections.append(Section(stream[at : at + 8], rva, virtual_size, flags))
     if sections[0].rva != base:
         raise ValueError("the image does not start at the first original section")
     imports_at, zero = struct.unpack_from("<II", offsets)
@@ -313,7 +329,18 @@ def read_tail(stream: bytes, header: Header, base: int) -> Tail:
     if zero or len(rest) > 3 or any(rest) or not imports_at <= end <= copy:
         raise ValueError("the offsets after the header copy have an unmeasured form")
     imports = _imports(stream, imports_at, end, base, header.format)
-    return Tail(machine, entry, image_base, tuple(sections), imports)
+    relocations = end if end != copy else None
+    return Tail(
+        machine,
+        entry,
+        image_base,
+        tuple(sections),
+        imports,
+        imports_at,
+        relocations,
+        copy,
+        directories,
+    )
 
 
 def _imports(stream: bytes, at: int, end: int, base: int, kind: Format) -> tuple[Import, ...]:
@@ -363,6 +390,113 @@ def _imports(stream: bytes, at: int, end: int, base: int, kind: Format) -> tuple
     return tuple(found)
 
 
+FILTERS = {0x26: False, 0x49: True}  # measured filters: does it also change jcc rel32?
+CODE = 0x20000020  # IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE
+# Data directories whose bytes UPX changes or moves (import, resource, relocation, debug,
+# load config, bound import, IAT, delay import): no string is taken from them, nor from
+# the section that holds the resources (UPX zeroes their padding).
+REBUILT = (1, 2, 5, 6, 10, 11, 12, 13)
+
+
+def excluded(tail: Tail, base: int) -> list[tuple[int, int]]:
+    """Image offsets [start, end) whose bytes are not the original program's."""
+    spans = [
+        (rva - base, rva - base + size)
+        for index, (rva, size) in enumerate(tail.directories)
+        if index in REBUILT and rva and size
+    ]
+    if len(tail.directories) > 2 and tail.directories[2][0]:
+        resource = tail.directories[2][0]
+        spans += [
+            (s.rva - base, s.rva + s.virtual_size - base)
+            for s in tail.sections
+            if s.rva <= resource < s.rva + s.virtual_size
+        ]
+    return spans
+
+
+def _unfilter(image: bytearray, kind: int, cto: int) -> None:
+    """Undo the jump filter: after E8 or E9 (and, for 0x49, after 0F 80-8F), four bytes
+    that start with `cto` hold, big-endian, cto << 24 plus the position of the field plus
+    its rel32. Measured: only those bytes change, and the scan skips a restored field."""
+    jcc = FILTERS[kind]
+    at, end = 0, len(image) - 4
+    while at < end:
+        opcode = image[at]
+        if opcode in (0xE8, 0xE9) or (
+            jcc and at and image[at - 1] == 0x0F and 0x80 <= opcode <= 0x8F
+        ):
+            if image[at + 1] == cto:
+                value = int.from_bytes(image[at + 1 : at + 5], "big") - (cto << 24)
+                image[at + 1 : at + 5] = ((value - (at + 1)) & _END).to_bytes(4, "little")
+                at += 5
+                continue
+        at += 1
+
+
+def _relocations(stream: bytes, at: int, end: int) -> list[int]:
+    """Positions of the relocated fields: from -4, each byte 1-0xEF adds itself, a byte
+    F0-FF adds its low nibble << 16 plus the next u16 (F0 and a zero u16: the next u32),
+    and 0 ends the stream exactly at `end`."""
+    found, position = [], -4
+    while True:
+        if at >= end:
+            raise ValueError("the relocation stream runs past its end")
+        value = stream[at]
+        at += 1
+        if value == 0:
+            break
+        if value < 0xF0:
+            position += value
+        else:
+            if at + 2 > end:
+                raise ValueError("the relocation stream runs past its end")
+            step = (value & 0x0F) << 16 | struct.unpack_from("<H", stream, at)[0]
+            at += 2
+            if step == 0:
+                if at + 4 > end:
+                    raise ValueError("the relocation stream runs past its end")
+                step = struct.unpack_from("<I", stream, at)[0]
+                at += 4
+            position += step
+        found.append(position)
+    if at != end:
+        raise ValueError("the relocation stream does not end at the header copy")
+    return found
+
+
+def rebuild(unpacked: Unpacked, base: int) -> bytes | None:
+    """The original image from its first section to the import list, with the jump filter
+    undone and every relocated field back to its address, or None unless the filter and
+    the relocations have a measured form. Import, resource, relocation and debug areas
+    are not restored: UPX rebuilds them when the program starts."""
+    tail, header = unpacked.tail, unpacked.header
+    if tail is None or header.filter not in (0, *FILTERS):
+        return None
+    image = bytearray(unpacked.stream[: tail.imports_at])
+    if header.filter:
+        # measured: the filter reaches the end of the last section that holds code
+        code = [s.rva + s.virtual_size - base for s in tail.sections if s.characteristics & CODE]
+        end = min(max(code, default=0), len(image))
+        part = image[:end]
+        _unfilter(part, header.filter, header.cto)
+        image[:end] = part
+    if tail.relocations_at is not None:
+        width = 4 if header.format == "win32/pe" else 8
+        try:
+            positions = _relocations(unpacked.stream, tail.relocations_at, tail.copy_at)
+        except (ValueError, struct.error):
+            return None
+        offset = tail.image_base + base
+        for position in positions:
+            if not 0 <= position <= len(image) - width:
+                return None
+            value = int.from_bytes(image[position : position + width], "big")
+            address = (value + offset) & ((1 << (8 * width)) - 1)
+            image[position : position + width] = address.to_bytes(width, "little")
+    return bytes(image)
+
+
 @dataclass(frozen=True)
 class Span:
     """A section of the packed file, as the PE extractor reads it."""
@@ -377,6 +511,8 @@ class Span:
 class Derived:
     unpacked: Unpacked
     dlls: tuple[bytes, ...] | None  # the DLL name of each import, when the tail is read
+    image: bytes | None = None  # the rebuilt image (`rebuild`), when the DLL names read
+    base: int = 0  # the RVA where the image starts
 
 
 def import_directory(data: bytes) -> int | None:
@@ -432,7 +568,8 @@ def derive(data: bytes, sections: list[Span]) -> Derived | None:
                 None,
             )
         names.append(name)
-    return Derived(unpacked, tuple(names))
+    base = sections[0].rva
+    return Derived(unpacked, tuple(names), rebuild(unpacked, base), base)
 
 
 def unpack(data: bytes, section_starts: list[int], base: int) -> Unpacked | None:
