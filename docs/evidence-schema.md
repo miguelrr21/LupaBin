@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.12.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`) y los esquemas de versiones anteriores se conservan en `docs/schemas/`. Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.12.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`). Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -225,19 +225,19 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 
 ## Versiones del contrato
 
-| Versión | Añade | Esquema |
-| --- | --- | --- |
-| 0.1.0 | Hashes, tipo validado e imports normales y retardados | `docs/schemas/0.1.0.json` |
-| 0.2.0 | Cabecera PE, secciones, entropía, exports, cadenas y anomalías; cobertura por componente y `limitations` | `docs/schemas/0.2.0.json` |
-| 0.3.0 | Fuente `yara` y `yara_match` | `docs/schemas/0.3.0.json` |
-| 0.4.0 | Fuente `decode` y `decoded_string` | `docs/schemas/0.4.0.json` |
-| 0.5.0 | Fuente `code`: `api_call`, `call_argument` e `iat_rva` en los imports | `docs/schemas/0.5.0.json` |
-| 0.6.0 | `code_function` (rangos de `.pdata` en x64) | `docs/schemas/0.6.0.json` |
-| 0.7.0 | La vía `tail` de `api_call` (saltos en cola a una función importada) | `docs/schemas/0.7.0.json` |
-| 0.8.0 | `local_link` (un identificador que pasa de una llamada a otra por una variable local) | `docs/schemas/0.8.0.json` |
-| 0.9.0 | Componente `toolchain` y `toolchain_marker` (marcas de compilador) | `docs/schemas/0.9.0.json` |
-| 0.10.0 | Componente `main_function`, `main_call` y `code_reach` (la función main y el alcance) | `docs/schemas/0.10.0.json` |
-| 0.11.0 | Componente `string_references`, `string_reference` y los textos de `code_reach` (textos que usa el código) | `docs/schemas/0.11.0.json` |
-| 0.12.0 | Componente `upx`, `upx_image` y `upx_import` (programas empaquetados con UPX 5) | `docs/evidence-schema.json` (activo) |
+| Versión | Añade |
+| --- | --- |
+| 0.1.0 | Hashes, tipo validado e imports normales y retardados |
+| 0.2.0 | Cabecera PE, secciones, entropía, exports, cadenas y anomalías; cobertura por componente y `limitations` |
+| 0.3.0 | Fuente `yara` y `yara_match` |
+| 0.4.0 | Fuente `decode` y `decoded_string` |
+| 0.5.0 | Fuente `code`: `api_call`, `call_argument` e `iat_rva` en los imports |
+| 0.6.0 | `code_function` (rangos de `.pdata` en x64) |
+| 0.7.0 | La vía `tail` de `api_call` (saltos en cola a una función importada) |
+| 0.8.0 | `local_link` (un identificador que pasa de una llamada a otra por una variable local) |
+| 0.9.0 | Componente `toolchain` y `toolchain_marker` (marcas de compilador) |
+| 0.10.0 | Componente `main_function`, `main_call` y `code_reach` (la función main y el alcance) |
+| 0.11.0 | Componente `string_references`, `string_reference` y los textos de `code_reach` (textos que usa el código) |
+| 0.12.0 | Componente `upx`, `upx_image` y `upx_import` (programas empaquetados con UPX 5) |
 
-Los consumidores rechazan versiones de esquema no soportadas. La CLI no transforma informes antiguos.
+Solo el esquema activo se publica (`docs/evidence-schema.json`); los anteriores siguen en el historial de git. Los consumidores rechazan versiones de esquema no soportadas y la CLI no transforma informes antiguos.

@@ -391,7 +391,7 @@ Para repetir la muestra en Windows: `uv run python -m tests.vt_context_eval --jo
 
 La web es otra forma de usar `lupabin analyze`: cada archivo se analiza en un contenedor nuevo, igual que en la CLI, y se muestra el mismo informe. No guarda ni la muestra ni el informe, no pone cookies, no carga nada de terceros y no registra accesos. Todo texto de la muestra o de VirusTotal se neutraliza en el servidor y el navegador lo inserta solo como texto, con una política de seguridad de contenido sin código en línea.
 
-El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. Su usuario pertenece al grupo `docker`, que en la práctica equivale a administrador en esa máquina: por eso debe desplegarse en un servidor dedicado ([guía de despliegue](deploy.md)). Límites por defecto: 20 MiB por archivo, 6 análisis por IP cada 10 minutos, entre uno y tres análisis a la vez según la memoria y las CPU del servidor, y una cuota de VirusTotal compartida por todo el servidor (4 peticiones por minuto y 500 al día con la API pública).
+El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. Su usuario pertenece al grupo `docker`, que en la práctica equivale a administrador en esa máquina: por eso debe desplegarse en un servidor dedicado (`deploy/server/`). Límites por defecto: 20 MiB por archivo, 6 análisis por IP cada 10 minutos, entre uno y tres análisis a la vez según la memoria y las CPU del servidor, y una cuota de VirusTotal compartida por todo el servidor (4 peticiones por minuto y 500 al día con la API pública).
 
 ## Exportación a Ghidra
 

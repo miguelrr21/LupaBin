@@ -2,7 +2,6 @@
 # Instala la web de LupaBin en un servidor Linux (VPS) con Ubuntu 22.04/24.04 o Debian 12,
 # en x86_64 o ARM64 (aarch64).
 # Uso, desde la carpeta del repositorio:  sudo bash deploy/server/install.sh
-# Guía paso a paso (Oracle Cloud Free Tier, Hetzner u otro): docs/deploy.md
 #
 # Qué hace:
 #  1. instala Docker, Caddy y las actualizaciones automáticas de seguridad;
@@ -152,7 +151,7 @@ done
 if curl -fsS http://127.0.0.1:8080/api/health; then
   address="$(curl -fsS --max-time 5 https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
   printf '\n\nListo. Abre http://%s desde tu navegador.\n' "$address"
-  printf 'Si no carga, abre los puertos 80 y 443 en el cortafuegos de tu proveedor (docs/deploy.md).\n'
+  printf 'Si no carga, abre los puertos 80 y 443 en el cortafuegos de tu proveedor.\n'
 else
   die "el servicio no responde. Mira: sudo journalctl -u lupabin-web -n 50"
 fi

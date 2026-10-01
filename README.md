@@ -1,37 +1,44 @@
 # LupaBin
 
-Tutor de análisis estático de binarios, centrado en evidencias verificables. Creado por [Miguel Ángel Rodríguez Romero](https://github.com/miguelrr21). *English overview: [README.en.md](README.en.md).*
+Tutor de análisis estático de ejecutables de Windows. LupaBin lee un archivo PE sin ejecutarlo nunca, dice qué contienen sus bytes y explica cada afirmación: qué evidencia la respalda, qué no demuestra y dónde leer más. No es un antivirus y no da veredictos.
 
-**Si no hay evidencia suficiente, no se afirma.** Una importación no demuestra ejecución ni intención maliciosa; un resultado vacío no significa que el archivo sea seguro.
+Creado por [Miguel Ángel Rodríguez Romero](https://github.com/miguelrr21). *English overview: [README.en.md](README.en.md).*
+
+**Si no hay evidencia suficiente, no se afirma.** Cada método se midió en binarios benignos antes de adoptarlo, incluidas las variantes que se descartaron, y las cifras están en [cómo trabaja LupaBin](docs/metodo.md).
 
 ## Qué hace
 
-LupaBin lee un ejecutable de Windows sin ejecutarlo nunca, dice qué contienen sus bytes y explica cada afirmación: qué evidencia cita, qué no demuestra y dónde leer más. No es un antivirus y no da veredictos.
+- **Hechos de los bytes**, obtenidos en un contenedor Docker sin red: hashes, cabeceras y secciones PE32/PE32+, entropía, importaciones y exportaciones, anomalías estructurales, marcas de compilador (Microsoft, GCC y MinGW-w64, Go, .NET, PyInstaller), cadenas, reglas YARA propias y decodificación acotada (Base64, hexadecimal y XOR anclado en texto conocido).
+- **Qué llama el código.** Un recorrido del código x86/x64 encuentra qué funciones importadas se llaman, desde dónde y con qué argumentos constantes, en 72 funciones de Windows (claves de registro, servicios, líneas de órdenes, URL, permisos de memoria…). En los programas que arrancan con `__getmainargs`, como los de MinGW-w64, separa lo que se alcanza desde `main` de lo que solo hace el arranque del compilador.
+- **Capacidades**: frases como «el código contiene 1 llamada que escribe en una clave de arranque automático (Run)», con la técnica de MITRE ATT&CK solo cuando el mecanismo coincide con su definición y con su frecuencia en 3.090 binarios benignos.
+- **Programas empaquetados con UPX 5**: descomprime el bloque sin ejecutarlo y muestra las secciones, el punto de entrada y las funciones importadas que esconde.
+- **VirusTotal**, como fuente externa separada de los hechos, con el significado documentado de algunas etiquetas y el contraste de sus técnicas con las capacidades observadas.
+- **Para aprender**: explicaciones que citan cada evidencia, un glosario con fuentes, preguntas de práctica autocorregibles sobre el propio informe y exportación de las evidencias a Ghidra.
 
-- **Hechos de los bytes** (contrato 0.12.0), obtenidos en un worker Docker aislado y sin red: hashes, cabeceras y secciones PE32/PE32+, entropía, importaciones normales y retardadas, exportaciones, anomalías estructurales, marcas de compilador (cabecera Rich del enlazador de Microsoft, GCC y MinGW-w64, Go, .NET y PyInstaller), cadenas literales, coincidencias con las reglas YARA propias y decodificación estática acotada (Base64, hexadecimal y XOR de clave repetida de 1 a 8 bytes).
-- **Qué llama el código.** Qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes, en 72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía.
-- **Un informe didáctico** con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas.
-- **Capacidades:** lo que contiene el código (crear un servicio, escribir en una clave `Run`, pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos.
-- **Programas empaquetados con UPX 5:** descomprime el bloque sin ejecutarlo y muestra lo que esconde: las secciones y el punto de entrada originales y las funciones importadas que el cargador de UPX resuelve al arrancar.
-- **VirusTotal** como fuente externa, separada de los hechos (activo por defecto y desactivable), y **una web** con el mismo análisis.
+Ningún resultado se da por bueno porque lo diga el worker: el host vuelve a comprobar con los bytes de la muestra cada llamada, argumento, decodificación, marca, coincidencia YARA y bloque UPX, y cada frase del informe se regenera desde sus citas antes de mostrarse.
 
-No ejecuta ni emula la muestra, y no incluye LLM, capa ni FLOSS.
+## Ejemplo
 
-## Estado y alcance
+Fragmento del informe de un fixture sintético (`--scenario capability-demo`):
 
-Cada hecho indica qué se observó y dónde. La entropía no demuestra empaquetado; un export no necesariamente es una función; el timestamp de cabecera no acredita una fecha de compilación; una URL literal no prueba una conexión.
-
-El código incluye pruebas unitarias y pruebas reales de aislamiento marcadas `docker`. La existencia de estas pruebas o del workflow no implica que hayan pasado en tu entorno. Ejecuta las comprobaciones de aislamiento antes de usar muestras no fiables. Este proyecto es experimental; no es un antivirus ni una garantía de seguridad.
-
-## Requisitos
-
-- uv y Python 3.12; uv puede provisionar el intérprete sin sustituir el Python del sistema.
-- Docker con motor Linux; en Windows, Docker Desktop iniciado en modo de contenedores Linux.
-- Red para instalar dependencias y construir la imagen inicialmente. El análisis posterior no necesita red ni intenta descargar imágenes.
+```text
+Resumen: qué contiene el código
+   Persistencia
+   X10    El código contiene 1 llamada de este tipo: escribir un valor en una clave de arranque
+          automático (Run). Ninguno de los 3.090 binarios benignos medidos contiene un caso.
+          Técnicas de MITRE ATT&CK con el mismo mecanismo: T1547.001 (Boot or Logon Autostart
+          Execution: Registry Run Keys / Startup Folder)
+...
+   X1   El archivo es PE32 (32 bits, máquina x86, 0x014c). Declara el punto de entrada en la RVA
+        0x00002000 y un tamaño de imagen de 12.288 bytes.
+        Límite: Son valores declarados por el archivo: no garantizan que Windows lo cargue así ni
+          dicen nada de lo que hace el programa.
+        Evidencia: E1 · Glosario: pe.format, pe.header
+```
 
 ## Inicio rápido
 
-Desde la raíz del repositorio, con una entrada local disponible:
+Requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/) y Docker con motor Linux (en Windows, Docker Desktop en modo Linux).
 
 ```text
 uv sync --frozen
@@ -39,241 +46,46 @@ docker build --load -f docker/Dockerfile -t lupabin-worker:0.12.0 .
 uv run --frozen lupabin analyze "ruta/al/archivo.exe"
 ```
 
-Por defecto se muestra el informe didáctico. `--json` emite el informe de hechos validado (para guardarlo o procesarlo) y `--markdown` el informe didáctico en Markdown. Un informe guardado se puede explicar sin repetir el análisis:
+Por defecto se muestra el informe didáctico; `--markdown` lo da en Markdown y `--json`, el informe de hechos validado ([contrato](docs/evidence-schema.md)). Un informe guardado se explica de nuevo con `lupabin explain informe.json --sample archivo.exe`, que vuelve a contrastarlo con la muestra. Códigos de salida: 0 completo, 3 parcial, 1 fallo, 2 uso incorrecto.
+
+Para practicar sin aportar un binario, el generador crea archivos sintéticos e inofensivos (no los ejecutes):
 
 ```text
-uv run --frozen lupabin analyze "ruta/al/archivo.exe" --json > informe.json
-uv run --frozen lupabin explain informe.json --sample "ruta/al/archivo.exe"
+uv run python -m tests.fixtures.pe_builder --scenario capability-demo --output samples/demo.bin
+uv run --frozen lupabin analyze samples/demo.bin --no-virustotal
 ```
 
-Con `--sample`, el host repite sus comprobaciones contra la muestra (hashes, cada decodificación, coincidencia YARA, llamada, argumento y rango de función) y rechaza un informe que los bytes contradigan. Sin `--sample`, el informe explicado lleva un aviso visible: su estructura es válida, pero nada garantiza que proceda de la muestra. `--format json` emite el documento de explicaciones (contrato 0.1.0).
+Otros escenarios: `demo`, `decode-demo`, `toolchain-demo` y `upx-demo` ([procedencia de los fixtures](samples/README.md)).
 
-El parser se ejecuta en un contenedor sin red, sin capacidades adicionales, con usuario no root y raíz de solo lectura. La CLI no ejecuta el parser en el host si Docker falla. La imagen se resuelve a su ID local antes del análisis. No se montan archivos ni el socket Docker en el worker; la muestra se transmite como bytes por stdin.
+## VirusTotal
 
-Para generar una entrada sintética en lugar de aportar un binario:
+Con una clave de API en `VT_API_KEY` (o en un archivo `.env`, ignorado por git), `analyze` añade los resultados de VirusTotal como fuente externa: detecciones, veredictos de sus sandboxes y el comportamiento que observaron. Todo ocurre en el host; el worker sigue sin red.
 
-```text
-uv run python -m tests.fixtures.pe_builder --scenario demo --output samples/demo.bin
-uv run --frozen lupabin analyze samples/demo.bin --json
-uv run python -m tests.fixtures.pe_builder --scenario corrupt --output samples/partial.bin
-uv run --frozen lupabin analyze samples/partial.bin --json
-```
+Si VirusTotal no conoce el archivo, **LupaBin lo sube** con el nombre genérico `sample`. Lo subido puede compartirse con los clientes de pago de VirusTotal: para archivos confidenciales usa `--no-upload-to-virustotal`, o `LUPABIN_VIRUSTOTAL_UPLOAD=off` para no subir nunca. `--no-virustotal` o `LUPABIN_VIRUSTOTAL=off` desactivan la consulta. Una etiqueta es la opinión de un motor, y que VirusTotal no conozca un archivo no dice nada de él. [Más detalle](docs/metodo.md#virustotal).
 
-El generador no sobrescribe archivos existentes. Consulta [la procedencia de los fixtures](samples/README.md). No ejecutes los archivos generados.
+## Web, Ghidra y práctica
 
-## Qué aporta el informe didáctico
+- **Web:** `uv sync --extra web` y `uv run lupabin-web` (en `http://127.0.0.1:8080`) sirven el mismo análisis aislado en el navegador, sin guardar muestras ni informes. Para un servidor dedicado: `deploy/server/` (systemd y Caddy).
+- **Ghidra:** `lupabin export-ghidra informe.json --sample archivo.exe --output evidencias.zip` genera un JSON y un script que, en Ghidra, comprueba el SHA-256, muestra una revisión previa y añade las evidencias como comentarios sin tocar tus anotaciones. [Detalles](docs/metodo.md#exportación-a-ghidra).
+- **Práctica:** `lupabin challenge informe.json --practice`, o *Practicar con este informe* en la web, plantea preguntas tipo test sobre el propio informe y las corrige citando las evidencias. [Detalles](docs/metodo.md#retos-autocorregibles).
 
-El informe legible sigue siempre el mismo orden: la muestra (hashes, tamaño, tipo y si el informe se acaba de producir o se cargó de un archivo), un **resumen de lo que contiene el código** (capacidades agrupadas por táctica y los avisos que lo limitan), **qué no se pudo analizar**, los hechos observados, las inferencias (resultados de aplicar una transformación) y el glosario de los términos usados, con sus fuentes.
+## Seguridad
 
-- Cada frase la genera una regla determinista a partir de las evidencias que cita (`X1`, `X2`… citan `E1`, `E2`…). Antes de mostrarla, el validador la regenera desde esas citas y exige que coincida exactamente; una frase alterada no se muestra, y se dice cuántas se omitieron.
-- Cada frase lleva su **límite**: lo que ese hecho no demuestra. Cuando varias frases seguidas son de la misma regla (una por sección, una por función importada), el límite se escribe una vez para todas, y las llamadas que solo hace el código de arranque del compilador van juntas al final, con su propio título. Por ejemplo, una sección con permisos de escritura y ejecución no demuestra que se ejecute código escrito en ella.
-- Las cifras de contexto están medidas. Una entropía de 7,2 o más solo la alcanza el 0,34 % de las secciones de 4 KiB o más en 55.313 binarios benignos. Los imports se agrupan en nueve familias curadas con su prevalencia benigna: por ejemplo, el 32,2 % de los binarios benignos importa alguna función de comprobación de depuradores.
-- Todo texto que procede de la muestra (nombres, cadenas, textos decodificados) se neutraliza antes de mostrarse: los caracteres de control, de escape de terminal y bidi se convierten en escapes visibles, y en Markdown van en bloques de código inertes.
+Las muestras nunca se ejecutan ni se emulan. Los parsers corren en un contenedor sin red, con raíz de solo lectura, sin privilegios y con límites de recursos; el host valida todo lo que recibe. En el repositorio solo hay fixtures sintéticos: no envíes malware real. Modelo de amenaza y cómo informar de vulnerabilidades: [SECURITY.md](SECURITY.md).
 
-- Las marcas de compilador dicen con qué herramienta se hizo el archivo, solo cuando sus bytes tienen la forma exacta y están donde la herramienta los pone: por ejemplo, la cabecera Rich del enlazador de Microsoft con su checksum comprobado, o el mensaje del código de arranque de MinGW-w64, que explica por qué un programa compilado con GCC llama a `VirtualProtect`. Se midió en casi 55.000 binarios benignos, revisando a mano los casos dudosos: la firma de Go, por ejemplo, también aparece dentro de programas de Git escritos en C, y se descarta porque no está alineada como la pone Go. Una marca puede copiarse, y el informe lo dice.
-
-- En los programas que arrancan con `__getmainargs` de `msvcrt.dll` (los compilados con MinGW-w64 contra msvcrt y muchos del propio Windows), el informe dice dónde está `main`, el punto donde el código de arranque del compilador entrega el control al programa, y separa las llamadas que se alcanzan desde `main` de las que solo hace el arranque. Así, en un programa de MinGW-w64, `VirtualProtect` y `SetUnhandledExceptionFilter` aparecen como del arranque, no del autor. También dice qué textos usa el código (las cadenas cuya dirección toma una instrucción) y, con `main` encontrado, los primeros que usa desde `main`: en un programa de consola, sus mensajes. Si no hay exactamente una llamada que cumpla la regla, no dice nada.
-
-- Las capacidades juntan una llamada y sus argumentos constantes en una frase como «el código contiene 1 llamada de este tipo: crear un servicio de Windows», con los casos (`servicio «X», binario «Y», inicio SERVICE_AUTO_START`). Dicen lo que el código contiene, no que el programa lo haga, y dan su frecuencia en 3.090 binarios benignos: por ejemplo, el 2,36 % contiene memoria ejecutable y escribible. Si no sabe algo (la raíz de una clave, el proceso de destino), lo dice.
-
-Método y mediciones: [cómo trabaja LupaBin](docs/metodo.md).
-
-## La web
-
-`lupabin-web` sirve el mismo análisis aislado y el mismo informe didáctico en el navegador: se sube un archivo y la página muestra el resumen de capacidades, los hechos, las inferencias, la cobertura, VirusTotal y el glosario, con la descarga del informe en JSON y en Markdown. No guarda ni la muestra ni el informe, y aplica límites de tamaño y de análisis por IP. Todo texto de la muestra se neutraliza en el servidor y la página lo inserta solo como texto.
-
-Para probarla en tu equipo (con Docker y la imagen construida):
-
-```text
-uv sync --extra web
-uv run lupabin-web
-```
-
-y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker.
-
-## Programas empaquetados con UPX
-
-UPX comprime un programa y le añade un pequeño cargador que lo descomprime en memoria al arrancar. Sin descomprimirlo, el análisis solo ve ese cargador y unas pocas funciones importadas, como `LoadLibraryA`, `GetProcAddress` o `VirtualProtect`. LupaBin reconoce los ejecutables y DLL de 32 y 64 bits empaquetados con UPX 5 (métodos NRV2B, NRV2D, NRV2E y LZMA) y descomprime el bloque sin ejecutar nada. Comprueba las dos sumas Adler-32 que declara la cabecera de UPX y el tamaño exacto, y si algo no coincide no publica nada.
-
-El informe dice entonces qué secciones y qué punto de entrada tenía el programa original, y qué funciones importa, agrupadas por DLL: son las que el cargador de UPX busca al arrancar y escribe en la tabla de importaciones del programa. El host repite toda la descompresión con la muestra y rechaza el informe si un solo dato difiere.
-
-```text
-uv run python -m tests.fixtures.pe_builder --scenario upx-demo --output samples/upx-demo.bin
-uv run --frozen lupabin analyze samples/upx-demo.bin --no-virustotal
-```
-
-El fixture es sintético: su bloque lo construye el generador con bytes inertes, sin usar UPX. Lo que LupaBin aún no hace es analizar el código descomprimido: las llamadas, los argumentos y las capacidades del informe siguen siendo los del cargador. Estar empaquetado no indica intención; muchos programas legítimos usan UPX. [Método, medición y límites](docs/metodo.md#upx).
-
-## Llevar las evidencias a Ghidra
-
-Después del análisis, la web ofrece **Exportar a Ghidra (ZIP)**. Desde la CLI se exporta un informe guardado:
-
-```text
-uv run lupabin export-ghidra informe.json --sample "ruta/al/archivo.exe" --output evidencias-ghidra.zip
-```
-
-El archivo original es obligatorio: antes de exportar se comprueba que el informe corresponde a sus bytes. No se repite el análisis, no se consulta VirusTotal y nunca se sobrescribe un ZIP existente. El ZIP trae `lupabin-ghidra.json`, con el informe completo, e `ImportLupaBin.java`, un script fijo que no incorpora texto de la muestra.
-
-1. Extrae el ZIP y abre el programa en Ghidra.
-2. En **Window → Script Manager**, añade la carpeta extraída y ejecuta `ImportLupaBin.java`. Está probado con Ghidra 12.1.3 y Java 21, y no necesita Python.
-3. Elige `lupabin-ghidra.json`. Si el SHA-256 del programa abierto no coincide con el del informe, el script no cambia nada.
-4. Guarda la revisión previa en un archivo nuevo y léela: lista cada anotación que se va a añadir y cada evidencia que no se puede situar, con su motivo. Después, confirma.
-5. El script añade comentarios y marcadores `Note` en la categoría `LupaBin/...`. No borra ni sustituye tus anotaciones, importar dos veces el mismo JSON no añade nada y, si algo falla o cancelas, el programa queda como estaba. Guarda el programa para conservar los cambios.
-
-Cada evidencia se sitúa con el mapa de bytes de Ghidra, sin suponer que un offset del archivo sea una dirección, y sigue en su sitio si cambias la base de la imagen. Las decodificaciones se anotan sobre los bytes codificados. Lo que no se puede situar con certeza (overlays, rangos ambiguos, bytes modificados) no se anota y aparece en la revisión. [Detalles y límites](docs/metodo.md#exportación-a-ghidra).
-
-## Qué aporta VirusTotal (activo por defecto, desactivable)
-
-Con una clave de API en la variable de entorno `VT_API_KEY`, o en un archivo `.env` en la carpeta desde la que lo ejecutas (`VT_API_KEY=...`, ignorado por git y excluido de la imagen Docker y del paquete), LupaBin añade por defecto los resultados de VirusTotal como **fuente externa, no verificada por LupaBin**: cuántos motores antivirus marcan el archivo y con qué etiqueta, veredictos de sus sandboxes y el comportamiento que observaron al ejecutarlo allí (procesos, comandos, archivos, registro, red, mutex, servicios y técnicas MITRE ATT&CK).
-
-```text
-uv run --frozen lupabin analyze "ruta/al/archivo.exe"
-uv run --frozen lupabin analyze "ruta/al/archivo.exe" --no-virustotal
-uv run --frozen lupabin virustotal --sha256 <sha256> --format json
-```
-
-- `analyze` y `explain` consultan VirusTotal sin opciones. No lo hacen con `--no-virustotal`, con la variable `LUPABIN_VIRUSTOTAL=off` ni con `--json`, que emite el informe de hechos; el documento de VirusTotal se obtiene con `lupabin virustotal --format json`. Sin clave, la sección explica cómo configurarla y no se conecta a nada; sin red, dice por qué no hay datos. En los dos casos el análisis local no cambia.
-
-- Primero se consulta solo el SHA-256. Si VirusTotal no conoce el archivo, **LupaBin lo sube automáticamente**, con el nombre genérico `sample`, y espera su análisis hasta 3 minutos. Según su documentación, el contenido subido puede compartirse con sus clientes de pago: para archivos internos o confidenciales usa `--no-upload-to-virustotal`, o `LUPABIN_VIRUSTOTAL_UPLOAD=off` para no subir nunca.
-- Todo ocurre en el host: el worker sigue sin red. Una etiqueta es la opinión de un motor, y el comportamiento se observó en los sandboxes de VirusTotal, no en tu equipo. "VirusTotal no conoce este archivo" no dice nada sobre su peligrosidad.
-- La API pública admite 500 consultas al día y 4 por minuto, y no puede usarse en productos o servicios comerciales.
-
-El informe añade el significado documentado de algunas etiquetas de Microsoft y F-Secure, con sus fuentes. Para otras, incluido `ti!`, indica que no hay una interpretación respaldada en el catálogo. No traduce cualquier `!ml` automáticamente ni adivina la causa exacta de una detección.
-
-También contrasta las técnicas de comportamiento que comunica VirusTotal con las seis técnicas cubiertas por las capacidades locales: exige el mismo SHA-256 y el mismo identificador, cita las evidencias del caso estático y distingue lo no observado de lo no analizable. Una coincidencia no confirma ejecución ni explica el veredicto del antivirus; una ausencia no lo refuta.
-
-Más detalle: [VirusTotal](docs/metodo.md#virustotal).
-
-## Modo reto: practicar con tu informe
-
-En la web, **Practicar con este informe** abre hasta siete preguntas tipo test sobre el propio informe: cabecera y secciones PE, importaciones frente a llamadas, cadenas literales y decodificadas, y cobertura incompleta. Al corregir, cada pregunta muestra la respuesta correcta, por qué lo es y las evidencias que la respaldan. Si el informe no tiene datos para una pregunta, esa pregunta no aparece. No se guarda nada en el servidor.
-
-Desde la CLI, con un informe guardado:
-
-```text
-uv run --frozen lupabin challenge informe.json --practice
-```
-
-`--practice` pregunta en la terminal (A, B o C; Enter la deja sin responder). Para contestar en un archivo, `--json` genera las preguntas y una plantilla `answers_template`: guárdala en `respuestas.json`, cambia cada `option_id` de `null` a `"A"`, `"B"` o `"C"` y corrige con `--answers respuestas.json`. La corrección se recalcula siempre desde `informe.json`, así que no admite un solucionario propio. `--sample archivo.exe` contrasta además el informe con la muestra. El comando no consulta VirusTotal ni repite el análisis, y termina con 0 si generó o corrigió el reto, 1 si no pudo cargar o contrastar el informe y 2 si las respuestas no son válidas.
-
-Es práctica, no un examen: en la web, las soluciones viajan al navegador y se pueden consultar. La nota mide tus respuestas, no el riesgo del archivo. [Método y límites](docs/metodo.md#retos-autocorregibles).
-
-## Salida y abstención
-
-La salida `--json` es un informe JSON validado con hashes SHA-256/MD5, tamaño, tipo validado, evidencias `E1`, `E2`, etc., estados de extractor, cobertura y errores. Los nombres se conservan en hexadecimal; solo se añade texto si decodifica estrictamente. Los imports por ordinal no se convierten en nombres supuestos.
-
-- `completed`: las cinco fuentes (`pe`, `strings`, `yara`, `decode` y `code`) completaron su cobertura declarada; no es un veredicto de seguridad.
-- `partial`: una parte se revisó, pero existen componentes bloqueados, errores u omisiones. Puede no haber hallazgos.
-- `failed`: las cinco fuentes quedaron bloqueadas, o la infraestructura no pudo producir un informe validado.
-
-La cobertura está en `extractor_runs[].components`, con contadores y estados `complete`, `partial` o `blocked`. `extractor_errors` describe fallos; `limitations` describe cuotas, truncamientos explícitos y warnings. Cero resultados con cobertura completa no equivale a un error ni demuestra seguridad.
-
-Un archivo cuyo PE no pueda interpretarse puede conservar cadenas literales y seguir clasificado como `unknown`; el resultado global será parcial. El barrido reconoce el repertorio ASCII imprimible, directamente y codificado en UTF-16LE, con mínimo de cuatro caracteres. No recupera todo Unicode ni cadenas ofuscadas. Los prefijos acotados llevan `complete=false` y nunca incluyen puntos suspensivos inventados. Una secuencia imprimible puede ser incidental o cruzar campos binarios: no se presume que sea texto intencional del programa.
-
-Códigos de salida: 0 completo, 3 parcial, 1 fallo, 2 uso incorrecto. Los errores anteriores al informe se emiten como JSON en stderr, sin rutas locales ni traceback. Las evidencias vacías deben interpretarse junto con `extractor_runs` y `extractor_errors`.
-
-Los límites predeterminados son 20 MiB de entrada, 30 segundos de worker, 512 MiB de memoria, 1 CPU, 64 procesos, 8 MiB de salida y 10.000 imports. La preparación y limpieza del contenedor tienen límites adicionales propios. Si no se puede confirmar la limpieza, la CLI lo comunica; no debe asumirse que el contenedor desapareció.
-
-También se acotan secciones (96), entradas EAT (5.000), asociaciones de nombres exportados (10.000), cadenas (5.000 y 1.024 caracteres por prefijo), anomalías (128) y bytes acumulados de entropía (20 MiB). Se reserva espacio de salida para explicar las omisiones. Las cuotas efectivas aparecen en el JSON.
-
-Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, sin borrar las cabeceras y descriptores comprobados. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
-
-La CLI 0.12.0 exige el esquema 0.12.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 a 0.11.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
-
-Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' lupabin-worker:0.12.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
-
-## Qué aporta YARA
-
-El catálogo propio incluye cuatro reglas: texto del stub DOS, presencia conjunta de tres nombres de APIs, marcadores `RSDS`/`.pdb` y el marcador sintético `LUPABIN PRACTICE`. Ninguna identifica una familia ni prueba ejecución, imports, inyección o actividad de red.
-
-Cada `yara_match` contiene regla, namespace, revisión, hashes de fuente/conjunto, versiones observadas e instancias con offsets y bytes originales. Su `location` global es nula porque una regla puede depender de varios intervalos; consulta `data.instances`. `yara_context` identifica el catálogo incluso cuando no hay coincidencias.
-
-El motor nativo corre en un hijo dentro del worker. Usa solo el buffer recibido, sin rutas, PIDs ni reglas externas. Los límites iniciales son 5 segundos de matching, 10 segundos de proceso, 32 reglas publicadas, 16 instancias por regla y 256 bytes por instancia. Los bytes o apariciones omitidos se marcan como parciales. Un timeout, warning nativo o respuesta inválida descarta los matches YARA, conservando PE/strings cuando el padre sigue operativo.
-
-Para probar representación limitada con datos sintéticos:
-
-```text
-uv run python -m tests.fixtures.pe_builder --scenario yara-limited --output samples/yara-limited.bin
-uv run --frozen lupabin analyze samples/yara-limited.bin --json
-```
-
-El fixture contiene veinte apariciones ASCII del marcador. Con los límites predeterminados el informe debe conservar dieciséis e indicar cuatro omitidas, con salida 3. `--scenario demo` ofrece un positivo y `--scenario basic` un caso sin coincidencias de este catálogo. No ejecutes ninguno como programa.
-
-## Qué aporta la decodificación
-
-Cada `decoded_string` dice exactamente esto: "estos bytes, transformados con este algoritmo y estos parámetros, producen este texto". Es siempre `confidence: "inferred"`. No afirma que el programa realice la transformación, que el texto sea el que pretendía su autor ni que tenga significado (una URL decodificada no prueba una conexión).
-
-- **Base64 y hexadecimal** (`component: decode_strings`): sobre las cadenas ya extraídas, con validación estricta (Base64 canónico de al menos 12 caracteres si lleva relleno `=` o 16 si no; hexadecimal que no sea solo dígitos decimales, porque un número como `2147483647` también es hexadecimal válido; el texto resultante debe ser imprimible y tener al menos 4 caracteres distintos). Citan en `provenance` la cadena que contiene los bytes codificados.
-- **XOR de clave repetida de 1 a 8 bytes** (`component: decode_xor`): sobre los bytes crudos, anclado en un catálogo versionado de cadenas de referencia (`anchor`, p. ej. `http://`, `kernel32.dll`, `\Registry\Machine\`; 62 en la versión 3). La clave no se elige entre candidatas: se deriva de los bytes y se publica en `transform.key_hex`, alineada con el inicio de `location`. Cualquiera puede comprobarla: `texto[i] = bytes[inicio + i] XOR clave[i mod longitud]`. Si una cadena usa una clave ya verificada en otro punto de la muestra (lo habitual en tablas de cadenas cifradas), también se descifra aunque su ancla sea corta, y cita en `provenance` la decodificación que estableció la clave.
-
-Límites honestos del método, medidos sobre más de 30.000 archivos benignos de Windows y programas instalados (0 decodificaciones espurias; todas las encontradas eran ofuscación real y se revisaron a mano) y documentados en [el método](docs/metodo.md#decodificación):
-
-- Un texto cifrado que **no contenga ninguna cadena del catálogo no se encuentra**.
-- Si la clave deja el texto cifrado todavía legible (claves pequeñas, típicamente `< 0x20`), **no se publica**: sin puntuar plausibilidad es indistinguible de texto normal. Esos bytes siguen visibles como `string`.
-- Una ancla corta solo verifica por sí sola claves cortas (`http://`, 7 bytes, nunca una clave de 8). Con claves de 8 bytes la cobertura medida es del 37 % para una cadena aislada y del 92 % cuando otra cadena de la muestra comparte la clave (el techo alcanzable en el conjunto de prueba es del 86 %: el resto no contiene ninguna ancla).
-- No hay compresión (salvo el bloque de UPX, más abajo), RC4, XOR rodante ni emulación.
-
-El host no confía en el worker: vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta si alguna no se reproduce. Una muestra con millones de patrones candidatos termina como limitación declarada (`decode_xor_examined_limit`), no como timeout.
-
-```text
-uv run python -m tests.fixtures.pe_builder --scenario decode-demo --output samples/decode-demo.bin
-uv run --frozen lupabin analyze samples/decode-demo.bin --json
-```
-
-El fixture contiene un Base64, un hexadecimal y cuatro textos cifrados con XOR (clave de 1 byte, de 4 bytes, una cadena UTF-16LE y una URL que reutiliza la clave de 4 bytes) sobre el dominio reservado `.invalid`. El informe debe mostrar seis `decoded_string` y estado completo; la URL cita en `provenance` la decodificación que estableció su clave.
-
-## Arquitectura
-
-```text
-CLI -> lectura acotada + hashes -> Docker sin red
-    -> PE (cabeceras, secciones, entropía, imports, exports, anomalías)
-    -> cadenas literales independientes -> hijo YARA con catálogo propio
-    -> decodificación: Base64/hex sobre cadenas, XOR anclado sobre bytes
-    -> código x86/x64: llamadas a imports, argumentos constantes y rangos de .pdata
-    -> presupuesto y modelos Pydantic
-    -> validación de respuesta y reverificación de bytes en el host -> JSON
-    -> explicaciones deterministas (host) + glosario con fuentes
-    -> validación por regeneración -> texto / Markdown con texto de la muestra neutralizado
-```
-
-- [Contrato de evidencias](docs/evidence-schema.md).
-- [Cómo trabaja LupaBin: método y límites medidos](docs/metodo.md).
-- [JSON Schema generado](docs/evidence-schema.json) y [el de las explicaciones](docs/explanation-schema.json).
-- [Despliegue de la web](docs/deploy.md).
-
-El JSON Schema valida la forma; Pydantic añade invariantes entre campos, referencias y estados. Una cita existente no demuestra por sí sola la veracidad de una afirmación.
-
-## Desarrollo y verificación
+## Desarrollo
 
 ```text
 uv run --frozen ruff format --check .
 uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
-node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs
-uv run --frozen python -m lupabin.evidence.schema --check
-uv run --frozen python -m lupabin.explain.schema --check
-uv build
-uv run --frozen python -m tests.check_yara_distribution
-docker compose config --quiet
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.12.0 .
 uv run --frozen pytest -m docker
+node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs
 ```
 
-Las regresiones del JavaScript de la web requieren Node.js 22 o posterior y usan su ejecutor de pruebas integrado, sin instalar paquetes npm. Node.js no es necesario para ejecutar LupaBin.
-
-Las pruebas Docker fallan si se solicitan sin motor o imagen; no se omiten silenciosamente. La suite ordinaria excluye explícitamente ese marcador. `docker compose build worker` es una alternativa de build; el servicio Compose es el worker de consola. La web se sirve con `lupabin-web` (ver más arriba).
-
-Para actualizar los esquemas tras cambiar los modelos: `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. No editar manualmente el JSON generado. `uv run python -m tests.check_glossary_sources` comprueba con red que las fuentes del glosario y sus anclas siguen existiendo; no forma parte de la CI.
-
-Para repetir las mediciones sobre un directorio de binarios benignos propio (solo se leen como bytes; no forma parte de la CI; ver [el método](docs/metodo.md#repetir-las-mediciones)):
-
-```text
-uv run python -m tests.decode_eval false-positives <directorio>
-uv run python -m tests.decode_eval recall <directorio>
-uv run python -m tests.decode_eval timing
-```
+Las pruebas de la web necesitan Node.js 22 o posterior, sin paquetes npm. La CI ejecuta además las comprobaciones de los esquemas, el build y la distribución del catálogo YARA; tras cambiar los modelos, los esquemas se regeneran con `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. Las mediciones sobre binarios benignos se repiten con las herramientas `tests/*_eval.py` ([cómo](docs/metodo.md#repetir-las-mediciones)).
 
 ## Contribuir y licencia
 
-Lee [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) y el [código de conducta](CODE_OF_CONDUCT.md). Solo se admiten fixtures sintéticos e inofensivos. LupaBin es obra de Miguel Ángel Rodríguez Romero y se distribuye con la licencia [Apache-2.0](LICENSE): puedes usarlo, modificarlo, hacer fork y comercializarlo, siempre que conserves el archivo [NOTICE](NOTICE) y nombres al autor (*"Basado en LupaBin, de Miguel Ángel Rodríguez Romero"*). El nombre y el logo están reservados ([TRADEMARKS.md](TRADEMARKS.md)), y las contribuciones requieren aceptar el [acuerdo de contribución](CLA.md). Las dependencias conservan sus licencias.
+Lee [CONTRIBUTING.md](CONTRIBUTING.md) y el [código de conducta](CODE_OF_CONDUCT.md). LupaBin se distribuye con la licencia [Apache-2.0](LICENSE): puedes usarlo, modificarlo y redistribuirlo conservando el archivo [NOTICE](NOTICE). El nombre y el logo están reservados ([TRADEMARKS.md](TRADEMARKS.md)) y las contribuciones requieren aceptar el [acuerdo de contribución](CLA.md).

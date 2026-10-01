@@ -41,7 +41,7 @@ uv sync --extra web
 uv run lupabin-web          # http://127.0.0.1:8080
 ```
 
-To deploy it on a server (Ubuntu 24.04/22.04 or Debian 12, x86_64 or ARM64, e.g. Oracle Cloud Free Tier or Hetzner), follow [docs/deploy.md](docs/deploy.md) (in Spanish). Use a dedicated server: the service controls Docker.
+For a server, `deploy/server/` has the systemd unit, the Caddy configuration and an installer for Ubuntu or Debian. Use a dedicated server: the service controls Docker.
 
 ## Ghidra export
 
