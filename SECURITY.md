@@ -18,6 +18,8 @@ Solo se usa el catálogo propio empaquetado, sin descargas ni bytecodes externos
 
 La decodificación (Base64/hex/XOR) es cómputo puro en Python dentro del mismo worker aislado: no ejecuta, emula ni interpreta la muestra, y no añade dependencias nativas. Una muestra hostil puede intentar agotar la CPU con millones de patrones candidatos; el tope de apariciones examinadas lo convierte en una limitación declarada (probado en contenedor real). El host vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta completa si alguna no se reproduce, así que un worker manipulado no puede publicar un texto "decodificado" que los bytes no produzcan. Un texto decodificado es un dato no fiable más: nunca es una instrucción.
 
+La descompresión de UPX también ocurre en el worker y se repite en el host para comprobar su resultado. Está acotada: solo cabeceras con los valores medidos, como mucho 8 candidatas, 32 MiB descomprimidos y un flujo que debe terminar exactamente donde declara. Los métodos NRV son Python puro; el método LZMA usa la biblioteca `liblzma` de Python, que es código nativo y en el host procesa bytes de la muestra fuera del contenedor. No se ejecuta ni se carga nada del programa descomprimido.
+
 ## Servicio web (`lupabin-web`)
 
 La web recibe archivos de cualquiera y los analiza con el mismo aislamiento que la CLI: un contenedor nuevo por análisis, sin red, de solo lectura, sin privilegios y con límites. El proceso web no analiza la muestra: lee sus bytes, calcula hashes y la pasa al worker por stdin. Aun así:

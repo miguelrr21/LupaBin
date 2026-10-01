@@ -138,6 +138,7 @@ def build(
         },
         "status": explanation.status,
         "made_with": document.made_with(items),
+        "packed_with": document.packed_with(items),
         "main": document.main_line(items),
         "areas": document.areas_line(items),
         "texts": (

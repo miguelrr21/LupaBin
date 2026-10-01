@@ -14,6 +14,7 @@ from lupabin.errors import LupaBinError
 from lupabin.evidence.code import verify_calls
 from lupabin.evidence.models import Limits, Report
 from lupabin.evidence.toolchain_checks import verify_markers
+from lupabin.evidence.upx_checks import verify_upx
 from lupabin.evidence.yara import validate_matches
 from lupabin.extractors.decode import verify_decodings
 from lupabin.extractors.strings import verify_strings
@@ -28,7 +29,8 @@ UNCHECKED = (
 CHECKED = (
     "Informe cargado de un archivo y contrastado con la muestra: coinciden los hashes, "
     "se cotejaron los bytes conservados de las cadenas literales, cada decodificación "
-    "se rederivó de los bytes y cada coincidencia YARA se comprobó."
+    "se rederivó de los bytes, cada coincidencia YARA se comprobó y el bloque UPX, si lo hay, "
+    "se descomprimió de nuevo."
 )
 
 
@@ -63,6 +65,7 @@ def check_against_sample(report: Report, blob: Blob) -> None:
         verify_decodings(report.evidence, blob.data)
         verify_calls(report.evidence, blob.data)
         verify_markers(report.evidence, blob.data)
+        verify_upx(report.evidence, blob.data)
         context = report.yara_context
         if context is not None and context.catalog is not None:
             limits = report.analysis.limits.yara

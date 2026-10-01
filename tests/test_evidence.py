@@ -25,7 +25,7 @@ from lupabin.evidence.primitives import COMPONENTS, Provenance, Transform, minim
 
 def report_dict():
     return {
-        "schema_version": "0.11.0",
+        "schema_version": "0.12.0",
         "analysis": {
             "started_at": "2026-09-20T12:00:00Z",
             "finished_at": "2026-09-20T12:00:01Z",

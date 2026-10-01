@@ -24,6 +24,8 @@ from lupabin.evidence.facts import (
     StringData,
     StringReferenceData,
     ToolchainData,
+    UpxImageData,
+    UpxImportData,
 )
 from lupabin.evidence.models import (
     ComponentRun,
@@ -46,6 +48,8 @@ KINDS = {
     StringData: "string",
     AnomalyData: "header_anomaly",
     ToolchainData: "toolchain_marker",
+    UpxImageData: "upx_image",
+    UpxImportData: "upx_import",
     YaraMatchData: "yara_match",
     DecodedStringData: "decoded_string",
     ApiCallData: "api_call",
@@ -127,6 +131,8 @@ class Collector:
             "export": limits.exports,
             "header_anomaly": limits.anomalies,
             "toolchain_marker": toolchain.QUOTA,
+            "upx_image": 1,
+            "upx_import": limits.imports,
             "string": limits.strings,
             "yara_match": limits.yara.matches,
             "decoded_string": limits.decode.strings + limits.decode.xor,
@@ -160,6 +166,7 @@ class Collector:
         if self.counts[kind] >= self.quotas[kind]:
             codes: dict[str, ErrorCode] = {
                 "import": "import_limit",
+                "upx_import": "import_limit",
                 "export": "export_limit",
                 "string": "string_limit",
                 "header_anomaly": "anomaly_limit",

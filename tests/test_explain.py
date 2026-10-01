@@ -25,6 +25,7 @@ from tests.fixtures.pe_builder import (
     build_resolve_demo,
     build_same_function_demo,
     build_toolchain_demo,
+    build_upx_demo,
 )
 
 GLOSSARY = load_glossary()
@@ -84,6 +85,8 @@ SAMPLES = {
     "runtime": lambda: build_pe(function=b"GetProcAddress"),
     "wx": writable_executable,
     "high-entropy": high_entropy,
+    "upx": build_upx_demo,
+    "upx-plain": lambda: build_upx_demo(bits=64, method="nrv2e", tail=False),
     "not-pe": lambda: b"just some text, not a PE file at all " * 4,
 }
 

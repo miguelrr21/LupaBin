@@ -20,6 +20,7 @@ COMPONENTS: dict[Component, str] = {
     "exports": "exports",
     "anomalies": "anomalías estructurales",
     "toolchain": "marcas de compilador",
+    "upx": "empaquetado UPX",
     "ascii": "cadenas ASCII",
     "utf16le": "cadenas UTF-16LE",
     "yara_rules": "catálogo de reglas",
@@ -74,6 +75,10 @@ MESSAGES: dict[str, str] = {
     ),
     "anomaly_limit": "Se alcanzó el máximo de anomalías conservadas.",
     "toolchain_limit": "Se alcanzó el máximo de marcas de GCC distintas conservadas.",
+    "upx_layout_unrecognized": (
+        "El bloque de UPX se descomprimió y verificó, pero su final no tiene la forma medida: "
+        "no se publican las secciones originales, el punto de entrada ni las importaciones."
+    ),
     "evidence_budget": "Se alcanzó el tamaño máximo del informe y se omitieron resultados.",
     "dependency_omitted": (
         "Faltan datos de los que depende este componente, así que parte de él no se calculó."

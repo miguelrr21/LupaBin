@@ -20,13 +20,14 @@ from lupabin.evidence.facts import (
     StringEvidence,
     StringReferenceEvidence,
     ToolchainEvidence,
+    UpxImageEvidence,
     YaraEvidence,
 )
 from lupabin.evidence.models import Report
 from lupabin.explain.capabilities import CAPABILITIES, cases
 from lupabin.explain.families import FAMILIES, family_of
 from lupabin.explain.models import Explanation, Item, Note, ReportRef
-from lupabin.explain.rules import RULES, executable_sections, groups, procedure_name
+from lupabin.explain.rules import RULES, executable_sections, groups, procedure_name, upx_groups
 from lupabin.explain.text import COMPONENTS, MESSAGES, SOURCES, STATUSES, name
 from lupabin.glossary.catalog import Glossary
 
@@ -97,6 +98,12 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
                 yield "toolchain.go_buildinfo_pointer@1", (fact,)
             else:
                 yield f"toolchain.{fact.data.marker}@1", (fact,)
+    for fact in evidence:
+        if isinstance(fact, UpxImageEvidence):
+            described = fact.data.original_sections is not None
+            yield ("upx.image@1" if described else "upx.image_plain@1"), (fact,)
+    for listed in upx_groups(report):
+        yield "upx.imports@1", listed
     for fact in evidence:
         if isinstance(fact, SectionEvidence):
             yield "pe.section@1", (fact,)

@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
-from lupabin.evidence import toolchain
+from lupabin.evidence import toolchain, upx
 from lupabin.evidence.primitives import (
     Component,
     EvidenceId,
@@ -602,6 +602,142 @@ class ToolchainEvidence(Fact):
         return self
 
 
+class UpxSection(Model):
+    """A section of the original program, as the header copy in the block lists it."""
+
+    name_raw_hex: Annotated[str, Field(pattern=r"^[a-f0-9]{16}$")]
+    name_text: Annotated[str, Field(max_length=8)] | None
+    rva: UInt
+    virtual_size: UInt
+
+    @model_validator(mode="after")
+    def faithful(self) -> Self:
+        if upx.section_text(bytes.fromhex(self.name_raw_hex)) != self.name_text:
+            raise ValueError("section name disagrees with its bytes")
+        return self
+
+
+class UpxImageData(Model):
+    """A UPX 5 block (evidence/upx.py): its header, where its packed bytes are, and what
+    the unpacked bytes declare about the original program. The unpacked bytes are
+    identified by their size, Adler-32 and SHA-256, and the host derives them again."""
+
+    method_id: Literal["upx5-pe-v1"] = "upx5-pe-v1"
+    header_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2}){32}$")]
+    version: Annotated[int, Field(ge=0, le=255)]
+    format: upx.Format
+    method: upx.Method
+    level: Annotated[int, Field(ge=0, le=255)]
+    packed_offset: NonNegative
+    packed_size: Annotated[int, Field(gt=0)]
+    packed_adler32: UInt
+    unpacked_size: Annotated[int, Field(gt=0, le=upx.MAX_UNPACKED)]
+    unpacked_adler32: UInt
+    unpacked_sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    original_size: UInt
+    # what the end of the unpacked bytes declares; all None when it lacks the measured form
+    original_entry_rva: UInt | None = None
+    original_image_base: Annotated[int, Field(ge=0, le=0xFFFFFFFFFFFFFFFF)] | None = None
+    original_sections: (
+        Annotated[tuple[UpxSection, ...], Field(min_length=1, max_length=upx.MAX_SECTIONS)] | None
+    ) = None
+    imports: Annotated[int, Field(ge=0, le=upx.MAX_IMPORTS)] | None = None  # in the list
+
+    @model_validator(mode="after")
+    def agrees_with_header(self) -> Self:
+        header = upx.decode_header(bytes.fromhex(self.header_hex))
+        if header is None or (
+            header.version,
+            header.format,
+            header.method,
+            header.level,
+            header.packed_size,
+            header.packed_adler32,
+            header.unpacked_size,
+            header.unpacked_adler32,
+            header.original_size,
+        ) != (
+            self.version,
+            self.format,
+            self.method,
+            self.level,
+            self.packed_size,
+            self.packed_adler32,
+            self.unpacked_size,
+            self.unpacked_adler32,
+            self.original_size,
+        ):
+            raise ValueError("UPX fields disagree with their header")
+        declared = (
+            self.original_entry_rva,
+            self.original_image_base,
+            self.original_sections,
+            self.imports,
+        )
+        if any(item is None for item in declared) and any(item is not None for item in declared):
+            raise ValueError("the original program is described whole or not at all")
+        return self
+
+
+class UpxImageEvidence(Model):
+    id: EvidenceId
+    source: Literal["pe"] = "pe"
+    component: Literal["upx"] = "upx"
+    kind: Literal["upx_image"] = "upx_image"
+    location: Location  # the 32-byte header
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: UpxImageData
+
+    @model_validator(mode="after")
+    def locates_its_header(self) -> Self:
+        if self.location.offset is None or self.location.length != upx.HEADER_SIZE:
+            raise ValueError("a UPX block locates exactly its header")
+        if self.provenance.evidence_ids:
+            raise ValueError("a UPX block cites nothing but the sample's bytes")
+        return self
+
+
+class UpxImportData(Model):
+    """A function in the import list of a UPX block: the loader resolves it and writes
+    its address in the original program's import slot `iat_rva`. The entry lies in the
+    unpacked bytes; the DLL's name, in the packed file."""
+
+    dll: Name
+    dll_rva: UInt
+    function: Name | None = None
+    ordinal: Annotated[int, Field(ge=0, le=65535)] | None = None
+    iat_rva: Annotated[int, Field(gt=0, le=0xFFFFFFFF)]
+    stream_offset: NonNegative
+    stream_length: Annotated[int, Field(ge=2, le=upx.MAX_NAME + 2)]
+
+    @model_validator(mode="after")
+    def name_or_ordinal(self) -> Self:
+        if (self.function is None) == (self.ordinal is None):
+            raise ValueError("exactly one of function and ordinal is required")
+        size = 3 if self.function is None else len(self.function.raw_hex) // 2 + 2
+        if self.stream_length != size:
+            raise ValueError("an import entry's length disagrees with its name")
+        return self
+
+
+class UpxImportEvidence(Model):
+    id: EvidenceId
+    source: Literal["pe"] = "pe"
+    component: Literal["upx"] = "upx"
+    kind: Literal["upx_import"] = "upx_import"
+    location: None = None
+    confidence: Literal["inferred"] = "inferred"
+    provenance: Provenance = Field(default_factory=Provenance)
+    data: UpxImportData
+
+    @model_validator(mode="after")
+    def cites_its_block(self) -> Self:
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a UPX import cites its block")
+        return self
+
+
 class YaraEvidence(Model):
     id: EvidenceId
     source: Literal["yara"] = "yara"
@@ -630,6 +766,8 @@ Evidence = Annotated[
     | StringEvidence
     | AnomalyEvidence
     | ToolchainEvidence
+    | UpxImageEvidence
+    | UpxImportEvidence
     | YaraEvidence
     | DecodedStringEvidence
     | ApiCallEvidence
@@ -650,6 +788,8 @@ Payload = (
     | StringData
     | AnomalyData
     | ToolchainData
+    | UpxImageData
+    | UpxImportData
     | YaraMatchData
     | DecodedStringData
     | ApiCallData

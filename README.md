@@ -8,13 +8,14 @@ Tutor de análisis estático de binarios, centrado en evidencias verificables. C
 
 LupaBin lee un ejecutable de Windows sin ejecutarlo nunca, dice qué contienen sus bytes y explica cada afirmación: qué evidencia cita, qué no demuestra y dónde leer más. No es un antivirus y no da veredictos.
 
-- **Hechos de los bytes** (contrato 0.11.0), obtenidos en un worker Docker aislado y sin red: hashes, cabeceras y secciones PE32/PE32+, entropía, importaciones normales y retardadas, exportaciones, anomalías estructurales, marcas de compilador (cabecera Rich del enlazador de Microsoft, GCC y MinGW-w64, Go, .NET y PyInstaller), cadenas literales, coincidencias con las reglas YARA propias y decodificación estática acotada (Base64, hexadecimal y XOR de clave repetida de 1 a 8 bytes).
+- **Hechos de los bytes** (contrato 0.12.0), obtenidos en un worker Docker aislado y sin red: hashes, cabeceras y secciones PE32/PE32+, entropía, importaciones normales y retardadas, exportaciones, anomalías estructurales, marcas de compilador (cabecera Rich del enlazador de Microsoft, GCC y MinGW-w64, Go, .NET y PyInstaller), cadenas literales, coincidencias con las reglas YARA propias y decodificación estática acotada (Base64, hexadecimal y XOR de clave repetida de 1 a 8 bytes).
 - **Qué llama el código.** Qué funciones importadas llama el código x86/x64, desde qué instrucción y con qué argumentos constantes, en 72 funciones de registro, servicios, procesos, bibliotecas, archivos, red, sincronización, memoria y criptografía.
 - **Un informe didáctico** con explicaciones deterministas que citan cada evidencia, dicen lo que no demuestran y enlazan un glosario con fuentes verificadas.
 - **Capacidades:** lo que contiene el código (crear un servicio, escribir en una clave `Run`, pedir memoria ejecutable y escribible), con la técnica de MITRE ATT&CK solo donde el mecanismo coincide y su frecuencia en binarios benignos.
+- **Programas empaquetados con UPX 5:** descomprime el bloque sin ejecutarlo y muestra lo que esconde: las secciones y el punto de entrada originales y las funciones importadas que el cargador de UPX resuelve al arrancar.
 - **VirusTotal** como fuente externa, separada de los hechos (activo por defecto y desactivable), y **una web** con el mismo análisis.
 
-No ejecuta ni emula la muestra, y no incluye LLM, capa, FLOSS ni desempaquetado.
+No ejecuta ni emula la muestra, y no incluye LLM, capa ni FLOSS.
 
 ## Estado y alcance
 
@@ -34,7 +35,7 @@ Desde la raíz del repositorio, con una entrada local disponible:
 
 ```text
 uv sync --frozen
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.11.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.12.0 .
 uv run --frozen lupabin analyze "ruta/al/archivo.exe"
 ```
 
@@ -89,6 +90,19 @@ uv run lupabin-web
 ```
 
 y abre `http://127.0.0.1:8080`. Para desplegarla en un servidor (Oracle Cloud Free Tier, Hetzner u otro VPS, en x86_64 o ARM64), con HTTPS gratuito mediante un dominio de DuckDNS, sigue [la guía](docs/deploy.md). Usa un servidor dedicado: el servicio controla Docker.
+
+## Programas empaquetados con UPX
+
+UPX comprime un programa y le añade un pequeño cargador que lo descomprime en memoria al arrancar. Sin descomprimirlo, el análisis solo ve ese cargador y unas pocas funciones importadas, como `LoadLibraryA`, `GetProcAddress` o `VirtualProtect`. LupaBin reconoce los ejecutables y DLL de 32 y 64 bits empaquetados con UPX 5 (métodos NRV2B, NRV2D, NRV2E y LZMA) y descomprime el bloque sin ejecutar nada. Comprueba las dos sumas Adler-32 que declara la cabecera de UPX y el tamaño exacto, y si algo no coincide no publica nada.
+
+El informe dice entonces qué secciones y qué punto de entrada tenía el programa original, y qué funciones importa, agrupadas por DLL: son las que el cargador de UPX busca al arrancar y escribe en la tabla de importaciones del programa. El host repite toda la descompresión con la muestra y rechaza el informe si un solo dato difiere.
+
+```text
+uv run python -m tests.fixtures.pe_builder --scenario upx-demo --output samples/upx-demo.bin
+uv run --frozen lupabin analyze samples/upx-demo.bin --no-virustotal
+```
+
+El fixture es sintético: su bloque lo construye el generador con bytes inertes, sin usar UPX. Lo que LupaBin aún no hace es analizar el código descomprimido: las llamadas, los argumentos y las capacidades del informe siguen siendo los del cargador. Estar empaquetado no indica intención; muchos programas legítimos usan UPX. [Método, medición y límites](docs/metodo.md#upx).
 
 ## Llevar las evidencias a Ghidra
 
@@ -164,9 +178,9 @@ También se acotan secciones (96), entradas EAT (5.000), asociaciones de nombres
 
 Ante un mapa de regiones ambiguo se bloquean las lecturas que dependan de él, sin borrar las cabeceras y descriptores comprobados. Los warnings de pefile impiden declarar una extracción completa. El determinismo aplica a hechos, orden e IDs con versiones/configuración equivalentes; no a timestamps ni a ejecuciones interrumpidas por límites.
 
-La CLI 0.11.0 exige el esquema 0.11.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 a 0.10.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
+La CLI 0.12.0 exige el esquema 0.12.0 y un catálogo compatible del worker; una discrepancia produce `incompatible_worker`. Los esquemas 0.1.0 a 0.11.0 se conservan en `docs/schemas/`, pero no hay conversión automática de informes. Los IDs pueden cambiar entre versiones.
 
-Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' lupabin-worker:0.11.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
+Si aparece `image_unavailable`, la CLI no pudo verificar la imagen, lo que no demuestra por sí solo que haya sido borrada. Comprueba en la misma terminal `docker context show` y `docker image inspect --format '{{.Id}}' lupabin-worker:0.12.0`; construye la imagen con `--load` en ese contexto si no está disponible. No se cambia el contexto ni se descarga una imagen durante el análisis.
 
 ## Qué aporta YARA
 
@@ -197,7 +211,7 @@ Límites honestos del método, medidos sobre más de 30.000 archivos benignos de
 - Un texto cifrado que **no contenga ninguna cadena del catálogo no se encuentra**.
 - Si la clave deja el texto cifrado todavía legible (claves pequeñas, típicamente `< 0x20`), **no se publica**: sin puntuar plausibilidad es indistinguible de texto normal. Esos bytes siguen visibles como `string`.
 - Una ancla corta solo verifica por sí sola claves cortas (`http://`, 7 bytes, nunca una clave de 8). Con claves de 8 bytes la cobertura medida es del 37 % para una cadena aislada y del 92 % cuando otra cadena de la muestra comparte la clave (el techo alcanzable en el conjunto de prueba es del 86 %: el resto no contiene ninguna ancla).
-- No hay desempaquetado, compresión, RC4, XOR rodante ni emulación.
+- No hay compresión (salvo el bloque de UPX, más abajo), RC4, XOR rodante ni emulación.
 
 El host no confía en el worker: vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta si alguna no se reproduce. Una muestra con millones de patrones candidatos termina como limitación declarada (`decode_xor_examined_limit`), no como timeout.
 
@@ -242,7 +256,7 @@ uv run --frozen python -m lupabin.explain.schema --check
 uv build
 uv run --frozen python -m tests.check_yara_distribution
 docker compose config --quiet
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.11.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.12.0 .
 uv run --frozen pytest -m docker
 ```
 

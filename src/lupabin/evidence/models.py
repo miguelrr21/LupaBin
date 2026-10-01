@@ -13,7 +13,7 @@ from lupabin.evidence.code import (
     validate_main,
     validate_reference,
 )
-from lupabin.evidence.facts import ApiCallEvidence, ToolchainEvidence
+from lupabin.evidence.facts import ApiCallEvidence, ToolchainEvidence, UpxImageEvidence
 from lupabin.evidence.facts import Evidence as Evidence
 from lupabin.evidence.facts import ImportData as ImportData
 from lupabin.evidence.primitives import (
@@ -53,6 +53,7 @@ ErrorCode = (
         "entropy_limit",
         "anomaly_limit",
         "toolchain_limit",
+        "upx_layout_unrecognized",
         "evidence_budget",
         "dependency_omitted",
         "output_limit",
@@ -75,7 +76,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.11.0"] = "0.11.0"
+    version: Literal["0.12.0"] = "0.12.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -114,7 +115,7 @@ class Run(Model):
     source: Source
     version: Annotated[str, Field(min_length=1, max_length=64)]
     status: Status
-    components: Annotated[tuple[ComponentRun, ...], Field(max_length=8)]
+    components: Annotated[tuple[ComponentRun, ...], Field(max_length=9)]
     evidence_count: NonNegative
 
     @model_validator(mode="after")
@@ -147,7 +148,7 @@ def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | 
 
 
 class Report(Model):
-    schema_version: Literal["0.11.0"] = "0.11.0"
+    schema_version: Literal["0.12.0"] = "0.12.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -175,6 +176,8 @@ class Report(Model):
             "string": limits.strings,
             "header_anomaly": limits.anomalies,
             "toolchain_marker": toolchain.QUOTA,
+            "upx_image": 1,
+            "upx_import": limits.imports,
             "yara_match": limits.yara.matches,
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
@@ -284,6 +287,31 @@ class Report(Model):
                 raise ValueError("evidence has no successful or partial source")
             if fact.kind == "yara_match":
                 degrees[fact.id] = 0
+                continue
+            if fact.kind == "upx_image":
+                span, packed = fact.location, fact.data
+                if (span.offset or 0) + (span.length or 0) > self.sample.size or (
+                    packed.packed_offset + packed.packed_size > self.sample.size
+                ):
+                    raise ValueError("evidence location exceeds sample bounds")
+                if self.sample.type == "unknown":
+                    raise ValueError("unknown format cannot have PE evidence")
+                listed = sum(1 for item in self.evidence if item.kind == "upx_import")
+                coverage = {part.name: part.status for part in runs["pe"].components}["upx"]
+                if listed > (packed.imports or 0) or (
+                    coverage == "complete" and listed != (packed.imports or 0)
+                ):
+                    raise ValueError("UPX imports disagree with the block's list")
+                degrees[fact.id] = 0
+                continue
+            if fact.kind == "upx_import":
+                block = facts.get(fact.provenance.evidence_ids[0])
+                if not isinstance(block, UpxImageEvidence) or block.data.imports is None:
+                    raise ValueError("a UPX import cites a block with an import list")
+                if fact.data.stream_offset + fact.data.stream_length > block.data.unpacked_size:
+                    raise ValueError("a UPX import lies in the unpacked bytes")
+                degrees[fact.id] = 1
+                children[block.id].append(fact.id)
                 continue
             if fact.kind == "api_call":
                 span = fact.location

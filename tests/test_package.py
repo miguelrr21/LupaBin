@@ -1,4 +1,4 @@
 def test_package_version():
     import lupabin
 
-    assert lupabin.__version__ == "0.11.0"
+    assert lupabin.__version__ == "0.12.0"

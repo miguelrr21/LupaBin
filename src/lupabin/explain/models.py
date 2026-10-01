@@ -20,7 +20,7 @@ SlotValue = str | int | bool | tuple[str, ...]
 
 class ReportRef(Model):
     sample_sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
-    schema_version: Literal["0.11.0"]
+    schema_version: Literal["0.12.0"]
 
 
 class Item(Model):

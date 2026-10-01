@@ -29,6 +29,8 @@ from lupabin.evidence.facts import (
     StringEvidence,
     StringReferenceEvidence,
     ToolchainEvidence,
+    UpxImageEvidence,
+    UpxImportEvidence,
     YaraEvidence,
 )
 from lupabin.evidence.models import Report
@@ -897,6 +899,99 @@ def _areas(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("code.reach", "code.import_call")
 
 
+UPX_NOT_PROVEN = (
+    "Descomprimir no es ejecutar, y LupaBin aún no analiza el código descomprimido: las "
+    "llamadas del informe son las del cargador de UPX. Empaquetar no indica intención: muchos "
+    "programas legítimos usan UPX. Las sumas prueban que los bytes descomprimidos son los que "
+    "declara la cabecera, no quién la escribió."
+)
+UPX_METHODS = {"nrv2b": "NRV2B", "nrv2d": "NRV2D", "nrv2e": "NRV2E", "lzma": "LZMA"}
+UPX_IMPORTS_SHOWN = 20
+UPX_SECTIONS_SHOWN = 16
+UPX_NAME_SHOWN = 60  # characters of a name, so a statement stays within its length
+
+
+def _short(text: str) -> str:
+    return (
+        text
+        if len(text) <= UPX_NAME_SHOWN
+        else f"{text[:UPX_NAME_SHOWN]}… ({len(text)} caracteres)"
+    )
+
+
+def _first(names: list[str], limit: int) -> str:
+    shown = ", ".join(_short(item) for item in names[:limit])
+    return shown + (f" y {number(len(names) - limit)} más" if len(names) > limit else "")
+
+
+def _upx_image(described: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | None]:
+    """A UPX block, with or without what the end of its unpacked bytes declares."""
+
+    def derive(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+        if len(cited) != 1 or not isinstance(cited[0], UpxImageEvidence):
+            return None
+        block = cited[0].data
+        if (block.original_sections is not None) != described:
+            return None
+        slots: Slots = {
+            "offset": hexadecimal(cited[0].location.offset or 0),
+            "method": UPX_METHODS[block.method],
+            "packed": number(block.packed_size),
+            "packed_offset": hexadecimal(block.packed_offset),
+            "unpacked": number(block.unpacked_size),
+        }
+        if block.original_sections is not None:
+            count = len(block.original_sections)
+            slots |= {
+                "count": count,
+                "noun": "sección" if count == 1 else "secciones",
+                "sections": _first(
+                    [section_name(s.name_text, s.name_raw_hex) for s in block.original_sections],
+                    UPX_SECTIONS_SHOWN,
+                ),
+                "entry": hexadecimal(block.original_entry_rva or 0),
+                "imports": number(block.imports or 0),
+                "import_noun": "función importada"
+                if block.imports == 1
+                else "funciones importadas",
+            }
+        return slots, ("upx.packing", "evidence.confidence")
+
+    return derive
+
+
+def upx_groups(report: Report) -> list[tuple[UpxImportEvidence, ...]]:
+    """The UPX imports in report order, one group per run of the same DLL entry."""
+    groups: list[list[UpxImportEvidence]] = []
+    for fact in report.evidence:
+        if isinstance(fact, UpxImportEvidence):
+            if groups and groups[-1][-1].data.dll_rva == fact.data.dll_rva:
+                groups[-1].append(fact)
+            else:
+                groups.append([fact])
+    return [tuple(group) for group in groups]
+
+
+def _upx_imports(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    if not cited or not all(isinstance(fact, UpxImportEvidence) for fact in cited):
+        return None
+    ids = tuple(fact.id for fact in cited)
+    if ids not in {tuple(fact.id for fact in group) for group in upx_groups(report)}:
+        return None
+    entries = [fact.data for fact in cited if isinstance(fact, UpxImportEvidence)]
+    functions = [
+        name(entry.function) if entry.function is not None else f"ordinal {entry.ordinal}"
+        for entry in entries
+    ]
+    slots: Slots = {
+        "count": number(len(entries)),
+        "noun": "función" if len(entries) == 1 else "funciones",
+        "dll": _short(name(entries[0].dll)),
+        "listed": _first(functions, UPX_IMPORTS_SHOWN),
+    }
+    return slots, ("upx.import_list", "pe.imports")
+
+
 RULES: dict[str, Rule] = {
     rule.id: rule
     for rule in (
@@ -966,6 +1061,36 @@ RULES: dict[str, Rule] = {
             "LupaBin solo analiza el cargador que abre ese archivo, no el código Python que "
             "contiene. La cookie puede copiarse.",
             _marker("pyinstaller_cookie"),
+        ),
+        Rule(
+            "upx.image@1",
+            "El archivo está empaquetado con UPX: la cabecera de UPX (desplazamiento {offset}) "
+            "declara el método {method}. Sus {packed} bytes comprimidos (desde {packed_offset}) "
+            "se descomprimieron sin ejecutar nada y dan {unpacked} bytes, con las dos sumas "
+            "Adler-32 que declara la cabecera. Según la copia de la cabecera original que guarda "
+            "el bloque, el programa tenía {count} {noun} ({sections}), su punto de entrada "
+            "estaba en la RVA {entry} y el cargador de UPX resuelve {imports} {import_noun} al "
+            "arrancar.",
+            UPX_NOT_PROVEN,
+            _upx_image(described=True),
+        ),
+        Rule(
+            "upx.image_plain@1",
+            "El archivo está empaquetado con UPX: la cabecera de UPX (desplazamiento {offset}) "
+            "declara el método {method}. Sus {packed} bytes comprimidos (desde {packed_offset}) "
+            "se descomprimieron sin ejecutar nada y dan {unpacked} bytes, con las dos sumas "
+            "Adler-32 que declara la cabecera. El final del bloque no tiene la forma medida, así "
+            "que no se publica lo que declara del programa original.",
+            UPX_NOT_PROVEN,
+            _upx_image(described=False),
+        ),
+        Rule(
+            "upx.imports@1",
+            "La lista de importaciones del bloque UPX incluye {count} {noun} de «{dll}»: {listed}.",
+            "Son las funciones que el cargador de UPX resuelve al arrancar para el programa "
+            "original. Una importación no demuestra que el código la llame, ni cuándo, ni para "
+            "qué.",
+            _upx_imports,
         ),
         Rule(
             "pe.section@1",
