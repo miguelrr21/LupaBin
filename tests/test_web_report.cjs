@@ -60,7 +60,9 @@ function page() {
       querySelector: get, querySelectorAll: () => tabs,
       createTextNode(text) { return { ...element(), textContent: text }; } },
     window: { scrollTo() {} }, clearTimeout() {}, clearInterval() {},
-    payload: { items: ITEMS, questions: QUESTIONS, notes: [], omitted: 0 },
+    payload: { items: ITEMS, questions: QUESTIONS, notes: [], omitted: 0, status: "completed",
+      sample: { sha256: "a".repeat(64), md5: "b".repeat(32), size: 10, type: "pe" },
+      summary: { groups: [], warnings: [] }, downloads: {}, virustotal: null, absence: "" },
   });
   vm.runInContext(source, context);
   vm.runInContext("lastResult = { data: payload, vt: null }; renderItems(payload);", context);
@@ -140,4 +142,16 @@ test("text of the sample stays text in the report and in the search", () => {
   run(context, 'setFilter("<img", "all")');
   assert.match(visible(get("q-content")), /<img src=x onerror=1>/);
   assert.doesNotMatch(source, /\.innerHTML|insertAdjacentHTML|document\.write\(/);
+});
+
+test("the guide marks the sections already opened and starts again with each report", () => {
+  const { get, context } = page();
+  run(context, 'render(payload, "a.exe")');
+  assert.equal(get("step-code").className, "");
+  assert.equal(get("step-vt").hidden, true); // no VirusTotal tab, no step for it
+  run(context, 'select("tab-code")');
+  assert.equal(get("step-code").className, "done");
+  assert.equal(get("step-identity").className, "");
+  run(context, 'render(payload, "b.exe")');
+  assert.equal(get("step-code").className, "");
 });
