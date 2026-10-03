@@ -240,3 +240,29 @@ test("empty challenge abstains and does not offer a correction button", () => {
   assert.match(text(get("challenge-content")), /Sin preguntas/);
   assert.doesNotMatch(text(get("challenge-content")), /Corregir respuestas/);
 });
+
+test("practice shows how many questions are answered and what each one is answered with", () => {
+  const { context, get, ready } = page();
+  vm.runInContext("loadConfig = () => {}; lastResult = { data: payload }; challenge_reset()", context);
+  ready[0]();
+  get("go-practice").events.click();
+  assert.equal(get("challenge-panel").hidden, false);
+  assert.equal(get("step-practice").className, "done");
+  const shown = text(get("challenge-content"));
+  assert.match(shown, /Respondidas: 0 de 1\./);
+  assert.match(shown, /Q1\. <script>hostile<\/script>\s+Hecho/);
+  descendants(get("challenge-content")).find((node) => node.value === "B").events.change();
+  assert.match(text(get("challenge-content")), /Respondidas: 1 de 1\./);
+  get("go-practice").events.click(); // already open: it stays open, with the answers
+  assert.equal(get("challenge-panel").hidden, false);
+  assert.match(text(get("challenge-content")), /Respondidas: 1 de 1\./);
+});
+
+test("a download closes the downloads menu", () => {
+  const { context, get, ready } = page();
+  vm.runInContext("loadConfig = () => {}; lastResult = null", context);
+  ready[0]();
+  get("downloads").open = true;
+  get("download-md").events.click();
+  assert.equal(get("downloads").open, false);
+});

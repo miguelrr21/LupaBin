@@ -214,6 +214,33 @@ main.wrap { padding-top: 24px; padding-bottom: 40px; }
 .level.observed { border-color: var(--green); color: var(--green); background: var(--green-soft); }
 .level.inferred { border-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
 
+/* downloads menu and guide */
+.menu { position: relative; }
+.menu > summary { list-style: none; display: inline-block; user-select: none; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary::after { content: " ▾"; color: var(--muted); }
+.menu[open] > summary { border-color: var(--blue); color: var(--blue); }
+.menu-list {
+  position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 260px;
+  display: flex; flex-direction: column; padding: 4px;
+  background: var(--panel); border: 1px solid var(--border-strong); border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(11, 31, 63, .18);
+}
+.menu-list button {
+  font: inherit; text-align: left; cursor: pointer; padding: .5rem .7rem;
+  border: 0; border-radius: 3px; background: none; color: var(--text);
+}
+.menu-list button:hover:not(:disabled) { background: var(--blue-soft); color: var(--blue); }
+.menu-list button:disabled { opacity: .5; cursor: not-allowed; }
+.guide { margin-bottom: 1.4rem; padding: .9rem 1rem; border: 1px solid var(--border); border-left: 3px solid var(--blue); border-radius: 4px; background: var(--bg); }
+.guide h3 { margin-bottom: .4rem; }
+.steps { margin: 0; padding-left: 1.3rem; font-size: .93rem; }
+.steps li { margin: .25rem 0; }
+.steps li.done::marker { color: var(--green); }
+.steps li.done .link-button { color: var(--green); }
+.steps li.done .link-button::after { content: " ✓"; }
+.challenge-question legend .level { font-weight: 600; }
+
 /* summary */
 .tactic { margin: 1rem 0 0; }
 .tactic h4 { margin: 0 0 .4rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }

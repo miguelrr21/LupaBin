@@ -4,7 +4,8 @@
 
 const $ = (id) => document.getElementById(id);
 const VALUES_SHOWN = 8;
-const LEVEL = { observed: "Hecho", inferred: "Inferencia" };
+const LEVEL = { observed: "Hecho", inferred: "Inferencia", general: "Criterio general" };
+const STEPS = ["identity", "code", "content", "vt", "coverage"]; // each opens the tab of its name
 const STATUS = { completed: "Análisis completo", partial: "Análisis parcial", failed: "Análisis fallido" };
 
 let config = { max_bytes: 20 * 1024 * 1024, virustotal: false, upload: false };
@@ -721,14 +722,21 @@ function challenge_render(data) {
   const reportDigest = challenge.report_digest;
   const selections = Object.create(null);
   const feedbackBox = el("div", { className: "challenge-feedback", "aria-live": "polite" });
+  const progress = el("p", { className: "muted small", "aria-live": "polite" });
+  const answered = () => {
+    const done = Object.values(selections).filter((selected) => selected !== null).length;
+    progress.textContent = `Respondidas: ${done} de ${challenge.questions.length}.`;
+  };
   for (const question of challenge.questions) {
     selections[question.id] = null;
     const fieldset = el("fieldset", { className: "challenge-question" },
-      el("legend", { text: `${question.id} [${question.level}] ${question.prompt}` }));
+      el("legend", {}, `${question.id}. ${question.prompt} `,
+        el("span", { className: `level ${question.level}`, text: LEVEL[question.level] || question.level })));
     for (const option of question.options) {
       const input = el("input", { type: "radio", name: `challenge-${question.id}`, value: option.id,
         onchange: () => {
           selections[question.id] = option.id;
+          answered();
           clear(feedbackBox);
           feedbackBox.append(el("p", { text: "Respuestas cambiadas; vuelve a corregir." }));
         } });
@@ -765,7 +773,8 @@ function challenge_render(data) {
     feedbackBox.append(el("p", { text: review.length ? `Repasa: ${[...new Set(review)].join(", ")}.` : "Has acertado las preguntas disponibles." }),
       el("p", { className: "muted", text: "La puntuación mide tus respuestas, no el riesgo de la muestra. No se guardan las respuestas al salir de esta página." }));
   } });
-  box.append(el("div", { className: "actions" }, correct,
+  answered();
+  box.append(progress, el("div", { className: "actions" }, correct,
     el("button", { type: "button", className: "button", text: "Repetir reto", onclick: () => challenge_render(data) })), feedbackBox);
 }
 
@@ -775,6 +784,24 @@ function challenge_reset() {
   $("challenge-open").setAttribute("aria-expanded", "false");
 }
 
+function challenge_toggle(open) {
+  if (!lastResult) return;
+  const panel = $("challenge-panel");
+  const opening = open === true || panel.hidden;
+  if (opening && !panel.hidden) {
+    panel.scrollIntoView({ block: "start" });
+    return;
+  }
+  if (opening) challenge_render(lastResult.data);
+  else challenge_reset();
+  panel.hidden = !opening;
+  $("challenge-open").setAttribute("aria-expanded", opening ? "true" : "false");
+  if (opening) {
+    $("step-practice").className = "done";
+    panel.scrollIntoView({ block: "start" });
+  }
+}
+
 function render(data, name) {
   challenge_reset();
   painted = new Set();
@@ -782,6 +809,8 @@ function render(data, name) {
   renderSummary(data);
   renderItems(data);
   $("tab-vt").hidden = !(data.virustotal || (lastResult && lastResult.vt));
+  $("step-vt").hidden = $("tab-vt").hidden;
+  for (const step of [...STEPS, "practice"]) $(`step-${step}`).className = "";
   showVirusTotalStatus();
   $("absence").textContent = data.absence;
   select("tab-summary");
@@ -800,6 +829,7 @@ function select(id, focus) {
     tab.tabIndex = on ? 0 : -1;
     $(tab.getAttribute("aria-controls")).hidden = !on;
     if (on) paint(tab.getAttribute("aria-controls"));
+    if (on && STEPS.includes(id.slice(4))) $(`step-${id.slice(4)}`).className = "done";
     if (on && focus) tab.focus();
   }
 }
@@ -836,16 +866,14 @@ function download(text, name, type) {
 // --- wiring ----------------------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  $("challenge-open").addEventListener("click", () => {
-    if (!lastResult) return;
-    const panel = $("challenge-panel");
-    const opening = panel.hidden;
-    if (opening) challenge_render(lastResult.data);
-    else challenge_reset();
-    panel.hidden = !opening;
-    $("challenge-open").setAttribute("aria-expanded", opening ? "true" : "false");
-    if (opening) panel.scrollIntoView({ block: "start" });
-  });
+  $("challenge-open").addEventListener("click", () => challenge_toggle());
+  $("go-practice").addEventListener("click", () => challenge_toggle(true));
+  for (const step of STEPS) {
+    $(`go-${step}`).addEventListener("click", () => {
+      select(`tab-${step}`);
+      $(`tab-${step}`).scrollIntoView({ block: "start" });
+    });
+  }
   loadConfig();
   const drop = $("drop");
   $("file").addEventListener("change", (event) => choose(event.target.files[0]));
@@ -882,11 +910,14 @@ document.addEventListener("DOMContentLoaded", () => {
     $(`level-${level}`).addEventListener("click", () => setFilter($("search").value, level));
   }
   $("filter-reset").addEventListener("click", resetFilter);
-  $("ghidra-download").addEventListener("click", ghidra_download);
+  const closeMenu = () => { $("downloads").open = false; };
+  $("ghidra-download").addEventListener("click", () => { closeMenu(); ghidra_download(); });
   $("download-json").addEventListener("click", () => {
+    closeMenu();
     if (lastResult) download(lastResult.data.downloads.report, `${lastResult.data.sample.sha256}.lupabin.json`, "application/json");
   });
   $("download-md").addEventListener("click", () => {
+    closeMenu();
     if (lastResult) download(lastResult.data.downloads.markdown, `${lastResult.data.sample.sha256}.lupabin.md`, "text/markdown");
   });
   document.querySelector('[role="tablist"]').addEventListener("click", (event) => {

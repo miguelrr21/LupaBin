@@ -78,17 +78,22 @@
       </div>
       <dl class="hashes" id="hashes"></dl>
       <div class="actions">
-        <button type="button" class="button" id="download-json">Descargar informe (JSON)</button>
-        <button type="button" class="button" id="download-md">Descargar informe (Markdown)</button>
-        <button type="button" class="button" id="ghidra-download">Exportar a Ghidra (ZIP)</button>
-        <button type="button" class="button" id="challenge-open" aria-controls="challenge-panel" aria-expanded="false">Practicar con este informe</button>
-        <button type="button" class="button primary" id="again">Analizar otro archivo</button>
+        <button type="button" class="button primary" id="challenge-open" aria-controls="challenge-panel" aria-expanded="false">Practicar con este informe</button>
+        <details class="menu" id="downloads">
+          <summary class="button">Descargar</summary>
+          <div class="menu-list">
+            <button type="button" id="download-md">Informe para leer (Markdown)</button>
+            <button type="button" id="download-json">Informe de hechos (JSON)</button>
+            <button type="button" id="ghidra-download">Evidencias para Ghidra (ZIP)</button>
+          </div>
+        </details>
+        <button type="button" class="button" id="again">Analizar otro archivo</button>
       </div>
     </div>
 
     <section class="panel" id="challenge-panel" aria-labelledby="challenge-title" hidden>
-      <h3 id="challenge-title">Modo reto: aprender con evidencias</h3>
-      <p class="muted">Observado (observed): lectura de bytes. Inferido (inferred): resultado de un método. General (general): criterio educativo, no un hecho adicional sobre la muestra.</p>
+      <h3 id="challenge-title">Preguntas de práctica sobre este informe</h3>
+      <p class="muted">Cada pregunta indica con qué se responde: un hecho (una lectura de los bytes), una inferencia (el resultado de un método) o un criterio general (conocimiento de la materia, no un dato más sobre el archivo).</p>
       <div id="challenge-content"></div>
     </section>
 
@@ -117,6 +122,17 @@
     </div>
 
     <div class="panel pane" role="tabpanel" id="pane-summary" aria-labelledby="tab-summary">
+      <div class="guide">
+        <h3>Por dónde empezar</h3>
+        <ol class="steps">
+          <li id="step-identity"><button type="button" class="link-button" id="go-identity">Mira qué es el archivo</button>: su formato, con qué se hizo y cómo está organizado.</li>
+          <li id="step-code"><button type="button" class="link-button" id="go-code">Mira qué contiene su código</button>: qué funciones de Windows llama y con qué argumentos. Las capacidades reconocidas están resumidas aquí debajo.</li>
+          <li id="step-content"><button type="button" class="link-button" id="go-content">Revisa sus textos y datos</button>: cadenas, datos decodificados y entropía.</li>
+          <li id="step-vt" hidden><button type="button" class="link-button" id="go-vt">Contrasta con VirusTotal</button>: es una fuente externa, y una detección es la opinión de un motor.</li>
+          <li id="step-coverage"><button type="button" class="link-button" id="go-coverage">Comprueba hasta dónde llegó el análisis</button>: lo que no se pudo analizar no queda descartado.</li>
+          <li id="step-practice"><button type="button" class="link-button" id="go-practice">Practica con preguntas sobre este informe</button>.</li>
+        </ol>
+      </div>
       <h3>Qué contiene el código</h3>
       <p class="muted">Capacidades reconocidas a partir de las llamadas del código y de sus argumentos constantes. Que el código las contenga no demuestra que el programa las use, ni con qué intención; el detalle y el límite de cada una están en «¿Qué contiene su código?».</p>
       <div id="summary"></div>
