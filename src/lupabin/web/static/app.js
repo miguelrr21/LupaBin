@@ -4,12 +4,17 @@
 
 const $ = (id) => document.getElementById(id);
 const VALUES_SHOWN = 8;
+const LEVEL = { observed: "Hecho", inferred: "Inferencia" };
 const STATUS = { completed: "Análisis completo", partial: "Análisis parcial", failed: "Análisis fallido" };
 
 let config = { max_bytes: 20 * 1024 * 1024, virustotal: false, upload: false };
 let chosen = null;
 let lastResult = null;
 let painted = new Set(); // panes already built for the current result (built when opened)
+let shownItems = new Map(); // item id -> { node, entry, lists } for the panes already built
+let shownTopics = []; // { node, entries, counter } for the panes already built
+let filter = { words: [], level: "all" };
+const folded = new WeakMap(); // item -> its searchable text
 let vtTimer = null; // the next check of an uploaded file's analysis at VirusTotal
 let vtClock = null; // updates the elapsed time shown while VirusTotal analyses
 const VT_FOLLOW_MS = 20000; // the public API allows 4 requests per minute
@@ -220,12 +225,17 @@ function item(entry) {
   const node = el("li", { className: "item", id: `item-${entry.id}` },
     el("div", { className: "item-head" },
       el("span", { className: "item-id", text: entry.id }),
+      el("span", { className: `level ${entry.level}`, text: LEVEL[entry.level] || entry.level }),
       el("span", { className: "item-rule", text: entry.rule })),
     el("p", { className: "statement", text: entry.statement }));
+  const lists = [];
   for (const extra of entry.extras) {
+    const list = values(extra.values);
+    lists.push(list);
     node.append(el("div", { className: "extra" },
-      el("span", { className: "extra-label", text: `${extra.label}:` }), values(extra.values)));
+      el("span", { className: "extra-label", text: `${extra.label}:` }), list));
   }
+  shownItems.set(entry.id, { node, entry, lists });
   node.append(el("p", { className: "limit" }, el("strong", { text: "Límite: " }), entry.not_proven));
   const refs = el("div", { className: "refs" }, "Evidencia:");
   const evidence = entry.evidence.length > 12 ? [...entry.evidence.slice(0, 12), `y ${entry.evidence.length - 12} más`] : entry.evidence;
@@ -263,19 +273,110 @@ function renderSummary(data) {
   }
 }
 
-function renderLevel(data, level) {
-  const list = $(level);
-  clear(list);
-  const chosenItems = data.items.filter((entry) => entry.level === level);
-  if (!chosenItems.length) list.append(el("li", { className: "empty", text: "(ninguno)" }));
-  for (const entry of chosenItems) list.append(item(entry));
+// --- the report by questions, with its search and its filter -----------------------------
+
+function fold(text) {
+  return String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function searchable(entry) {
+  if (!folded.has(entry)) {
+    folded.set(entry, fold([entry.id, entry.rule, entry.statement, entry.not_proven,
+      ...entry.extras.flatMap((extra) => [extra.label, ...extra.values]), ...entry.glossary].join("\n")));
+  }
+  return folded.get(entry);
+}
+
+function matches(entry) {
+  if (filter.level !== "all" && entry.level !== filter.level) return false;
+  const text = filter.words.length ? searchable(entry) : "";
+  return filter.words.every((word) => text.includes(word));
+}
+
+function questionOf(data, topic) {
+  return data.questions.find((question) => question.topics.some((known) => known.id === topic));
+}
+
+function renderQuestion(data, question) {
+  const box = $(`q-${question.id}`);
+  clear(box);
+  for (const topic of question.topics) {
+    const entries = data.items.filter((entry) => entry.topic === topic.id);
+    if (!entries.length) continue;
+    const counter = el("span", { className: "count" });
+    const list = el("ol", { className: "items" });
+    for (const entry of entries) list.append(item(entry));
+    const node = el("section", { className: "topic" }, el("h3", {}, topic.title, " ", counter), list);
+    shownTopics.push({ node, entries, counter });
+    box.append(node);
+  }
+  applyFilter();
+}
+
+// a value the search found is shown even if it was behind «Mostrar los N»
+function reveal(lists) {
+  for (const list of lists) {
+    const ul = [...list.children].find((child) => child.className === "values") || list;
+    for (const li of ul.children) {
+      if (li.hidden && filter.words.some((word) => fold(li.textContent).includes(word))) li.hidden = false;
+    }
+  }
+}
+
+function applyFilter() {
+  if (!lastResult) return;
+  const data = lastResult.data;
+  const active = filter.words.length > 0 || filter.level !== "all";
+  let shown = 0;
+  for (const question of data.questions) {
+    const topics = new Set(question.topics.map((topic) => topic.id));
+    const all = data.items.filter((entry) => topics.has(entry.topic));
+    const count = all.filter(matches).length;
+    shown += count;
+    $(`count-${question.id}`).textContent = active ? `${count}/${all.length}` : String(all.length);
+    const empty = $(`empty-${question.id}`);
+    empty.hidden = count > 0;
+    empty.textContent = all.length
+      ? "Ninguna afirmación de esta sección coincide con la búsqueda o el filtro."
+      : "El informe no tiene afirmaciones en esta sección.";
+  }
+  for (const { node, entry, lists } of shownItems.values()) {
+    const on = matches(entry);
+    node.hidden = !on;
+    if (on && filter.words.length) reveal(lists);
+  }
+  for (const { node, entries, counter } of shownTopics) {
+    const count = entries.filter(matches).length;
+    node.hidden = count === 0;
+    counter.textContent = active ? `${count}/${entries.length}` : String(entries.length);
+  }
+  $("filter-count").textContent = active
+    ? `${shown} de ${data.items.length} afirmaciones.`
+    : `${data.items.length} afirmaciones.`;
+  $("filter-reset").hidden = !active;
+  for (const level of ["all", "observed", "inferred"]) {
+    $(`level-${level}`).setAttribute("aria-pressed", filter.level === level ? "true" : "false");
+  }
+}
+
+function setFilter(query, level) {
+  filter = { words: fold(query).split(/\s+/).filter(Boolean), level };
+  applyFilter();
+}
+
+function resetFilter() {
+  $("search").value = "";
+  setFilter("", "all");
 }
 
 function renderItems(data) {
-  for (const level of ["observed", "inferred"]) {
-    clear($(level));
-    $(`count-${level}`).textContent = String(data.items.filter((entry) => entry.level === level).length);
+  shownItems = new Map();
+  shownTopics = [];
+  for (const question of data.questions) {
+    clear($(`q-${question.id}`));
+    $(`intro-${question.id}`).textContent = question.intro;
   }
+  resetFilter();
   const notes = $("notes");
   clear(notes);
   for (const note of data.notes) notes.append(el("li", { text: note }));
@@ -537,16 +638,17 @@ function renderGlossary(data) {
 }
 
 const PAINTERS = {
-  "pane-observed": (data) => renderLevel(data, "observed"),
-  "pane-inferred": (data) => renderLevel(data, "inferred"),
   "pane-vt": renderVirusTotal,
   "pane-glossary": renderGlossary,
 };
 
 function paint(pane) {
-  if (!lastResult || painted.has(pane) || !PAINTERS[pane]) return;
+  if (!lastResult || painted.has(pane)) return;
+  const question = lastResult.data.questions.find((known) => `pane-${known.id}` === pane);
+  if (!question && !PAINTERS[pane]) return;
   painted.add(pane);
-  PAINTERS[pane](lastResult.data);
+  if (question) renderQuestion(lastResult.data, question);
+  else PAINTERS[pane](lastResult.data);
 }
 
 function challenge_grade(data, selections) {
@@ -703,13 +805,13 @@ function select(id, focus) {
 }
 
 function openItem(id) {
-  paint("pane-observed");
-  paint("pane-inferred");
-  const target = $(`item-${id}`);
+  const data = lastResult.data;
+  for (const question of data.questions) paint(`pane-${question.id}`);
+  const target = shownItems.get(id);
   if (!target) return;
-  const pane = target.closest('[role="tabpanel"]');
-  select(pane.getAttribute("aria-labelledby"));
-  target.scrollIntoView({ block: "start" });
+  if (target.node.hidden) resetFilter(); // the filter must not hide what was asked for
+  select(`tab-${questionOf(data, target.entry.topic).id}`);
+  target.node.scrollIntoView({ block: "start" });
 }
 
 function openEntry(ref) {
@@ -775,6 +877,11 @@ document.addEventListener("DOMContentLoaded", () => {
     choose(null);
     show("upload");
   });
+  $("search").addEventListener("input", () => setFilter($("search").value, filter.level));
+  for (const level of ["all", "observed", "inferred"]) {
+    $(`level-${level}`).addEventListener("click", () => setFilter($("search").value, level));
+  }
+  $("filter-reset").addEventListener("click", resetFilter);
   $("ghidra-download").addEventListener("click", ghidra_download);
   $("download-json").addEventListener("click", () => {
     if (lastResult) download(lastResult.data.downloads.report, `${lastResult.data.sample.sha256}.lupabin.json`, "application/json");

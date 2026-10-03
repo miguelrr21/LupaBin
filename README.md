@@ -81,7 +81,7 @@ uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
 uv run --frozen pytest -m docker
-node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs
+node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs tests/test_web_report.cjs
 ```
 
 Las pruebas de la web necesitan Node.js 22 o posterior, sin paquetes npm. La CI ejecuta además las comprobaciones de los esquemas, el build y la distribución del catálogo YARA; tras cambiar los modelos, los esquemas se regeneran con `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. Las mediciones sobre binarios benignos se repiten con las herramientas `tests/*_eval.py` ([cómo](docs/metodo.md#repetir-las-mediciones)).

@@ -1,15 +1,16 @@
 """What the web page receives: the didactic report as data.
 
 Only items that regenerate exactly from their citations are sent (engine.validate), in
-the same order and with the same wording as the terminal and Markdown views. Every
-string, including the text of the sample and what VirusTotal returns, is neutralised
-with render.safe.visible before it leaves the server; the page inserts text only as
-text.
+the same order and with the same wording as the terminal and Markdown views. The page
+groups them by the question they answer (QUESTIONS); the grouping changes where an item
+is shown, never its text, its level or its citations. Every string, including the text
+of the sample and what VirusTotal returns, is neutralised with render.safe.visible
+before it leaves the server; the page inserts text only as text.
 """
 
 import base64
 from dataclasses import asdict
-from typing import Any
+from typing import Any, NamedTuple
 
 from lupabin.challenge.engine import web_challenge
 from lupabin.evidence.models import Report
@@ -39,6 +40,74 @@ QUEUED = (
 )
 
 
+class Topic(NamedTuple):
+    id: str
+    title: str
+    prefixes: tuple[str, ...]  # of the rule identifiers shown under this topic
+
+
+class Question(NamedTuple):
+    id: str
+    title: str
+    intro: str
+    topics: tuple[Topic, ...]
+
+
+OTHER = "other"
+QUESTIONS = (
+    Question(
+        "identity",
+        "¿Qué es?",
+        "El formato del archivo, con qué herramientas se hizo y cómo está organizado.",
+        (
+            Topic("format", "Formato y cabecera", ("pe.header@",)),
+            Topic("toolchain", "Con qué se hizo", ("toolchain.",)),
+            Topic("sections", "Secciones", ("pe.section",)),
+            Topic("exports", "Funciones que exporta", ("exports.",)),
+            Topic("anomalies", "Anomalías de la estructura", ("anomaly.",)),
+        ),
+    ),
+    Question(
+        "code",
+        "¿Qué contiene su código?",
+        "Las funciones de Windows que el archivo importa y las que su código llama. Que el "
+        "código contenga una llamada no demuestra que el programa llegue a hacerla.",
+        (
+            Topic("capabilities", "Capacidades reconocidas", ("capability.",)),
+            Topic("main", "La función main y el arranque", ("code.main_call@", "code.reach_")),
+            Topic("calls", "Recorrido y llamadas del código", ("code.",)),
+            Topic("imports", "Funciones que importa", ("imports.",)),
+        ),
+    ),
+    Question(
+        "content",
+        "¿Qué textos y datos lleva?",
+        "Las cadenas de texto, lo que aparece al decodificar o descomprimir sin ejecutar "
+        "nada, y lo que indican la entropía y las reglas YARA.",
+        (
+            Topic("packing", "Programa empaquetado con UPX", ("upx.",)),
+            Topic("decoded", "Datos decodificados", ("decoded.",)),
+            Topic("strings", "Cadenas de texto", ("strings.",)),
+            Topic("entropy", "Entropía", ("entropy.",)),
+            Topic("yara", "Reglas YARA", ("yara.",)),
+            # nothing is left out of the page because a rule has no topic yet
+            Topic(OTHER, "Otras afirmaciones", ("",)),
+        ),
+    ),
+)
+
+
+def topic_of(rule: str) -> str:
+    """The topic whose longest prefix matches the rule identifier."""
+    found, length = OTHER, -1
+    for question in QUESTIONS:
+        for topic in question.topics:
+            for prefix in topic.prefixes:
+                if rule.startswith(prefix) and len(prefix) > length:
+                    found, length = topic.id, len(prefix)
+    return found
+
+
 def neutral(value: Any) -> Any:
     """Every string in a JSON-like structure, neutralised."""
     if isinstance(value, str):
@@ -58,6 +127,7 @@ def _item(item: Item) -> dict[str, Any]:
     return {
         "id": item.id,
         "rule": item.rule,
+        "topic": topic_of(item.rule),
         "level": item.level,
         "statement": item.statement,
         "extras": extras,
@@ -149,6 +219,15 @@ def build(
         "summary": _summary(items, report),
         "notes": [note.statement for note in explanation.notes],
         "items": [_item(item) for item in items],
+        "questions": [
+            {
+                "id": question.id,
+                "title": question.title,
+                "intro": question.intro,
+                "topics": [{"id": topic.id, "title": topic.title} for topic in question.topics],
+            }
+            for question in QUESTIONS
+        ],
         "omitted": len(explanation.items) - len(items),
         "glossary": [
             {
