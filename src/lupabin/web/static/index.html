@@ -92,29 +92,51 @@
       <div id="challenge-content"></div>
     </section>
 
+    <div class="panel filter" id="filter">
+      <div class="filter-row">
+        <label class="visually-hidden" for="search">Buscar en el informe</label>
+        <input type="search" id="search" class="search" autocomplete="off" spellcheck="false" placeholder="Buscar en el informe: una función, un texto, una sección…">
+        <div class="segmented" role="group" aria-label="Tipo de afirmación">
+          <button type="button" id="level-all" aria-pressed="true">Todo</button>
+          <button type="button" id="level-observed" aria-pressed="false">Hechos</button>
+          <button type="button" id="level-inferred" aria-pressed="false">Inferencias</button>
+        </div>
+        <button type="button" class="link-button" id="filter-reset" hidden>Quitar filtros</button>
+      </div>
+      <p class="muted small filter-note"><span id="filter-count" aria-live="polite"></span> Un <strong>hecho</strong> es una lectura directa de los bytes del archivo; una <strong>inferencia</strong>, el resultado de aplicarles un método (una decodificación, una regla del recorrido del código).</p>
+    </div>
+
     <div class="tabs" role="tablist" aria-label="Secciones del informe">
       <button role="tab" id="tab-summary" aria-controls="pane-summary" aria-selected="true">Resumen</button>
-      <button role="tab" id="tab-observed" aria-controls="pane-observed" aria-selected="false" tabindex="-1">Hechos <span class="count" id="count-observed"></span></button>
-      <button role="tab" id="tab-inferred" aria-controls="pane-inferred" aria-selected="false" tabindex="-1">Inferencias <span class="count" id="count-inferred"></span></button>
-      <button role="tab" id="tab-coverage" aria-controls="pane-coverage" aria-selected="false" tabindex="-1">Cobertura</button>
-      <button role="tab" id="tab-vt" aria-controls="pane-vt" aria-selected="false" tabindex="-1" hidden>VirusTotal</button>
+      <button role="tab" id="tab-identity" aria-controls="pane-identity" aria-selected="false" tabindex="-1">¿Qué es? <span class="count" id="count-identity"></span></button>
+      <button role="tab" id="tab-code" aria-controls="pane-code" aria-selected="false" tabindex="-1">¿Qué contiene su código? <span class="count" id="count-code"></span></button>
+      <button role="tab" id="tab-content" aria-controls="pane-content" aria-selected="false" tabindex="-1">¿Qué textos y datos lleva? <span class="count" id="count-content"></span></button>
+      <button role="tab" id="tab-vt" aria-controls="pane-vt" aria-selected="false" tabindex="-1" hidden>¿Qué dice VirusTotal?</button>
+      <button role="tab" id="tab-coverage" aria-controls="pane-coverage" aria-selected="false" tabindex="-1">¿Hasta dónde llega?</button>
       <button role="tab" id="tab-glossary" aria-controls="pane-glossary" aria-selected="false" tabindex="-1">Glosario</button>
     </div>
 
     <div class="panel pane" role="tabpanel" id="pane-summary" aria-labelledby="tab-summary">
       <h3>Qué contiene el código</h3>
-      <p class="muted">Capacidades reconocidas a partir de las llamadas del código y de sus argumentos constantes. Que el código las contenga no demuestra que el programa las use, ni con qué intención; el detalle y el límite de cada una están en Inferencias.</p>
+      <p class="muted">Capacidades reconocidas a partir de las llamadas del código y de sus argumentos constantes. Que el código las contenga no demuestra que el programa las use, ni con qué intención; el detalle y el límite de cada una están en «¿Qué contiene su código?».</p>
       <div id="summary"></div>
       <h4>Lo que limita este resumen</h4>
       <ul class="warnings" id="warnings"></ul>
     </div>
-    <div class="panel pane" role="tabpanel" id="pane-observed" aria-labelledby="tab-observed" hidden>
-      <p class="muted">Lecturas directas de los bytes del archivo.</p>
-      <ol class="items" id="observed"></ol>
+    <div class="panel pane" role="tabpanel" id="pane-identity" aria-labelledby="tab-identity" hidden>
+      <p class="muted" id="intro-identity"></p>
+      <div id="q-identity"></div>
+      <p class="empty" id="empty-identity" hidden></p>
     </div>
-    <div class="panel pane" role="tabpanel" id="pane-inferred" aria-labelledby="tab-inferred" hidden>
-      <p class="muted">Resultados de aplicar un método a los bytes (una decodificación, una regla del recorrido del código), no lecturas directas.</p>
-      <ol class="items" id="inferred"></ol>
+    <div class="panel pane" role="tabpanel" id="pane-code" aria-labelledby="tab-code" hidden>
+      <p class="muted" id="intro-code"></p>
+      <div id="q-code"></div>
+      <p class="empty" id="empty-code" hidden></p>
+    </div>
+    <div class="panel pane" role="tabpanel" id="pane-content" aria-labelledby="tab-content" hidden>
+      <p class="muted" id="intro-content"></p>
+      <div id="q-content"></div>
+      <p class="empty" id="empty-content" hidden></p>
     </div>
     <div class="panel pane" role="tabpanel" id="pane-coverage" aria-labelledby="tab-coverage" hidden>
       <p class="muted">Qué partes se pudieron analizar y hasta dónde. Un resultado parcial dice lo que encontró, no que no haya nada más.</p>
