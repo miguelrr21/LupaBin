@@ -9,8 +9,10 @@ from starlette.testclient import TestClient
 
 from lupabin.errors import LupaBinError
 from lupabin.evidence.models import Limits
+from lupabin.explain.rules import RULES
 from lupabin.transport import Completed
 from lupabin.web import app as web
+from lupabin.web import view
 from lupabin.web.guard import RateLimit, Settings, client_address
 from tests.fixtures.pe_builder import build_call_demo, build_pe, build_same_function_demo
 from tests.test_render import HOSTILE_DLL, HOSTILE_FUNCTION
@@ -107,6 +109,23 @@ def test_element_ids_on_the_page_are_unique():
     assert len(ids) == len(set(ids))
 
 
+def test_every_rule_is_shown_under_a_question_and_the_page_has_its_tab():
+    """An item is never left out of the page, or dropped into the catch-all topic,
+    because its rule was added without saying which question it answers."""
+    for rule in RULES:
+        assert view.topic_of(rule) != view.OTHER, rule
+    assert view.topic_of("some.future_rule@1") == view.OTHER
+    assert view.topic_of("pe.section.writable_executable@1") == "sections"
+    assert view.topic_of("code.reach_main@1") == "main" and view.topic_of("code.calls@1") == "calls"
+    topics = [topic.id for question in view.QUESTIONS for topic in question.topics]
+    assert len(topics) == len(set(topics))
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    for question in view.QUESTIONS:
+        for part in ("tab", "pane", "count", "intro", "q", "empty"):
+            assert f'id="{part}-{question.id}"' in html, (part, question.id)
+        assert f">{question.title} <span" in html
+
+
 def test_config_reports_the_limits_and_whether_virustotal_is_offered():
     shown = client(Settings(virustotal=True, upload=False)).get("/api/config").json()
     assert shown["max_bytes"] == Limits().input_bytes
@@ -131,6 +150,11 @@ def test_an_upload_is_analysed_in_the_isolated_worker_and_explained():
     assert group["tactic"] == "Persistencia"
     assert group["items"][0]["techniques"][0].startswith("T1547.001")
     assert {item["level"] for item in body["items"]} == {"observed", "inferred"}
+    shown = {topic["id"] for question in body["questions"] for topic in question["topics"]}
+    assert [question["id"] for question in body["questions"]] == ["identity", "code", "content"]
+    assert {item["topic"] for item in body["items"]} <= shown - {view.OTHER}
+    capability = next(item for item in body["items"] if item["rule"].startswith("capability."))
+    assert capability["topic"] == "capabilities"
     assert json.loads(body["downloads"]["report"])["sample"]["sha256"] == body["sample"]["sha256"]
     assert body["downloads"]["markdown"].startswith("# LupaBin: informe didáctico")
     assert body["virustotal"] is None and body["glossary"]

@@ -4,12 +4,18 @@
 
 const $ = (id) => document.getElementById(id);
 const VALUES_SHOWN = 8;
+const LEVEL = { observed: "Hecho", inferred: "Inferencia", general: "Criterio general" };
+const STEPS = ["identity", "code", "content", "vt", "coverage"]; // each opens the tab of its name
 const STATUS = { completed: "Análisis completo", partial: "Análisis parcial", failed: "Análisis fallido" };
 
 let config = { max_bytes: 20 * 1024 * 1024, virustotal: false, upload: false };
 let chosen = null;
 let lastResult = null;
 let painted = new Set(); // panes already built for the current result (built when opened)
+let shownItems = new Map(); // item id -> { node, entry, lists } for the panes already built
+let shownTopics = []; // { node, entries, counter } for the panes already built
+let filter = { words: [], level: "all" };
+const folded = new WeakMap(); // item -> its searchable text
 let vtTimer = null; // the next check of an uploaded file's analysis at VirusTotal
 let vtClock = null; // updates the elapsed time shown while VirusTotal analyses
 const VT_FOLLOW_MS = 20000; // the public API allows 4 requests per minute
@@ -220,12 +226,17 @@ function item(entry) {
   const node = el("li", { className: "item", id: `item-${entry.id}` },
     el("div", { className: "item-head" },
       el("span", { className: "item-id", text: entry.id }),
+      el("span", { className: `level ${entry.level}`, text: LEVEL[entry.level] || entry.level }),
       el("span", { className: "item-rule", text: entry.rule })),
     el("p", { className: "statement", text: entry.statement }));
+  const lists = [];
   for (const extra of entry.extras) {
+    const list = values(extra.values);
+    lists.push(list);
     node.append(el("div", { className: "extra" },
-      el("span", { className: "extra-label", text: `${extra.label}:` }), values(extra.values)));
+      el("span", { className: "extra-label", text: `${extra.label}:` }), list));
   }
+  shownItems.set(entry.id, { node, entry, lists });
   node.append(el("p", { className: "limit" }, el("strong", { text: "Límite: " }), entry.not_proven));
   const refs = el("div", { className: "refs" }, "Evidencia:");
   const evidence = entry.evidence.length > 12 ? [...entry.evidence.slice(0, 12), `y ${entry.evidence.length - 12} más`] : entry.evidence;
@@ -263,19 +274,110 @@ function renderSummary(data) {
   }
 }
 
-function renderLevel(data, level) {
-  const list = $(level);
-  clear(list);
-  const chosenItems = data.items.filter((entry) => entry.level === level);
-  if (!chosenItems.length) list.append(el("li", { className: "empty", text: "(ninguno)" }));
-  for (const entry of chosenItems) list.append(item(entry));
+// --- the report by questions, with its search and its filter -----------------------------
+
+function fold(text) {
+  return String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function searchable(entry) {
+  if (!folded.has(entry)) {
+    folded.set(entry, fold([entry.id, entry.rule, entry.statement, entry.not_proven,
+      ...entry.extras.flatMap((extra) => [extra.label, ...extra.values]), ...entry.glossary].join("\n")));
+  }
+  return folded.get(entry);
+}
+
+function matches(entry) {
+  if (filter.level !== "all" && entry.level !== filter.level) return false;
+  const text = filter.words.length ? searchable(entry) : "";
+  return filter.words.every((word) => text.includes(word));
+}
+
+function questionOf(data, topic) {
+  return data.questions.find((question) => question.topics.some((known) => known.id === topic));
+}
+
+function renderQuestion(data, question) {
+  const box = $(`q-${question.id}`);
+  clear(box);
+  for (const topic of question.topics) {
+    const entries = data.items.filter((entry) => entry.topic === topic.id);
+    if (!entries.length) continue;
+    const counter = el("span", { className: "count" });
+    const list = el("ol", { className: "items" });
+    for (const entry of entries) list.append(item(entry));
+    const node = el("section", { className: "topic" }, el("h3", {}, topic.title, " ", counter), list);
+    shownTopics.push({ node, entries, counter });
+    box.append(node);
+  }
+  applyFilter();
+}
+
+// a value the search found is shown even if it was behind «Mostrar los N»
+function reveal(lists) {
+  for (const list of lists) {
+    const ul = [...list.children].find((child) => child.className === "values") || list;
+    for (const li of ul.children) {
+      if (li.hidden && filter.words.some((word) => fold(li.textContent).includes(word))) li.hidden = false;
+    }
+  }
+}
+
+function applyFilter() {
+  if (!lastResult) return;
+  const data = lastResult.data;
+  const active = filter.words.length > 0 || filter.level !== "all";
+  let shown = 0;
+  for (const question of data.questions) {
+    const topics = new Set(question.topics.map((topic) => topic.id));
+    const all = data.items.filter((entry) => topics.has(entry.topic));
+    const count = all.filter(matches).length;
+    shown += count;
+    $(`count-${question.id}`).textContent = active ? `${count}/${all.length}` : String(all.length);
+    const empty = $(`empty-${question.id}`);
+    empty.hidden = count > 0;
+    empty.textContent = all.length
+      ? "Ninguna afirmación de esta sección coincide con la búsqueda o el filtro."
+      : "El informe no tiene afirmaciones en esta sección.";
+  }
+  for (const { node, entry, lists } of shownItems.values()) {
+    const on = matches(entry);
+    node.hidden = !on;
+    if (on && filter.words.length) reveal(lists);
+  }
+  for (const { node, entries, counter } of shownTopics) {
+    const count = entries.filter(matches).length;
+    node.hidden = count === 0;
+    counter.textContent = active ? `${count}/${entries.length}` : String(entries.length);
+  }
+  $("filter-count").textContent = active
+    ? `${shown} de ${data.items.length} afirmaciones.`
+    : `${data.items.length} afirmaciones.`;
+  $("filter-reset").hidden = !active;
+  for (const level of ["all", "observed", "inferred"]) {
+    $(`level-${level}`).setAttribute("aria-pressed", filter.level === level ? "true" : "false");
+  }
+}
+
+function setFilter(query, level) {
+  filter = { words: fold(query).split(/\s+/).filter(Boolean), level };
+  applyFilter();
+}
+
+function resetFilter() {
+  $("search").value = "";
+  setFilter("", "all");
 }
 
 function renderItems(data) {
-  for (const level of ["observed", "inferred"]) {
-    clear($(level));
-    $(`count-${level}`).textContent = String(data.items.filter((entry) => entry.level === level).length);
+  shownItems = new Map();
+  shownTopics = [];
+  for (const question of data.questions) {
+    clear($(`q-${question.id}`));
+    $(`intro-${question.id}`).textContent = question.intro;
   }
+  resetFilter();
   const notes = $("notes");
   clear(notes);
   for (const note of data.notes) notes.append(el("li", { text: note }));
@@ -537,16 +639,17 @@ function renderGlossary(data) {
 }
 
 const PAINTERS = {
-  "pane-observed": (data) => renderLevel(data, "observed"),
-  "pane-inferred": (data) => renderLevel(data, "inferred"),
   "pane-vt": renderVirusTotal,
   "pane-glossary": renderGlossary,
 };
 
 function paint(pane) {
-  if (!lastResult || painted.has(pane) || !PAINTERS[pane]) return;
+  if (!lastResult || painted.has(pane)) return;
+  const question = lastResult.data.questions.find((known) => `pane-${known.id}` === pane);
+  if (!question && !PAINTERS[pane]) return;
   painted.add(pane);
-  PAINTERS[pane](lastResult.data);
+  if (question) renderQuestion(lastResult.data, question);
+  else PAINTERS[pane](lastResult.data);
 }
 
 function challenge_grade(data, selections) {
@@ -619,14 +722,21 @@ function challenge_render(data) {
   const reportDigest = challenge.report_digest;
   const selections = Object.create(null);
   const feedbackBox = el("div", { className: "challenge-feedback", "aria-live": "polite" });
+  const progress = el("p", { className: "muted small", "aria-live": "polite" });
+  const answered = () => {
+    const done = Object.values(selections).filter((selected) => selected !== null).length;
+    progress.textContent = `Respondidas: ${done} de ${challenge.questions.length}.`;
+  };
   for (const question of challenge.questions) {
     selections[question.id] = null;
     const fieldset = el("fieldset", { className: "challenge-question" },
-      el("legend", { text: `${question.id} [${question.level}] ${question.prompt}` }));
+      el("legend", {}, `${question.id}. ${question.prompt} `,
+        el("span", { className: `level ${question.level}`, text: LEVEL[question.level] || question.level })));
     for (const option of question.options) {
       const input = el("input", { type: "radio", name: `challenge-${question.id}`, value: option.id,
         onchange: () => {
           selections[question.id] = option.id;
+          answered();
           clear(feedbackBox);
           feedbackBox.append(el("p", { text: "Respuestas cambiadas; vuelve a corregir." }));
         } });
@@ -663,7 +773,8 @@ function challenge_render(data) {
     feedbackBox.append(el("p", { text: review.length ? `Repasa: ${[...new Set(review)].join(", ")}.` : "Has acertado las preguntas disponibles." }),
       el("p", { className: "muted", text: "La puntuación mide tus respuestas, no el riesgo de la muestra. No se guardan las respuestas al salir de esta página." }));
   } });
-  box.append(el("div", { className: "actions" }, correct,
+  answered();
+  box.append(progress, el("div", { className: "actions" }, correct,
     el("button", { type: "button", className: "button", text: "Repetir reto", onclick: () => challenge_render(data) })), feedbackBox);
 }
 
@@ -673,6 +784,24 @@ function challenge_reset() {
   $("challenge-open").setAttribute("aria-expanded", "false");
 }
 
+function challenge_toggle(open) {
+  if (!lastResult) return;
+  const panel = $("challenge-panel");
+  const opening = open === true || panel.hidden;
+  if (opening && !panel.hidden) {
+    panel.scrollIntoView({ block: "start" });
+    return;
+  }
+  if (opening) challenge_render(lastResult.data);
+  else challenge_reset();
+  panel.hidden = !opening;
+  $("challenge-open").setAttribute("aria-expanded", opening ? "true" : "false");
+  if (opening) {
+    $("step-practice").className = "done";
+    panel.scrollIntoView({ block: "start" });
+  }
+}
+
 function render(data, name) {
   challenge_reset();
   painted = new Set();
@@ -680,6 +809,8 @@ function render(data, name) {
   renderSummary(data);
   renderItems(data);
   $("tab-vt").hidden = !(data.virustotal || (lastResult && lastResult.vt));
+  $("step-vt").hidden = $("tab-vt").hidden;
+  for (const step of [...STEPS, "practice"]) $(`step-${step}`).className = "";
   showVirusTotalStatus();
   $("absence").textContent = data.absence;
   select("tab-summary");
@@ -698,18 +829,19 @@ function select(id, focus) {
     tab.tabIndex = on ? 0 : -1;
     $(tab.getAttribute("aria-controls")).hidden = !on;
     if (on) paint(tab.getAttribute("aria-controls"));
+    if (on && STEPS.includes(id.slice(4))) $(`step-${id.slice(4)}`).className = "done";
     if (on && focus) tab.focus();
   }
 }
 
 function openItem(id) {
-  paint("pane-observed");
-  paint("pane-inferred");
-  const target = $(`item-${id}`);
+  const data = lastResult.data;
+  for (const question of data.questions) paint(`pane-${question.id}`);
+  const target = shownItems.get(id);
   if (!target) return;
-  const pane = target.closest('[role="tabpanel"]');
-  select(pane.getAttribute("aria-labelledby"));
-  target.scrollIntoView({ block: "start" });
+  if (target.node.hidden) resetFilter(); // the filter must not hide what was asked for
+  select(`tab-${questionOf(data, target.entry.topic).id}`);
+  target.node.scrollIntoView({ block: "start" });
 }
 
 function openEntry(ref) {
@@ -734,16 +866,14 @@ function download(text, name, type) {
 // --- wiring ----------------------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  $("challenge-open").addEventListener("click", () => {
-    if (!lastResult) return;
-    const panel = $("challenge-panel");
-    const opening = panel.hidden;
-    if (opening) challenge_render(lastResult.data);
-    else challenge_reset();
-    panel.hidden = !opening;
-    $("challenge-open").setAttribute("aria-expanded", opening ? "true" : "false");
-    if (opening) panel.scrollIntoView({ block: "start" });
-  });
+  $("challenge-open").addEventListener("click", () => challenge_toggle());
+  $("go-practice").addEventListener("click", () => challenge_toggle(true));
+  for (const step of STEPS) {
+    $(`go-${step}`).addEventListener("click", () => {
+      select(`tab-${step}`);
+      $(`tab-${step}`).scrollIntoView({ block: "start" });
+    });
+  }
   loadConfig();
   const drop = $("drop");
   $("file").addEventListener("change", (event) => choose(event.target.files[0]));
@@ -775,11 +905,19 @@ document.addEventListener("DOMContentLoaded", () => {
     choose(null);
     show("upload");
   });
-  $("ghidra-download").addEventListener("click", ghidra_download);
+  $("search").addEventListener("input", () => setFilter($("search").value, filter.level));
+  for (const level of ["all", "observed", "inferred"]) {
+    $(`level-${level}`).addEventListener("click", () => setFilter($("search").value, level));
+  }
+  $("filter-reset").addEventListener("click", resetFilter);
+  const closeMenu = () => { $("downloads").open = false; };
+  $("ghidra-download").addEventListener("click", () => { closeMenu(); ghidra_download(); });
   $("download-json").addEventListener("click", () => {
+    closeMenu();
     if (lastResult) download(lastResult.data.downloads.report, `${lastResult.data.sample.sha256}.lupabin.json`, "application/json");
   });
   $("download-md").addEventListener("click", () => {
+    closeMenu();
     if (lastResult) download(lastResult.data.downloads.markdown, `${lastResult.data.sample.sha256}.lupabin.md`, "text/markdown");
   });
   document.querySelector('[role="tablist"]').addEventListener("click", (event) => {
