@@ -20,6 +20,7 @@ from tests.fixtures.pe_builder import (
     build_code_pe,
     build_decode_demo,
     build_demo,
+    build_dotnet_demo,
     build_main_demo,
     build_pe,
     build_resolve_demo,
@@ -86,6 +87,8 @@ SAMPLES = {
     "wx": writable_executable,
     "high-entropy": high_entropy,
     "upx": build_upx_demo,
+    "dotnet": build_dotnet_demo,
+    "dotnet-own": lambda: build_dotnet_demo(library=b"", own_field=True),
     "upx-plain": lambda: build_upx_demo(bits=64, method="nrv2e", tail=False),
     "not-pe": lambda: b"just some text, not a PE file at all " * 4,
 }

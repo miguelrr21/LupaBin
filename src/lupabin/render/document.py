@@ -30,6 +30,9 @@ ABSENCE = (
 )
 EXTRA = {
     "functions": "Funciones",
+    "references": "Ensamblados de los que depende",
+    "members": "Miembros",
+    "types": "Tipos",
     "sites": "Desde (RVA)",
     "cases": "Casos",
     "ranges": "Rangos (RVA)",

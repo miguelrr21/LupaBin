@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.13.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`). Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.14.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`). Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -30,10 +30,10 @@ El host trata la respuesta del worker como entrada no fiable: la valida, comprue
 
 | Campo | Contenido |
 | --- | --- |
-| `schema_version` | Literal `0.13.0`; versiones distintas se rechazan. |
+| `schema_version` | Literal `0.14.0`; versiones distintas se rechazan. |
 | `sample` | SHA-256, MD5, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. MD5 se incluye solo por interoperabilidad. |
 | `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
-| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `upx_image`, `upx_import`, `upx_string`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call`, `code_reach` y `string_reference`. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `upx_image`, `upx_import`, `upx_string`, `dotnet_metadata`, `dotnet_pinvoke`, `dotnet_string`, `dotnet_member`, `dotnet_type`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call`, `code_reach` y `string_reference`. |
 | `extractor_runs` | Fuentes `pe`, `strings`, `yara`, `decode` y `code`, con su versión y componentes tipados con cobertura y contadores. |
 | `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
 | `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
@@ -91,6 +91,22 @@ Componente `upx` de la fuente `pe`. LupaBin solo reconoce UPX 5 (versión de cab
 `upx_string` es una cadena de la imagen reconstruida: los bytes descomprimidos desde la primera sección hasta la lista de importaciones, con el filtro de saltos deshecho y cada campo reubicado devuelto a su dirección. Se buscan igual que las cadenas del archivo (mismos repertorios, longitud mínima y truncado) y llevan la RVA del programa original. No tienen `location` y citan su `upx_image`. Si el filtro o las reubicaciones no tienen una forma medida, no se publica ninguna y el componente queda parcial (`upx_rebuild_unrecognized`).
 
 El informe comprueba que los campos coinciden con la cabecera, que el bloque cabe en la muestra y que el número de importaciones publicadas es coherente con la cobertura. El host repite toda la derivación con la muestra y la tabla de secciones del informe, y rechaza la respuesta si algo difiere. Un archivo sin una cabecera que se verifique no tiene hechos de este componente: eso no demuestra que no esté empaquetado.
+## Metadatos de .NET (`dotnet_metadata`, `dotnet_pinvoke`, `dotnet_string`, `dotnet_member` y `dotnet_type`)
+
+Componente `dotnet` de la fuente `pe`. Son los metadatos de un ensamblado .NET (ECMA-335, partición II), leídos con el método `ecma335-metadata-v1` solo cuando tienen la forma habitual: un único flujo `#~`, sin tablas de punteros, sin datos de cabecera fuera del estándar y con las 45 tablas del estándar como mucho ([el método](metodo.md#metadatos-de-net)). Todos son `observed`: cada hecho sitúa en `location` los bytes del archivo de los que sale.
+
+- **`dotnet_metadata`** (uno por archivo): `location` es la raíz de los metadatos, desde la firma `BSJB` hasta el final de las cabeceras de sus flujos. `data` lleva `version` (el texto de versión de la raíz), `flags` y `entry_point` de la cabecera CLI, `streams` (nombre, posición en el archivo y tamaño de cada flujo), el número de filas que declaran las tablas (`type_refs`, `type_defs`, `methods`, `member_refs`, `module_refs`, `pinvokes`, `assembly_refs`), `assembly` (nombre y versión del propio ensamblado, si tiene tabla Assembly), `references` (nombre y versión de los primeros 128 ensamblados de los que depende) `unreadable` (filas que no se publican porque un nombre o un índice suyo no se pudo leer) y `user_strings` (entradas no vacías del flujo `#US`, entre las examinadas).
+- **`dotnet_pinvoke`**: una fila de la tabla ImplMap, es decir, una función de código nativo declarada para llamarla mediante P/Invoke. `module` es la biblioteca, `function` el nombre con el que se importa y `method` el método que la declara. `module` y `function` son nulos cuando la fila deja ese nombre vacío, como hace C++/CLI para el código nativo del propio archivo.
+- **`dotnet_string`**: un texto literal del flujo `#US`, donde .NET guarda las cadenas que escribe el código. Tiene los mismos campos que `string` (siempre `utf-16-le`, repertorio ASCII imprimible, al menos 4 caracteres, truncado al límite de caracteres del informe) más `index`, la posición de su entrada en el flujo. `location` son los bytes del texto. Las entradas más cortas o con otros caracteres no se publican.
+- **`dotnet_member`**: una fila de la tabla MemberRef, un método o campo (`member`) que el ensamblado nombra sin definirlo en esa fila. `parent` dice a qué apunta la fila. Si es `type_ref`, `namespace` y `type` nombran el tipo y `assembly` el ensamblado que lo contiene, siguiendo hasta 8 tipos anidados; un tipo del propio módulo no lleva `assembly`. Si es `type_spec` (un tipo construido: genérico, matriz) o `method_def`, no hay nombre de tipo.
+- **`dotnet_type`**: una fila de la tabla TypeDef, un tipo que el ensamblado define: `namespace`, `name`, `flags` y `methods`, el número de filas de la tabla de métodos que le corresponden.
+
+Las filas de tabla llevan `row`, su número desde 1. Todos estos hechos citan el `dotnet_metadata` y se publican en este orden, cada grupo en el de su tabla o flujo: como mucho 1.024 `dotnet_pinvoke`, 2.048 `dotnet_string`, 4.096 `dotnet_member` y 1.024 `dotnet_type`. Los nombres van con sus bytes originales (`raw_hex`) y con `text` solo si son ASCII.
+
+Limitaciones propias: `dotnet_unsupported_layout` (el archivo declara metadatos, pero no en la forma que se lee; no se publica ningún hecho), `dotnet_unreadable_rows` (alguna fila se dejó fuera) y `dotnet_limit` (las tablas tienen más filas que las publicadas, o el flujo `#US` no se examinó hasta el final: más de 2.048 textos publicables, más de 262.144 entradas o una entrada que no cabe en el flujo). Un archivo sin directorio CLR no tiene hechos de este componente y su cobertura es completa.
+
+El host repite la lectura con los bytes de la muestra y rechaza la respuesta del worker si un hecho no es el que él obtiene, en el mismo lugar y en el mismo orden. No se lee el código IL: ningún hecho dice qué métodos se llaman ni desde dónde.
+
 ## Coincidencias YARA (`yara_match`)
 
 El informe incluye un `yara_context` tipado con catálogo, hashes de las fuentes y versiones realmente observadas. Una versión nativa que no se pudo obtener queda nula; no se sustituye por la versión esperada.
@@ -242,5 +258,6 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 | 0.11.0 | Componente `string_references`, `string_reference` y los textos de `code_reach` (textos que usa el código) |
 | 0.12.0 | Componente `upx`, `upx_image` y `upx_import` (programas empaquetados con UPX 5) |
 | 0.13.0 | `upx_string`: las cadenas de la imagen reconstruida de un bloque UPX |
+| 0.14.0 | Componente `dotnet`, `dotnet_metadata`, `dotnet_pinvoke`, `dotnet_string`, `dotnet_member` y `dotnet_type` (metadatos de .NET) |
 
 Solo el esquema activo se publica (`docs/evidence-schema.json`); los anteriores siguen en el historial de git. Los consumidores rechazan versiones de esquema no soportadas y la CLI no transforma informes antiguos.

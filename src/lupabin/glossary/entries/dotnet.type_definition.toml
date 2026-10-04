@@ -1,0 +1,13 @@
+id = "dotnet.type_definition"
+title = "Tipos que define un ensamblado (.NET)"
+revision = "1.0.0"
+lang = "es"
+summary = "Los metadatos de un ensamblado .NET listan cada tipo (clase, estructura, interfaz) que define, con su nombre, su espacio de nombres y sus métodos."
+body = "Están en la tabla TypeDef. A diferencia de un programa nativo, que normalmente no conserva los nombres de sus funciones, un ensamblado .NET necesita esos nombres para funcionar, así que suelen estar ahí.\n\nEl primer tipo de la tabla se llama «<Module>»: lo añade el compilador para lo que no pertenece a ninguna clase."
+not_proven = "Los nombres los elige quien compila y un ofuscador los cambia por otros sin significado: no dicen qué hace el código."
+related = ["dotnet.metadata"]
+sources = [
+  { title = "TypeDefinition Struct", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/dotnet/api/system.reflection.metadata.typedefinition", verified_on = 2026-10-03 },
+  { title = "ECMA-335: Common Language Infrastructure (CLI)", publisher = "Ecma International", url = "https://www.ecma-international.org/publications-and-standards/standards/ecma-335/", verified_on = 2026-10-03 },
+  { title = "Cómo trabaja LupaBin: metadatos de .NET", publisher = "Proyecto LupaBin", document = "docs/metodo.md#metadatos-de-net", verified_on = 2026-10-03 },
+]

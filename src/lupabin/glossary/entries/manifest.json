@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "lupabin_glossary",
- "revision": "1.13.0",
+ "revision": "1.14.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -152,6 +152,31 @@
    "id": "decode.xor",
    "filename": "decode.xor.toml",
    "sha256": "c19ab920d412d42ef04e456586078b678435b43acfc17d850a469d7307d31aa2"
+  },
+  {
+   "id": "dotnet.member_reference",
+   "filename": "dotnet.member_reference.toml",
+   "sha256": "55b4994414f205487e51561d804436bf53b8eca670bc15042630444af67d6030"
+  },
+  {
+   "id": "dotnet.metadata",
+   "filename": "dotnet.metadata.toml",
+   "sha256": "e8ac2ca220c99370127022f4389785b4a7b41154b3869764a49807a856b9310c"
+  },
+  {
+   "id": "dotnet.pinvoke",
+   "filename": "dotnet.pinvoke.toml",
+   "sha256": "1b6610ddd8596b4032009a7a01c9f444f0b2510f611f2b4f392209d769215383"
+  },
+  {
+   "id": "dotnet.type_definition",
+   "filename": "dotnet.type_definition.toml",
+   "sha256": "bdfae81c231d530c561329505003a43bf7cdb6675955b1fdf71e20f78055ab92"
+  },
+  {
+   "id": "dotnet.user_strings",
+   "filename": "dotnet.user_strings.toml",
+   "sha256": "96222c5188739762fe8e8af90450f4e9669781fc77140a4e6387907f758d0ab3"
   },
   {
    "id": "entropy.shannon",

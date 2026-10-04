@@ -12,10 +12,11 @@ Creado por [Miguel Ángel Rodríguez Romero](https://github.com/miguelrr21). *En
 - **Qué llama el código.** Un recorrido del código x86/x64 encuentra qué funciones importadas se llaman, desde dónde y con qué argumentos constantes, en 72 funciones de Windows (claves de registro, servicios, líneas de órdenes, URL, permisos de memoria…). En los programas que arrancan con `__getmainargs`, como los de MinGW-w64, separa lo que se alcanza desde `main` de lo que solo hace el arranque del compilador.
 - **Capacidades**: frases como «el código contiene 1 llamada que escribe en una clave de arranque automático (Run)», con la técnica de MITRE ATT&CK solo cuando el mecanismo coincide con su definición y con su frecuencia en 3.090 binarios benignos.
 - **Programas empaquetados con UPX 5**: descomprime el bloque sin ejecutarlo y muestra las secciones, el punto de entrada, las funciones importadas y las cadenas de texto que esconde.
+- **Programas .NET**: lee sus metadatos y muestra qué funciones de Windows declaran para llamarlas (P/Invoke), qué métodos de otras bibliotecas nombran, qué tipos definen y los textos literales de su código.
 - **VirusTotal**, como fuente externa separada de los hechos, con el significado documentado de algunas etiquetas y el contraste de sus técnicas con las capacidades observadas.
 - **Para aprender**: explicaciones que citan cada evidencia, un glosario con fuentes, preguntas de práctica autocorregibles sobre el propio informe y exportación de las evidencias a Ghidra.
 
-Ningún resultado se da por bueno porque lo diga el worker: el host vuelve a comprobar con los bytes de la muestra cada llamada, argumento, decodificación, marca, coincidencia YARA y bloque UPX, y cada frase del informe se regenera desde sus citas antes de mostrarse.
+Ningún resultado se da por bueno porque lo diga el worker: el host vuelve a comprobar con los bytes de la muestra cada llamada, argumento, decodificación, marca, coincidencia YARA, bloque UPX y fila de metadatos de .NET, y cada frase del informe se regenera desde sus citas antes de mostrarse.
 
 ## Ejemplo
 
@@ -42,7 +43,7 @@ Requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/) y Docker con motor Lin
 
 ```text
 uv sync --frozen
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.13.0 .
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.14.0 .
 uv run --frozen lupabin analyze "ruta/al/archivo.exe"
 ```
 
@@ -55,7 +56,7 @@ uv run python -m tests.fixtures.pe_builder --scenario capability-demo --output s
 uv run --frozen lupabin analyze samples/demo.bin --no-virustotal
 ```
 
-Otros escenarios: `demo`, `decode-demo`, `toolchain-demo` y `upx-demo` ([procedencia de los fixtures](samples/README.md)).
+Otros escenarios: `demo`, `decode-demo`, `toolchain-demo`, `upx-demo` y `dotnet-demo` ([procedencia de los fixtures](samples/README.md)).
 
 ## VirusTotal
 

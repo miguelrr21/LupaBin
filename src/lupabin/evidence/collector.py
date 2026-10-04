@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from pydantic import TypeAdapter
 
-from lupabin.evidence import toolchain
+from lupabin.evidence import dotnet, toolchain
 from lupabin.evidence.facts import (
     AnomalyData,
     ApiCallData,
@@ -12,6 +12,11 @@ from lupabin.evidence.facts import (
     CodeFunctionData,
     CodeReachData,
     DecodedStringData,
+    DotnetMemberData,
+    DotnetMetadataData,
+    DotnetPinvokeData,
+    DotnetStringData,
+    DotnetTypeData,
     EntropyData,
     Evidence,
     ExportData,
@@ -52,6 +57,11 @@ KINDS = {
     UpxImageData: "upx_image",
     UpxImportData: "upx_import",
     UpxStringData: "upx_string",
+    DotnetMetadataData: "dotnet_metadata",
+    DotnetPinvokeData: "dotnet_pinvoke",
+    DotnetStringData: "dotnet_string",
+    DotnetMemberData: "dotnet_member",
+    DotnetTypeData: "dotnet_type",
     YaraMatchData: "yara_match",
     DecodedStringData: "decoded_string",
     ApiCallData: "api_call",
@@ -136,6 +146,11 @@ class Collector:
             "upx_image": 1,
             "upx_import": limits.imports,
             "upx_string": limits.strings,
+            "dotnet_metadata": 1,
+            "dotnet_pinvoke": dotnet.PINVOKES,
+            "dotnet_string": dotnet.USER_STRINGS,
+            "dotnet_member": dotnet.MEMBERS,
+            "dotnet_type": dotnet.TYPES,
             "string": limits.strings,
             "yara_match": limits.yara.matches,
             "decoded_string": limits.decode.strings + limits.decode.xor,

@@ -1,0 +1,13 @@
+id = "dotnet.pinvoke"
+title = "P/Invoke: código nativo desde .NET"
+revision = "1.0.0"
+lang = "es"
+summary = "P/Invoke (Platform Invoke) es el mecanismo con el que un programa .NET llama a funciones de bibliotecas nativas, como las DLL de Windows. Cada función se declara en los metadatos con su nombre y el de su biblioteca."
+body = "Un programa nativo importa las funciones de Windows en su tabla de imports. Uno de .NET no: las declara como métodos marcados con DllImport, y el runtime carga la biblioteca y busca la función la primera vez que se llama. Por eso estas funciones no aparecen en la tabla de imports del archivo, sino en la tabla ImplMap de los metadatos.\n\nLos programas escritos en C++/CLI, que mezclan código .NET y nativo en el mismo archivo, usan la misma tabla para su propio código nativo, y entonces dejan vacío el nombre de la biblioteca."
+not_proven = "Una declaración P/Invoke no demuestra que el programa llame a la función, ni cuándo ni para qué. Y un programa .NET puede llegar a código nativo por otros caminos que no dejan esta declaración."
+related = ["dotnet.metadata", "pe.imports"]
+sources = [
+  { title = "Platform Invoke (P/Invoke)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/dotnet/standard/native-interop/pinvoke", verified_on = 2026-10-03 },
+  { title = "ECMA-335: Common Language Infrastructure (CLI)", publisher = "Ecma International", url = "https://www.ecma-international.org/publications-and-standards/standards/ecma-335/", verified_on = 2026-10-03 },
+  { title = "Cómo trabaja LupaBin: metadatos de .NET", publisher = "Proyecto LupaBin", document = "docs/metodo.md#metadatos-de-net", verified_on = 2026-10-03 },
+]

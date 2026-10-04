@@ -1,0 +1,13 @@
+id = "dotnet.metadata"
+title = "Metadatos de .NET"
+revision = "1.0.0"
+lang = "es"
+summary = "Un ensamblado .NET lleva dentro unas tablas, los metadatos, que describen los tipos y métodos que define y los de otros ensamblados que nombra."
+body = "El código de un programa .NET no llama a direcciones de memoria, sino a métodos identificados por filas de esas tablas. Por eso los metadatos son una lista bastante completa de lo que el programa define y de lo que nombra de otras bibliotecas.\n\nLos metadatos empiezan con la firma «BSJB» y se reparten en flujos: «#~» contiene las tablas, «#Strings» los nombres, «#US» los textos literales del código, «#Blob» las firmas y «#GUID» los identificadores. Su formato está definido en el estándar ECMA-335.\n\nLupaBin lee los metadatos solo cuando tienen la forma habitual: un único flujo «#~», sin tablas de punteros y sin datos fuera del estándar. Si no la tienen, lo dice y no publica nada de ellos. No lee el código IL de los métodos."
+not_proven = "Los metadatos dicen qué declara y qué nombra el ensamblado, no qué código se ejecuta. Un ofuscador puede cambiar todos los nombres, o dejar los metadatos en una forma que LupaBin no lee."
+related = ["toolchain.clr_header", "dotnet.member_reference", "dotnet.pinvoke"]
+sources = [
+  { title = "Metadata and self-describing components", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/dotnet/standard/metadata-and-self-describing-components", verified_on = 2026-10-03 },
+  { title = "ECMA-335: Common Language Infrastructure (CLI)", publisher = "Ecma International", url = "https://www.ecma-international.org/publications-and-standards/standards/ecma-335/", verified_on = 2026-10-03 },
+  { title = "Cómo trabaja LupaBin: metadatos de .NET", publisher = "Proyecto LupaBin", document = "docs/metodo.md#metadatos-de-net", verified_on = 2026-10-03 },
+]
