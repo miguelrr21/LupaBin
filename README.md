@@ -67,7 +67,7 @@ Si VirusTotal no conoce el archivo, **LupaBin lo sube** con el nombre genérico 
 ## Web, Ghidra y práctica
 
 - **Web:** `uv sync --extra web` y `uv run lupabin-web` (en `http://127.0.0.1:8080`) sirven el mismo análisis aislado en el navegador, sin guardar las muestras recibidas ni sus informes. Para un servidor dedicado: `deploy/server/` (systemd y Caddy).
-- **Ejemplo y descargas:** *Ver informe de ejemplo* permite explorar un informe sintético, sus citas y la práctica sin aportar un archivo ni consultar VirusTotal. El menú *Descargar* ofrece también un HTML autónomo para leer sin conexión, con evidencias, glosario y límites; conserva el informe local, no los resultados de VirusTotal recibidos después.
+- **Ejemplo y descargas:** *Ver informe de ejemplo* permite explorar un informe sintético, sus citas y la práctica sin aportar un archivo ni consultar VirusTotal. El menú *Descargar* ofrece un resumen HTML breve para leer sin conexión, con citas y límites; el JSON conserva todas las evidencias. El resumen declara lo que omite y no incorpora los resultados de VirusTotal recibidos después.
 - **Ghidra:** `lupabin export-ghidra informe.json --sample archivo.exe --output evidencias.zip` genera un JSON y un script que, en Ghidra, comprueba el SHA-256, muestra una revisión previa y añade las evidencias como comentarios sin tocar tus anotaciones. [Detalles](docs/metodo.md#exportación-a-ghidra).
 - **Práctica:** `lupabin challenge informe.json --practice`, o *Practicar con este informe* en la web, plantea preguntas tipo test sobre el propio informe y las corrige citando las evidencias. [Detalles](docs/metodo.md#retos-autocorregibles).
 

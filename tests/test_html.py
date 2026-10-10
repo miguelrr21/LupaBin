@@ -2,10 +2,9 @@ import base64
 import hashlib
 import inspect
 import json
-import re
 from collections import Counter
 from datetime import UTC, date, datetime
-from html import escape, unescape
+from html import escape
 from html.parser import HTMLParser
 
 import pytest
@@ -14,6 +13,7 @@ from pydantic import ValidationError
 from lupabin.analysis import analyze_bytes
 from lupabin.evidence.models import Limits
 from lupabin.explain.engine import explain, validate
+from lupabin.extractors.code import CodeExtractor
 from lupabin.extractors.decode import DecodeExtractor
 from lupabin.extractors.pe import PEExtractor
 from lupabin.extractors.strings import StringsExtractor
@@ -24,7 +24,12 @@ from lupabin.render import html as renderer
 from lupabin.render.html import STYLE, HtmlExportError, HtmlLimitError, _source, to_html
 from lupabin.render.safe import visible
 from lupabin.virustotal.models import Behaviour, Detection, VirusTotalReport
-from tests.fixtures.pe_builder import build_decode_demo, build_pe
+from tests.fixtures.pe_builder import (
+    build_capability_demo,
+    build_code_pe,
+    build_decode_demo,
+    build_pe,
+)
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 GLOSSARY = load_glossary()
@@ -56,10 +61,12 @@ class Page(HTMLParser):
         return "".join(self.text)
 
 
-def prepared(data, *, limits=None, decode=False):
+def prepared(data, *, limits=None, decode=False, code=False):
     extractors = [PEExtractor(), StringsExtractor()]
     if decode:
         extractors.append(DecodeExtractor())
+    if code:
+        extractors.append(CodeExtractor())
     report = analyze_bytes(data, limits=limits, extractors=extractors, clock=lambda: NOW)
     explanation = explain(report, GLOSSARY)
     items = validate(explanation, report, GLOSSARY)
@@ -84,21 +91,21 @@ def test_structure_ids_and_citations_resolve_without_filters(trusted):
     assert tags["h1"] == tags["nav"] == 1
     assert len(page.ids) == len(set(page.ids))
     assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
-    assert {f"item-{item.id}" for item in items} <= set(page.ids)
-    assert {f"evidence-{fact.id}" for fact in report.evidence} <= set(page.ids)
-    assert max(len(item.evidence_ids) for item in items) > 12
-    for item in items:
+    selected = renderer._select(items)
+    assert {f"item-{item.id}" for item in selected} == {
+        ref for ref in page.ids if ref.startswith("item-")
+    }
+    refs = {ref for item in selected for ref in item.evidence_ids[: renderer.MAX_CITATIONS]}
+    assert {f"evidence-{ref}" for ref in refs} == {
+        ref for ref in page.ids if ref.startswith("evidence-")
+    }
+    assert len(refs) < len(report.evidence)
+    for item in selected:
         assert visible(item.statement) in page.content
         assert visible(item.not_proven) in page.content
-        for label, value in document._extras(item):
-            shown = ", ".join(value) if isinstance(value, tuple) else str(value)
-            assert visible(shown) in page.content
-            assert label in page.content
-        for ref in item.evidence_ids:
+        for ref in item.evidence_ids[: renderer.MAX_CITATIONS]:
             assert f"#evidence-{ref}" in page.links
-        for ref in item.glossary_ids:
-            assert f"#glossary-{ref}" in page.links
-    for note in explanation.notes:
+    for note in explanation.notes[: renderer.MAX_NOTES]:
         assert visible(note.statement) in page.content
     assert to_html(*trusted) == output
 
@@ -107,31 +114,23 @@ def test_levels_provenance_hashes_and_glossary_remain_readable(trusted):
     explanation, items, report, glossary = trusted
     page = Page(to_html(*trusted, origin="Informe guardado; no se repitió el análisis."))
     assert {item.level for item in items} == {"observed", "inferred"}
-    titles = ["1. Qué se pudo", "2. Hechos observados", "3. Inferencias", "4. Glosario"]
+    titles = ["Qué se pudo analizar", "Lectura seleccionada", "Glosario breve"]
     positions = [page.content.index(title) for title in titles]
     assert positions == sorted(positions)
     for value in (
         report.sample.sha256,
-        report.sample.md5,
-        report.schema_version,
-        report.analysis.version,
-        NOW.isoformat(),
-        explanation.glossary.digest,
         "Informe guardado; no se repitió el análisis.",
         "Límite (not_proven)",
         document.ABSENCE,
     ):
         assert value in page.content
-    for run in report.extractor_runs:
-        for part in run.components:
-            assert part.name in page.content
-            assert part.status in page.content
-    for ref in document._glossary_order(explanation, items):
-        entry = glossary.entries[ref]
-        for paragraph in entry.body.split("\n\n"):
-            assert visible(paragraph) in page.content
-        for source in entry.sources:
-            assert visible(source.url or source.document) in page.content
+    for ref in page.ids:
+        if ref.startswith("glossary-"):
+            entry = glossary.entries[ref.removeprefix("glossary-")]
+            assert visible(entry.summary) in page.content
+            assert visible(entry.body) not in page.content
+    assert "Metadatos completos" not in page.content
+    assert "Presupuestos del análisis" not in page.content
 
 
 def test_csp_permits_only_exact_static_css_and_no_active_elements(trusted):
@@ -271,7 +270,7 @@ def test_glossary_model_rejects_active_or_unreviewed_url_schemes(url):
         Source(title="Fuente", publisher="Editor", url=url, verified_on=date(2026, 1, 1))
 
 
-def test_external_results_are_separate_inert_complete_and_attributed(trusted):
+def test_external_results_are_separate_inert_brief_and_attributed(trusted):
     report = trusted[2]
     external = VirusTotalReport(
         sample_sha256=report.sample.sha256,
@@ -296,18 +295,16 @@ def test_external_results_are_separate_inert_complete_and_attributed(trusted):
     assert "Total de motores: no disponible" in page.content
     assert "Estos datos vienen de VirusTotal, no de LupaBin" in page.content
     assert "3 entradas omitidas por formato o límite." in page.content
-    assert "label-17" in page.content and "cmd-17" in page.content
+    assert "label-17" not in page.content and "cmd-17" not in page.content
+    assert "15 etiquetas externas omitidas en este HTML" in page.content
+    assert "15 entradas de Comandos ejecutados omitidas en este HTML" in page.content
     assert visible(external.meaningful_name) in page.content
     assert "script" not in {tag for tag, _ in page.elements}
     assert all("evil.invalid" not in link for link in page.links)
     assert "\u202e" not in output
     assert "No se incluyen datos de VirusTotal" not in page.content
-    blocks = [
-        json.loads(unescape(block))
-        for block in re.findall(r"<pre>(.*?)</pre>", output, flags=re.DOTALL)
-    ]
-    expected = json.loads(visible(json.dumps(external.model_dump(mode="json"), ensure_ascii=False)))
-    assert expected in blocks
+    assert "pre" not in {tag for tag, _ in page.elements}
+    assert "Los datos externos no forman parte del JSON de hechos" in page.content
 
 
 def test_external_empty_behaviour_keeps_omission_notice(trusted):
@@ -343,17 +340,240 @@ def test_public_signature_matches_markdown_and_limit_is_fixed():
     assert renderer.MAX_HTML_BYTES == 32 * 1024 * 1024
 
 
-def test_every_evidence_and_report_metadata_are_exported_without_truncation(trusted):
-    report = trusted[2]
-    blocks = [
-        json.loads(unescape(block))
-        for block in re.findall(r"<pre>(.*?)</pre>", to_html(*trusted), flags=re.DOTALL)
-    ]
-    assert blocks == [
-        report.analysis.limits.model_dump(mode="json"),
-        report.model_dump(mode="json", exclude={"evidence"}),
-        *(fact.model_dump(mode="json") for fact in report.evidence),
-    ]
+def test_many_strings_stay_in_report_json_but_not_in_brief_html():
+    texts = tuple(f"private-fixture-string-{n:04d}" for n in range(400))
+    args = prepared(build_pe() + b"\0" + b"\0".join(t.encode() for t in texts) + b"\0")
+    explanation, items, report, _ = args
+    before = report.model_dump_json()
+    output = to_html(*args)
+    page = Page(output)
+    assert all(text in before and text not in output for text in texts)
+    assert report.model_dump_json() == before
+    assert len(json.loads(before)["evidence"]) == len(report.evidence)
+    selected = renderer._select(items)
+    shown = sum(ref.startswith("evidence-") for ref in page.ids)
+    assert f"{len(items) - len(selected)} explicaciones validadas omitidas" in page.content
+    assert f"{len(report.evidence) - shown} evidencias sin ficha en este HTML" in page.content
+    assert "El JSON de hechos conserva todas las evidencias" in page.content
+    assert "La web permite consultar todas las explicaciones validadas" in page.content
+    assert not {"pre", "details"} & {tag for tag, _ in page.elements}
+    assert "raw_hex" not in output
+    assert len(output.encode()) < len(before.encode())
+    assert len(explanation.items) == len(items)
+
+
+def test_selection_is_bounded_deterministic_and_deduplicated(trusted):
+    base = trusted[1][0]
+    items = tuple(
+        base.model_copy(update={"id": f"X{n}", "rule": "anomaly.test@1"}) for n in range(1, 31)
+    )
+    assert renderer._select(items + items) == items[: renderer.MAX_ITEMS]
+    assert renderer._select(items + items) == renderer._select(items + items)
+    calls = base.model_copy(update={"id": "X31", "rule": "code.calls@1"})
+    assert calls not in renderer._select((calls, *items))
+
+
+def test_citations_extras_and_glossary_are_bounded_with_exact_omissions(trusted):
+    explanation, items, report, glossary = trusted
+    base = items[0]
+    refs = tuple(f.id for f in report.evidence)
+    terms = tuple(glossary.entries)[:8]
+    item = base.model_copy(
+        update={
+            "evidence_ids": refs,
+            "glossary_ids": terms,
+            "slots": {
+                "texts": tuple("a" * 200 + str(i) for i in range(9)),
+                "untouched": ("NEVER_PRESENT_AS_POSITIVE",),
+            },
+        }
+    )
+    output = to_html(explanation, (item,), report, glossary)
+    page = Page(output)
+    assert visible(item.statement) in page.content
+    assert visible(item.not_proven) in page.content
+    assert f"{len(refs) - renderer.MAX_CITATIONS} citas de evidencia omitidas" in page.content
+    assert "6 valores omitidos" in page.content
+    assert "41 caracteres del valor original omitidos" in page.content
+    assert "1 valores de familias sin llamadas omitidos" in page.content
+    assert "NEVER_PRESENT_AS_POSITIVE" not in page.content
+    assert len([x for x in page.ids if x.startswith("glossary-")]) <= renderer.MAX_GLOSSARY
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+def test_real_validated_capabilities_keep_statements_limits_and_citations():
+    args = prepared(build_capability_demo(), code=True)
+    page = Page(to_html(*args))
+    selected = renderer._select(args[1])
+    capabilities = [item for item in selected if item.rule.startswith("capability.")]
+    assert capabilities
+    for item in capabilities:
+        assert visible(item.statement) in page.content
+        assert visible(item.not_proven) in page.content
+        assert page.ids.count(f"item-{item.id}") == 1
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+    assert document.NO_CAPABILITY not in page.content
+
+
+def test_no_capabilities_is_not_presented_as_safety():
+    args = prepared(build_code_pe(b"\xc3"), code=True)
+    assert not any(item.rule.startswith("capability.") for item in args[1])
+    page = Page(to_html(*args))
+    assert document.NO_CAPABILITY in page.content
+    assert document.ABSENCE in page.content
+
+
+def test_notes_prioritize_recorded_issues_and_count_omissions():
+    args = prepared(b"not a PE")
+    explanation = args[0]
+    assert len(explanation.notes) > renderer.MAX_NOTES
+    page = Page(to_html(*args))
+    assert "no tiene formato PE" in page.content
+    assert (
+        f"{len(explanation.notes) - renderer.MAX_NOTES} notas de cobertura omitidas" in page.content
+    )
+
+
+def test_complete_coverage_has_no_component_dump(trusted):
+    args = prepared(build_pe())
+    assert all(
+        part.status == "complete" for run in args[2].extractor_runs for part in run.components
+    )
+    output = to_html(*args)
+    coverage = output.split('<section id="coverage">')[1].split("</section>")[0]
+    assert "componentes con cobertura completa registrada" in coverage
+    assert "imports_normal" not in coverage
+    assert "<table>" not in coverage
+
+
+def test_glossary_and_extra_field_omissions_are_exact(trusted):
+    explanation, items, report, glossary = trusted
+    terms = tuple(glossary.entries)[:12]
+    slots = {key: ("value",) for key in tuple(document.EXTRA)[:6]}
+    first = items[0].model_copy(update={"glossary_ids": terms[:8], "slots": slots})
+    second = first.model_copy(update={"id": "X999", "glossary_ids": terms[8:]})
+    page = Page(to_html(explanation, (first, second), report, glossary))
+    assert "4 términos citados omitidos" in page.content
+    assert "4 citas de glosario omitidas" in page.content
+    assert "2 campos extra omitidos" in page.content
+    assert len([ref for ref in page.ids if ref.startswith("glossary-")]) == 8
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+def test_density_warning_is_selected_even_after_many_findings(trusted):
+    base = trusted[1][0]
+    findings = tuple(
+        base.model_copy(update={"id": f"X{n}", "rule": "anomaly.test@1"}) for n in range(1, 30)
+    )
+    warning = base.model_copy(update={"id": "X30", "rule": "code.walk_density@1"})
+    assert renderer._select((*findings, warning))[0] == warning
+
+
+def test_brief_evidence_locations_are_not_invented(trusted):
+    explanation, items, report, glossary = trusted
+    refs = tuple(fact.id for fact in report.evidence[: renderer.MAX_CITATIONS])
+    item = items[0].model_copy(update={"evidence_ids": refs})
+    output = to_html(explanation, (item,), report, glossary)
+    for fact in report.evidence[: renderer.MAX_CITATIONS]:
+        row = output.split(f'<tr id="evidence-{fact.id}">')[1].split("</tr>")[0]
+        location = fact.location
+        for field in ("offset", "rva"):
+            value = getattr(location, field, None)
+            assert (f"0x{value:x}" if value is not None else "no determinado") in row
+    assert "raw_hex" not in output
+
+
+def test_truncated_extra_text_is_neutralized(trusted):
+    explanation, items, report, glossary = trusted
+    hostile = '<img src=x onerror="bad()">\u202e\x00' + "x" * 200
+    item = items[0].model_copy(update={"slots": {"text": hostile, "complete": False}})
+    output = to_html(explanation, (item,), report, glossary)
+    page = Page(output)
+    assert visible(hostile[: renderer.MAX_VALUE_CHARS]) in page.content
+    assert "caracteres del valor original omitidos" in page.content and "recortado" in page.content
+    assert "img" not in {tag for tag, _ in page.elements}
+    assert "\u202e" not in output and "\x00" not in output
+
+
+def test_headings_and_navigation_have_no_inherited_numbering(trusted):
+    output = to_html(*trusted)
+    for title in (
+        "Qué se pudo analizar",
+        "Lectura seleccionada",
+        "Glosario breve",
+        "Fuente externa: VirusTotal (no verificada por LupaBin)",
+    ):
+        assert f"<h2>{title}</h2>" in output
+    for number in (1, 3, 4, 5):
+        assert f"<h2>{number}. " not in output
+    assert "sección 1" not in output and "sección 3" not in output
+    page = Page(output)
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+def test_all_families_touched_does_not_count_none_sentinel_as_omitted(trusted):
+    explanation, items, report, glossary = trusted
+    item = items[0].model_copy(
+        update={
+            "rule": "code.areas@1",
+            "slots": {
+                "count": 9,
+                "total": 9,
+                "touched": tuple(f"family-{n}" for n in range(9)),
+                "untouched": ("ninguna",),
+            },
+        }
+    )
+    page = Page(to_html(explanation, (item,), report, glossary))
+    assert "valores de familias sin llamadas omitidos" not in page.content
+    assert visible(item.not_proven) in page.content
+
+
+def test_main_texts_are_shown_once_with_limits_and_citations(trusted):
+    explanation, items, report, glossary = trusted
+    texts = tuple(f"main-reading-text-{n}" for n in range(4))
+    item = items[0].model_copy(
+        update={
+            "rule": "strings.from_main@1",
+            "slots": {"texts": texts},
+        }
+    )
+    assert renderer._select((item,)) == (item,)
+    output = to_html(explanation, (item,), report, glossary)
+    page = Page(output)
+    header = output.split("</header>")[0]
+    for text in texts[:3]:
+        assert page.content.count(text) == 1
+        assert text not in header
+    assert texts[3] not in output
+    assert "1 valores omitidos" in page.content
+    assert visible(item.not_proven) in page.content
+    for ref in item.evidence_ids[: renderer.MAX_CITATIONS]:
+        assert f"#evidence-{ref}" in page.links
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+def test_main_text_preview_prefers_words_over_decorative_lines(trusted):
+    explanation, items, report, glossary = trusted
+    texts = ("«================»", "«Taller practico»", "«Introduzca el pin»", "«Enhorabuena»")
+    item = items[0].model_copy(update={"rule": "strings.from_main@1", "slots": {"texts": texts}})
+    output = Page(to_html(explanation, (item,), report, glossary)).content
+    assert texts[0] not in output
+    assert all(text in output for text in texts[1:])
+    assert "1 valores omitidos" in output
+    assert visible(item.not_proven) in output
+
+
+def test_brief_counts_original_characters_before_neutralizing():
+    value = "\u202e" * (renderer.MAX_VALUE_CHARS + 2)
+    brief = renderer._brief(value)
+    assert brief == value[: renderer.MAX_VALUE_CHARS] + (
+        "… [2 caracteres del valor original omitidos]"
+    )
+    assert (
+        visible(value[: renderer.MAX_VALUE_CHARS])
+        in Page(renderer._collect(renderer._text_chunks(brief), 100_000)).content
+    )
 
 
 def test_full_document_limit_counts_final_utf8_bytes_and_accepts_exact_fit(trusted, monkeypatch):
@@ -457,27 +677,7 @@ def test_tuple_values_are_not_joined_before_budget_check():
     assert renderer._collect(renderer._value(("á", "<&")), 100) == "á, &lt;&amp;"
 
 
-def test_json_strings_are_encoded_in_bounded_chunks_and_remain_complete(monkeypatch):
-    dumps = json.dumps
-    sizes = []
-
-    def checked_dumps(value, **kwargs):
-        if isinstance(value, str):
-            sizes.append(len(value))
-            assert len(value) <= renderer.TEXT_CHUNK
-        return dumps(value, **kwargs)
-
-    monkeypatch.setattr(renderer.json, "dumps", checked_dumps)
-    value = {"key": ['á\\"\n\U00020000<&' * 400, True, None, 42, 1.5], "empty": {}}
-    output = renderer._collect(renderer._json(value), 100_000)
-    assert json.loads(unescape(output.removeprefix("<pre>").removesuffix("</pre>\n"))) == value
-    assert max(sizes) == renderer.TEXT_CHUNK
-
-
-def test_json_and_public_renderer_stop_before_later_values(trusted, monkeypatch):
-    with pytest.raises(HtmlLimitError):
-        renderer._collect(renderer._json(["first", object()]), 10)
-
+def test_public_renderer_stops_before_later_values(trusted, monkeypatch):
     def fragments(*args):
         yield "oversized"
         pytest.fail("to_html must not collect all fragments before checking the budget")

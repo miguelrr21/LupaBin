@@ -18,6 +18,7 @@ from lupabin.web.guard import RateLimit, Settings, client_address
 from tests.fixtures.pe_builder import (
     build_call_demo,
     build_dotnet_demo,
+    build_main_demo,
     build_pe,
     build_same_function_demo,
 )
@@ -191,6 +192,16 @@ def test_dotnet_facts_reach_the_page_with_topics_citations_and_limits(bits):
     assert body["virustotal"] is None and test.vt_calls == []
 
 
+def test_unobserved_api_families_are_not_listed_as_findings_in_the_header():
+    body = analyze(client(), build_main_demo()).json()
+    assert body["summary"]["groups"] == []
+    assert body["areas"].startswith("0 de 9 familias con llamadas desde main: ninguna")
+    assert "criptografía" not in body["areas"] and "sockets" not in body["areas"]
+    detail = next(item for item in body["items"] if item["rule"] == "code.areas@1")
+    assert any(extra["label"] == "Sin llamadas vistas desde main" for extra in detail["extras"])
+    assert detail["not_proven"]
+
+
 def test_html_export_limit_keeps_the_analysis_and_other_downloads(monkeypatch):
     monkeypatch.setattr(view.html, "MAX_HTML_BYTES", 1)
     response = analyze(client(), build_pe())
@@ -209,9 +220,15 @@ def test_html_download_preserves_the_validated_report_and_its_limits():
     assert exported.startswith("<!doctype html>") or exported.startswith("<!DOCTYPE html>")
     assert body["sample"]["sha256"] in exported
     text = unescape(exported)
-    for item in body["items"]:
+    for rule in ("pe.header@1", "dotnet.metadata@1"):
+        item = next(item for item in body["items"] if item["rule"] == rule)
         assert item["statement"] in text
         assert item["not_proven"] in text
+    assert "resumen de lectura" in text
+    assert "El JSON de hechos conserva todas las evidencias" in text
+    assert "explicaciones validadas omitidas" in text
+    assert "evidencias sin ficha" in text
+    assert '"raw_hex"' not in text and '"extractor_runs"' not in text
     assert "<script" not in exported.lower()
 
 

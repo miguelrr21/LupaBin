@@ -227,7 +227,7 @@ function ghidra_download() {
 function renderHead(data, name) {
   $("download-html").disabled = !data.downloads || !data.downloads.html;
   $("download-html").title = data.downloads && data.downloads.html_error ||
-    "Abre el informe sin conexión, con sus evidencias, citas y límites. No incluye consultas externas posteriores.";
+    "Resumen breve con citas y límites. El JSON conserva todas las evidencias. No incluye consultas externas posteriores.";
   $("ghidra-download").disabled = !data.downloads || !data.downloads.ghidra;
   $("ghidra-download").title = data.downloads && data.downloads.ghidra_error ||
     "Extrae el ZIP y ejecuta ImportLupaBin.java desde el gestor de scripts de Ghidra. Exige hash y revisión previa.";

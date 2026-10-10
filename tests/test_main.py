@@ -262,7 +262,17 @@ def test_the_families_reachable_from_main_are_named_with_those_not_seen():
     areas = next(item for item in items if item.rule == "code.areas@1")
     assert areas.slots["touched"] == ("ninguna",)  # puts is on no list
     assert areas.slots["untouched"] == tuple(label for label, _ in FAMILIES.values())
-    assert areas_line(items).startswith("con llamadas: ninguna · sin llamadas vistas: ")
+    header = areas_line(items)
+    assert header == f"0 de {len(FAMILIES)} familias con llamadas desde main: ninguna ({areas.id})"
+    assert all(label not in header for label, _ in FAMILIES.values())
+    assert areas_line(()) is None
+    label = next(iter(FAMILIES.values()))[0]
+    positive = areas.model_copy(
+        update={"slots": {**areas.slots, "count": "1", "touched": (label,)}}
+    )
+    assert areas_line((positive,)) == (
+        f"1 de {len(FAMILIES)} familias con llamadas desde main: {label} ({areas.id})"
+    )
     assert "puede usar funciones que no están en la lista" in areas.not_proven
 
 
