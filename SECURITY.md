@@ -18,6 +18,8 @@ Solo se usa el catálogo propio empaquetado, sin descargas ni bytecodes externos
 
 La decodificación (Base64/hex/XOR) es cómputo puro en Python dentro del mismo worker aislado: no ejecuta, emula ni interpreta la muestra, y no añade dependencias nativas. Una muestra hostil puede intentar agotar la CPU con millones de patrones candidatos; el tope de apariciones examinadas lo convierte en una limitación declarada (probado en contenedor real). El host vuelve a derivar cada decodificación desde los bytes originales y rechaza la respuesta completa si alguna no se reproduce, así que un worker manipulado no puede publicar un texto "decodificado" que los bytes no produzcan. Un texto decodificado es un dato no fiable más: nunca es una instrucción.
 
+Los metadatos de .NET se leen en el worker y el host repite la lectura para comprobarla. Es aritmética sobre los bytes, sin dependencias: no carga el ensamblado ni interpreta su código, cada tabla se acota por lo que declara su cabecera y por el tamaño de su flujo, se recorren como mucho las filas que se publican y los tipos anidados se siguen 8 pasos como máximo.
+
 La descompresión de UPX también ocurre en el worker y se repite en el host para comprobar su resultado. Está acotada: solo cabeceras con los valores medidos, como mucho 8 candidatas, 32 MiB descomprimidos y un flujo que debe terminar exactamente donde declara. Los métodos NRV son Python puro; el método LZMA usa la biblioteca `liblzma` de Python, que es código nativo y en el host procesa bytes de la muestra fuera del contenedor. No se ejecuta ni se carga nada del programa descomprimido.
 
 ## Servicio web (`lupabin-web`)
@@ -25,7 +27,7 @@ La descompresión de UPX también ocurre en el worker y se repite en el host par
 La web recibe archivos de cualquiera y los analiza con el mismo aislamiento que la CLI: un contenedor nuevo por análisis, sin red, de solo lectura, sin privilegios y con límites. El proceso web no analiza la muestra: lee sus bytes, calcula hashes y la pasa al worker por stdin. Aun así:
 - **El usuario del servicio pertenece al grupo `docker`**, que equivale a root en esa máquina. Despliégala en un servidor dedicado que no guarde nada más y no esté en tu red doméstica. El servicio solo escucha en `127.0.0.1` detrás de Caddy, y systemd lo aísla (`deploy/server/lupabin-web.service`).
 - **Todo texto de la muestra o de VirusTotal se neutraliza en el servidor**, y la página lo inserta solo con `textContent`, bajo una CSP sin código en línea. No se usan cookies, terceros ni analítica.
-- **No se guardan muestras ni informes**, y no hay registro de accesos. Los límites por IP y la cuota de VirusTotal viven en memoria y se reinician con el servicio.
+- **No se guardan las muestras recibidas ni los informes de sus análisis**, y no hay registro de accesos. El informe de ejemplo es un recurso estático del paquete, generado a partir de un fixture sintético, no de una muestra recibida. Los límites por IP y la cuota de VirusTotal viven en memoria y se reinician con el servicio.
 - **VirusTotal:** con la configuración por defecto, un archivo que VirusTotal no conoce se sube con la clave del servidor, y lo subido puede compartirse con sus clientes de pago. La página lo avisa antes de enviar. `LUPABIN_VIRUSTOTAL_UPLOAD=off` lo desactiva.
 
 ## Datos y veracidad

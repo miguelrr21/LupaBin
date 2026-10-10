@@ -2,6 +2,7 @@
 
 import json
 import re
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,13 @@ from lupabin.transport import Completed
 from lupabin.web import app as web
 from lupabin.web import view
 from lupabin.web.guard import RateLimit, Settings, client_address
-from tests.fixtures.pe_builder import build_call_demo, build_pe, build_same_function_demo
+from tests.fixtures.pe_builder import (
+    build_call_demo,
+    build_dotnet_demo,
+    build_main_demo,
+    build_pe,
+    build_same_function_demo,
+)
 from tests.test_render import HOSTILE_DLL, HOSTILE_FUNCTION
 from tests.test_runner import FakeDocker
 
@@ -105,7 +112,8 @@ def test_the_page_has_no_inline_code_and_the_script_never_builds_html_from_data(
 
 def test_element_ids_on_the_page_are_unique():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    ids = re.findall(r'id="([^"]+)"', html)
+    ids = re.findall(r'\bid="([^"]+)"', html)
+    assert ids
     assert len(ids) == len(set(ids))
 
 
@@ -117,6 +125,8 @@ def test_every_rule_is_shown_under_a_question_and_the_page_has_its_tab():
     assert view.topic_of("some.future_rule@1") == view.OTHER
     assert view.topic_of("pe.section.writable_executable@1") == "sections"
     assert view.topic_of("code.reach_main@1") == "main" and view.topic_of("code.calls@1") == "calls"
+    assert view.topic_of("dotnet.pinvoke_unnamed@1") == "dotnet_names"
+    assert view.topic_of("dotnet.types@1") == "dotnet"
     topics = [topic.id for question in view.QUESTIONS for topic in question.topics]
     assert len(topics) == len(set(topics))
     html = (STATIC / "index.html").read_text(encoding="utf-8")
@@ -158,6 +168,68 @@ def test_an_upload_is_analysed_in_the_isolated_worker_and_explained():
     assert json.loads(body["downloads"]["report"])["sample"]["sha256"] == body["sample"]["sha256"]
     assert body["downloads"]["markdown"].startswith("# LupaBin: informe didáctico")
     assert body["virustotal"] is None and body["glossary"]
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+def test_dotnet_facts_reach_the_page_with_topics_citations_and_limits(bits):
+    test = client()
+    response = analyze(test, build_dotnet_demo(bits=bits))
+    assert response.status_code == 200
+    body = response.json()
+    report = json.loads(body["downloads"]["report"])
+    items = [item for item in body["items"] if item["rule"].startswith("dotnet.")]
+    assert {item["rule"]: item["topic"] for item in items} == {
+        "dotnet.metadata@1": "dotnet",
+        "dotnet.pinvoke@1": "dotnet_names",
+        "dotnet.members@1": "dotnet_names",
+        "dotnet.types@1": "dotnet",
+        "dotnet.user_strings@1": "dotnet_strings",
+    }
+    evidence = {fact["id"] for fact in report["evidence"] if fact["kind"].startswith("dotnet_")}
+    assert evidence == {citation for item in items for citation in item["evidence"]}
+    assert all(item["level"] == "observed" and item["not_proven"] for item in items)
+    assert report["sample"]["sha256"] == body["sample"]["sha256"]
+    assert body["virustotal"] is None and test.vt_calls == []
+
+
+def test_unobserved_api_families_are_not_listed_as_findings_in_the_header():
+    body = analyze(client(), build_main_demo()).json()
+    assert body["summary"]["groups"] == []
+    assert body["areas"].startswith("0 de 9 familias con llamadas desde main: ninguna")
+    assert "criptografía" not in body["areas"] and "sockets" not in body["areas"]
+    detail = next(item for item in body["items"] if item["rule"] == "code.areas@1")
+    assert any(extra["label"] == "Sin llamadas vistas desde main" for extra in detail["extras"])
+    assert detail["not_proven"]
+
+
+def test_html_export_limit_keeps_the_analysis_and_other_downloads(monkeypatch):
+    monkeypatch.setattr(view.html, "MAX_HTML_BYTES", 1)
+    response = analyze(client(), build_pe())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed" and body["items"]
+    assert "html" not in body["downloads"]
+    assert "supera" in body["downloads"]["html_error"]
+    assert json.loads(body["downloads"]["report"])["sample"]["sha256"] == body["sample"]["sha256"]
+    assert body["downloads"]["markdown"].startswith("# LupaBin: informe didáctico")
+
+
+def test_html_download_preserves_the_validated_report_and_its_limits():
+    body = analyze(client(), build_dotnet_demo()).json()
+    exported = body["downloads"]["html"]
+    assert exported.startswith("<!doctype html>") or exported.startswith("<!DOCTYPE html>")
+    assert body["sample"]["sha256"] in exported
+    text = unescape(exported)
+    for rule in ("pe.header@1", "dotnet.metadata@1"):
+        item = next(item for item in body["items"] if item["rule"] == rule)
+        assert item["statement"] in text
+        assert item["not_proven"] in text
+    assert "resumen de lectura" in text
+    assert "El JSON de hechos conserva todas las evidencias" in text
+    assert "explicaciones validadas omitidas" in text
+    assert "evidencias sin ficha" in text
+    assert '"raw_hex"' not in text and '"extractor_runs"' not in text
+    assert "<script" not in exported.lower()
 
 
 def test_x64_same_function_capabilities_reach_the_page():

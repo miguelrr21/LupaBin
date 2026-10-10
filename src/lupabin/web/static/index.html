@@ -37,7 +37,7 @@
       <fieldset class="options" id="vt-options" hidden>
         <legend>VirusTotal</legend>
         <label class="check"><input type="checkbox" id="vt" checked> <span id="vt-label">Analizar también en VirusTotal</span></label>
-        <p class="notice" id="upload-notice">Si VirusTotal no conoce el archivo, se sube para que lo analice, y el resultado aparece en cuanto termine. Lo subido puede compartirse con sus clientes de pago: no subas documentos ni programas internos o confidenciales.</p>
+        <p class="notice" id="upload-notice">Si VirusTotal no conoce el archivo, se sube para que lo analice, y el resultado aparece en cuanto termine. Lo subido puede compartirse con sus clientes de pago: no subas documentos ni programas internos o confidenciales. Cambiar de informe no revierte los envíos ya iniciados ni garantiza su cancelación en el servidor.</p>
       </fieldset>
 
       <div class="actions">
@@ -45,6 +45,10 @@
         <span class="muted small" id="limits-note"></span>
       </div>
     </form>
+    <div class="example-entry">
+      <button type="button" class="button" id="example-open" aria-describedby="example-help">Ver informe de ejemplo</button>
+      <p class="muted small" id="example-help">Explora un ejemplo sintético e inofensivo, sin aportar una muestra. No se sube ningún archivo ni se consulta VirusTotal.</p>
+    </div>
     <ul class="facts">
       <li><strong>No se ejecuta.</strong> El archivo se abre en un contenedor aislado, sin red ni privilegios, que se destruye al terminar.</li>
       <li><strong>No se guarda.</strong> Ni el archivo ni el informe quedan en el servidor; puedes descargarlos al final.</li>
@@ -56,15 +60,20 @@
     <div class="progress-bar" aria-hidden="true"><span></span></div>
     <p id="progress-text">Enviando el archivo…</p>
     <p class="muted small" id="progress-time"></p>
+    <button type="button" class="button" id="progress-back">Volver al inicio</button>
   </section>
 
   <section class="panel error" id="error" hidden role="alert">
-    <h2>No se pudo analizar</h2>
+    <h2 id="error-title">No se pudo analizar</h2>
     <p id="error-text"></p>
     <button type="button" class="button" id="error-back">Volver</button>
   </section>
 
   <section id="result" hidden>
+    <div class="panel example-notice" id="example-notice" role="note" hidden>
+      <strong>EJEMPLO SINTÉTICO</strong>
+      <p>Informe preparado offline a partir de datos de prueba inofensivos (capability-demo). No procede de un archivo aportado por ti ni de un análisis del worker web. Sus evidencias se contrastaron con los bytes del fixture. No se ha subido ningún archivo ni consultado VirusTotal para este ejemplo.</p>
+    </div>
     <div class="panel result-head">
       <div class="result-title">
         <h2 id="result-name"></h2>
@@ -82,6 +91,7 @@
         <details class="menu" id="downloads">
           <summary class="button">Descargar</summary>
           <div class="menu-list">
+            <button type="button" id="download-html">Resumen para leer (HTML)</button>
             <button type="button" id="download-md">Informe para leer (Markdown)</button>
             <button type="button" id="download-json">Informe de hechos (JSON)</button>
             <button type="button" id="ghidra-download">Evidencias para Ghidra (ZIP)</button>

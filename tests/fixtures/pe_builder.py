@@ -714,6 +714,107 @@ def build_toolchain_demo(*, bits=32, go_inline=True, rich_key=None, idents=(GCC_
     return bytes(data) + archive
 
 
+DOTNET_URL = "https://training.invalid/dotnet"
+DOTNET_NATIVE = b"MessageBoxW"
+DOTNET_ROOT = 0xE48  # file offset of the metadata root: right after the CLI header
+
+
+def dotnet_metadata(
+    *,
+    stream=b"#~",
+    heap_sizes=0,
+    native=DOTNET_NATIVE,
+    library=b"user32.dll",
+    own_field=False,
+    user_strings=(DOTNET_URL,),
+):
+    """The metadata of a tiny assembly, written row by row (ECMA-335 II.22 and II.24):
+    one type with a Main method and a P/Invoke declaration, a method and a field of
+    mscorlib it names, and one user string. Every index is 2 bytes wide. With `own_field`
+    the field named is one of the assembly's own type, not of mscorlib."""
+    strings = bytearray(b"\0")
+
+    def name(text):
+        if not text:
+            return 0
+        at = len(strings)
+        strings.extend(text + b"\0")
+        return at
+
+    blob = bytearray(b"\0")
+
+    def signature(raw):
+        at = len(blob)
+        blob.extend(bytes([len(raw)]) + raw)
+        return at
+
+    method_sig = signature(b"\x00\x00\x01")  # default calling convention, no parameters, void
+    field_sig = signature(b"\x06\x0e")  # a field of type string
+    user = b"\0"
+    for literal in user_strings:
+        text = literal.encode("utf-16-le")
+        user += bytes([len(text) + 1]) + text + b"\0"
+    tables = {
+        0: [struct.pack("<5H", 0, name(b"training.exe"), 1, 0, 0)],  # Module
+        1: [  # TypeRef, both of AssemblyRef 1
+            struct.pack("<3H", (1 << 2) | 2, name(b"WebClient"), name(b"System.Net")),
+            struct.pack("<3H", (1 << 2) | 2, name(b"String"), name(b"System")),
+        ],
+        2: [  # TypeDef: <Module> has no methods; Program has the two of the method table
+            struct.pack("<I5H", 0, name(b"<Module>"), 0, 0, 1, 1),
+            struct.pack("<I5H", 0x100001, name(b"Program"), name(b"LupaBin.Training"), 0, 1, 1),
+        ],
+        6: [  # MethodDef
+            struct.pack("<I5H", 0, 0, 0x96, name(b"Main"), method_sig, 1),
+            struct.pack("<I5H", 0, 0, 0x2096, name(b"ShowMessage"), method_sig, 1),
+        ],
+        10: [  # MemberRef: a method of TypeRef 1 and a field of TypeRef 2 (or of TypeDef 2)
+            struct.pack("<3H", (1 << 3) | 1, name(b"DownloadString"), method_sig),
+            struct.pack("<3H", (2 << 3) | (0 if own_field else 1), name(b"Empty"), field_sig),
+        ],
+        26: [struct.pack("<H", name(library))],  # ModuleRef
+        28: [struct.pack("<4H", 0x100, (2 << 1) | 1, name(native), 1)],  # ImplMap: MethodDef 2
+        32: [struct.pack("<I4HI3H", 0x8004, 1, 2, 3, 4, 0, 0, name(b"training"), 0)],  # Assembly
+        35: [struct.pack("<4HI4H", 4, 0, 0, 0, 0, 0, name(b"mscorlib"), 0, 0)],  # AssemblyRef
+    }
+    valid = sum(1 << index for index in tables)
+    body = struct.pack("<IBBBBQQ", 0, 2, 0, heap_sizes, 1, valid, 0)
+    body += b"".join(struct.pack("<I", len(rows)) for rows in tables.values())
+    body += b"".join(row for rows in tables.values() for row in rows)
+    streams = [
+        (stream, body),
+        (b"#Strings", bytes(strings)),
+        (b"#US", user),
+        (b"#GUID", bytes(16)),
+        (b"#Blob", bytes(blob)),
+    ]
+    version = b"v4.0.30319\0\0"
+    head = b"BSJB" + struct.pack("<HHII", 1, 1, 0, len(version)) + version
+    head += struct.pack("<HH", 0, len(streams))
+    names = [label + b"\0" * (4 - len(label) % 4) for label, _ in streams]
+    at = len(head) + sum(8 + len(label) for label in names)
+    data = b""
+    for (_, content), label in zip(streams, names, strict=True):
+        content += b"\0" * (-len(content) % 4)
+        head += struct.pack("<II", at, len(content)) + label
+        data += content
+        at += len(content)
+    return head + data
+
+
+def build_dotnet_demo(*, bits=32, **metadata):
+    """build_demo plus a CLI header its data directory points to and the metadata of
+    dotnet_metadata, both in .rdata (file offset 0xE00, RVA 0x2800)."""
+    data = bytearray(build_demo(bits=bits))
+    found = dotnet_metadata(**metadata)
+    assert DOTNET_ROOT + len(found) <= len(data)
+    directory = 0x98 + (96 if bits == 32 else 112) + 8 * 14
+    struct.pack_into("<II", data, directory, 0x2800, 72)
+    struct.pack_into("<IHHIIII", data, 0xE00, 72, 2, 5, 0x2848, len(found), 1, 0x06000001)
+    data[DOTNET_ROOT : DOTNET_ROOT + len(found)] = found
+    return bytes(data)
+
+
 UPX_METHOD_CODES = {"nrv2b": 2, "nrv2d": 5, "nrv2e": 8, "lzma": 14}
 UPX_FUNCTIONS = (b"ExitProcess", b"GetTickCount")
 UPX_ORDINAL = 5
@@ -867,6 +968,7 @@ def main():
             "capability-demo",
             "toolchain-demo",
             "upx-demo",
+            "dotnet-demo",
         ),
         default="basic",
     )
@@ -883,6 +985,8 @@ def main():
         data = build_upx_demo(bits=args.bits)
     elif args.scenario == "toolchain-demo":
         data = build_toolchain_demo(bits=args.bits)
+    elif args.scenario == "dotnet-demo":
+        data = build_dotnet_demo(bits=args.bits)
     elif args.scenario == "decode-demo":
         data = build_decode_demo(bits=args.bits)
     elif args.scenario in ("basic", "yara-limited"):

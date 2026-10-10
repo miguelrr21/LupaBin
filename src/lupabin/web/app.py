@@ -26,6 +26,7 @@ from lupabin.explain.engine import ExplanationError, explain, validate
 from lupabin.ghidra import build_bundle as ghidra_bundle
 from lupabin.glossary.catalog import load_glossary
 from lupabin.runner import IMAGE, run_isolated
+from lupabin.saved_report import FRESH
 from lupabin.transport import DockerCLI, Transport
 from lupabin.virustotal import client as virustotal_client
 from lupabin.virustotal.quota import Quota
@@ -177,7 +178,7 @@ def create_app(
         except ExplanationError:
             return failure("invalid_worker_output", 500)
         # VirusTotal is asked separately (/api/virustotal), so the report never waits for it
-        shown = view.build(report, explanation, items, glossary, None)
+        shown = view.build(report, explanation, items, glossary, None, origin=FRESH)
         if archive is not None:
             view.ghidra_download(shown, archive)
         else:

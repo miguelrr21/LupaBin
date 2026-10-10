@@ -64,6 +64,38 @@ Todas son `observed`: los bytes están ahí. Ninguna dice quién hizo el program
 - **PyInstaller**: 12 binarios con cookie, todos hechos con PyInstaller. En 7 de ellos la firma también está dentro del propio cargador, como constante para buscarla; solo cuenta la cookie de después de las secciones.
 - **GCC y Rich a la vez**: 2 DLL de JNA enlazadas con el enlazador de Microsoft que incluyen un objeto compilado con GCC. Las dos marcas son ciertas.
 
+### Metadatos de .NET
+
+Un ensamblado .NET declara tipos, métodos y referencias en sus metadatos ([ECMA-335, partición II](https://www.ecma-international.org/publications-and-standards/standards/ecma-335/)). El método `ecma335-metadata-v1` sigue el directorio CLR de la cabecera PE hasta la cabecera CLI y la raíz `BSJB`, y lee las tablas del flujo optimizado `#~`. No carga el ensamblado, no interpreta su código IL y no resuelve bibliotecas en el equipo.
+
+Se publican cinco clases de hechos, todos `observed`, con los bytes y la posición del archivo que los respaldan:
+
+- **Metadatos:** versión declarada en la raíz, indicadores y punto de entrada de la cabecera CLI, flujos y contadores de tablas, nombre y versión del ensamblado y hasta 128 referencias a otros ensamblados.
+- **P/Invoke:** hasta 1.024 declaraciones de funciones de código nativo, con biblioteca, nombre importado y método que las declara cuando esos nombres existen. Un nombre vacío se conserva como no disponible, no se sustituye por uno supuesto.
+- **Miembros:** hasta 4.096 referencias a métodos o campos, con el tipo y el ensamblado de origen solo cuando el método puede resolverlos en las tablas. Para encontrar el ensamblado de un tipo anidado se siguen como mucho ocho pasos; no se reconstruyen los nombres de tipos genéricos de `TypeSpec`.
+- **Tipos:** hasta 1.024 definiciones, con su nombre, espacio de nombres, indicadores y número de filas de métodos asignadas al tipo.
+- **Textos literales:** hasta 2.048 cadenas del flujo `#US`, en UTF-16LE pero limitadas al repertorio ASCII imprimible y a un mínimo de cuatro caracteres. Cada cadena se recorta al presupuesto de caracteres del informe y conserva su longitud completa declarada. El flujo se examina durante un máximo de 262.144 entradas, incluidas las vacías.
+
+La lectura admite los anchos de índices de dos o cuatro bytes que declaran los metadatos. Acota las tablas por sus contadores y por el tamaño del flujo; admite como mucho 16 flujos y nombres publicados de hasta 512 bytes. Se abstiene ante el flujo no optimizado `#-`, tablas de punteros con filas, nombres de flujo duplicados, tablas fuera de las 45 del estándar o datos adicionales en los indicadores de la cabecera de tablas. No interpreta las extensiones que introducen algunos ofuscadores. Una fila cuyo nombre o índice no puede leerse se omite y se cuenta; alcanzar un límite o encontrar una entrada de `#US` que no cabe deja cobertura parcial. El informe distingue `dotnet_unsupported_layout`, `dotnet_unreadable_rows` y `dotnet_limit`.
+
+**Qué no demuestra.** Una declaración P/Invoke no es una llamada encontrada en el código; una referencia a un método no prueba que se invoque, y un literal no prueba que se utilice. Los nombres pueden haber sido fabricados u ofuscados. Las formas que no se leen y las filas omitidas no son evidencia de ausencia ni de seguridad.
+
+El host vuelve a derivar cada hecho publicado desde los bytes originales y exige que coincidan sus valores y localizaciones. Repetir el mismo lector evita aceptar un resultado distinto del que producen esos bytes, pero no detecta un error de interpretación compartido entre worker y host: las pruebas sintéticas y la comparación con un lector independiente comprueban esa otra parte.
+
+**Medición (2026-10-06).** Se seleccionaron secuencialmente los primeros 100 archivos con metadatos leídos, en orden de nombre y sin recursión, de cada uno de cuatro directorios de bibliotecas instaladas: .NET Framework `v4.0.30319` de 32 y 64 bits, y `Microsoft.NETCore.App` 8.0.14 y 9.0.3. Se examinaron 524 PE para obtener esas 400 entradas de corpus; no son necesariamente 400 programas distintos ni una muestra aleatoria de ejecutables.
+
+| Directorio de origen | Archivos comparados | Campos contrastados con dnfile | Diferencias |
+| --- | ---: | ---: | ---: |
+| .NET Framework de 32 bits | 100 | 931.286 | 0 |
+| .NET Framework de 64 bits | 100 | 931.939 | 0 |
+| .NET 8.0.14 | 100 | 465.326 | 0 |
+| .NET 9.0.3 | 100 | 487.843 | 0 |
+| **Total** | **400** | **2.816.394** | **0** |
+
+La referencia fue `dnfile` 0.17.0 con `pefile` 2024.8.26, leídos los archivos como bytes sin cargar sus ensamblados. Se contrastaron nombres en bytes, versiones, indicadores, orígenes de miembros, clase de miembro, contadores, flujos y localizaciones. Los resultados incluyen 7.825 declaraciones P/Invoke, 219.607 referencias a miembros, 53.860 tipos y 100.834 literales. Además se comprobaron 4.878.553 campos de su proyección a evidencias sin diferencias; esta segunda cifra comprueba la transformación del resultado del lector, no es otra validación independiente del formato.
+
+Las cuatro corridas terminaron con código 2, **comparación incompleta**, no con un éxito que ocultara sus límites: 19.430 filas de miembros y 15.433 tipos quedaban fuera de los topes por archivo, y en 18 archivos no se recorrió `#US` hasta el final. No hubo filas publicadas con una discrepancia ni fallos del lector, de la referencia o de la proyección; eso no valida las partes no comparadas ni demuestra una tasa de error nula fuera de esta selección. Las pruebas sintéticas cubren también índices anchos, etiquetas reservadas, flujos truncados y hechos alterados. Los contenedores reales comprueban el recorrido completo worker–host con fixtures PE32/PE32+, un flujo no admitido y una fila ilegible.
+
 ## Cobertura, estados y abstención
 
 Cada extractor declara la cobertura de cada componente: `complete`, `partial` o `blocked`, con contadores y motivos. Un directorio de imports ausente puede tener cobertura completa con cero hallazgos; una tabla que no se pudo leer, nunca. Detectar una anomalía no significa que el análisis fallara: puede haberse comprobado bien una inconsistencia.
@@ -391,9 +423,19 @@ Para repetir la muestra en Windows: `uv run python -m tests.vt_context_eval --jo
 
 ## Interfaz web
 
-La web es otra forma de usar `lupabin analyze`: cada archivo se analiza en un contenedor nuevo, igual que en la CLI, y se muestra el mismo informe. La página agrupa las frases del informe por la pregunta que responden (qué es el archivo, qué contiene su código, qué textos y datos lleva) y, dentro de cada una, por tema; cada frase conserva su texto, sus citas, su límite y su nivel (hecho o inferencia), que se muestra como etiqueta. El buscador y el filtro por nivel solo ocultan frases en el navegador: no cambian el informe ni lo que se descarga. No guarda ni la muestra ni el informe, no pone cookies, no carga nada de terceros y no registra accesos. Todo texto de la muestra o de VirusTotal se neutraliza en el servidor y el navegador lo inserta solo como texto, con una política de seguridad de contenido sin código en línea.
+La web es otra forma de usar `lupabin analyze`: cada archivo se analiza en un contenedor nuevo, igual que en la CLI, y se muestra el mismo informe. La página agrupa las frases del informe por la pregunta que responden (qué es el archivo, qué contiene su código, qué textos y datos lleva) y, dentro de cada una, por tema; cada frase conserva su texto, sus citas, su límite y su nivel (hecho o inferencia), que se muestra como etiqueta. El buscador y el filtro por nivel solo ocultan frases en el navegador: no cambian el informe ni lo que se descarga. No guarda las muestras recibidas ni sus informes, no pone cookies, no carga nada de terceros y no registra accesos. Todo texto de la muestra o de VirusTotal se neutraliza en el servidor y el navegador lo inserta solo como texto, con una política de seguridad de contenido sin código en línea.
 
 El servicio escucha solo en `127.0.0.1`, detrás de Caddy, y systemd lo aísla. Su usuario pertenece al grupo `docker`, que en la práctica equivale a administrador en esa máquina: por eso debe desplegarse en un servidor dedicado (`deploy/server/`). Límites por defecto: 20 MiB por archivo, 6 análisis por IP cada 10 minutos, entre uno y tres análisis a la vez según la memoria y las CPU del servidor, y una cuota de VirusTotal compartida por todo el servidor (4 peticiones por minuto y 500 al día con la API pública).
+
+**Informe de ejemplo.** El botón «Ver informe de ejemplo» carga un documento estático incluido con la aplicación, obtenido del fixture sintético e inofensivo `capability-demo`. No requiere aportar una muestra, no solicita un análisis al worker web y no consulta ni sube nada a VirusTotal. Conserva filtros, citas, glosario, práctica y descargas; el aviso y los nombres de descarga lo identifican como ejemplo. Se prepara offline mediante el extractor real sobre el fixture conocido, se contrasta con sus bytes y se regeneran sus explicaciones antes de guardar el JSON. No procede de archivos recibidos por el servidor. Para generar otra copia, sin sobrescribir la existente: `uv run --frozen python -m tests.generate_web_example --output <nuevo.json>`.
+
+**HTML sin conexión.** La descarga principal es un resumen breve, no un volcado técnico: hasta 16 explicaciones validadas, con sus frases y límites íntegros, un glosario breve y fichas de las evidencias citadas. Primero muestra advertencias del recorrido, después capacidades y anomalías, y luego contexto; es un orden de lectura, no de peligrosidad. Declara cuántas explicaciones, citas y datos de detalle omite. El JSON de hechos separado conserva todas las evidencias y sus datos completos; la web conserva todas las explicaciones validadas. No se vuelcan en el HTML todas las cadenas, llamadas ni estructuras JSON internas.
+
+La cabecera de familias muestra cuántas tienen llamadas alcanzables desde main y nombra solo esas familias. Las familias sin llamadas observadas permanecen en el detalle de la explicación, no mezcladas en la cabecera como si fueran hallazgos. Un resultado de cero sigue sin demostrar ausencia de comportamiento.
+
+El HTML no necesita JavaScript ni recursos remotos. Los textos no fiables se neutralizan y se escapan; las direcciones de la muestra no se convierten en enlaces activos. El CSS es fijo y su hash se autoriza en una política de seguridad de contenido. Conserva el origen declarado del informe y no es una firma de autenticidad. Como el Markdown descargado desde la web, refleja el informe local generado antes de las consultas asíncronas a VirusTotal, no sus resultados posteriores.
+
+La generación HTML es incremental y se detiene antes de superar 32 MiB de salida UTF-8. No entrega un documento parcial ni cambia los presupuestos o resultados del análisis: si excede el límite, se desactiva esa descarga con un aviso y siguen disponibles el informe, JSON y Markdown. El límite mide el documento, no toda la RAM del proceso: también existen el informe validado, conversiones de datos, el buffer y el texto final. Cambiar de informe cancela las peticiones del navegador que aún pueden cancelarse e impide que respuestas antiguas sustituyan el informe nuevo; no revierte envíos ya iniciados ni garantiza su cancelación en el servidor.
 
 ## Exportación a Ghidra
 
@@ -419,6 +461,7 @@ Las APIs se contrastaron con la documentación y el código primarios de Ghidra:
 - **Familias de APIs.** Solo reconocen imports por nombre exacto, no por ordinal.
 - **La función main.** Solo con el arranque que usa `__getmainargs` de `msvcrt.dll`, en x64 y en x86 con `push`; el alcance sigue solo llamadas y saltos directos.
 - **Marcas de compilador.** Solo seis herramientas: otras (Delphi, Rust, Nuitka, AutoIt…) no se reconocen, y la versión de Visual Studio no se deduce de las entradas de la cabecera Rich, porque Microsoft no documenta su significado.
+- **.NET.** Solo metadatos optimizados `#~` dentro de los límites de filas, nombres y cadenas descritos en «Metadatos de .NET». No se recorre IL ni se recuperan nombres ofuscados; una referencia o declaración P/Invoke no equivale a una llamada observada en el código.
 - **Idioma.** Las explicaciones y el glosario están en español.
 - **Fuentes externas.** Las páginas que cita el glosario pueden moverse: `tests/check_glossary_sources.py` lo comprueba con red, fuera de la CI.
 - **Tiempo.** En una máquina lenta, los binarios más grandes pueden quedar parciales en XOR o en código, y lo declaran con su código.
@@ -432,6 +475,7 @@ Las herramientas están en `tests/` y no forman parte del paquete ni de la CI. R
 - `uv run python -m tests.capability_eval corpus <dir>`: frecuencia de cada capacidad; `review` lista cada caso para revisarlo.
 - `uv run python -m tests.main_eval corpus <dir>`: `main` encontrado o abstención por ejecutable, reparto de las llamadas y tiempos; `--out` lista cada caso para revisarlo.
 - `uv run python -m tests.toolchain_eval corpus <dir>`: marcas de compilador por binario y combinación, comprobación de los bytes y regeneración de las explicaciones; `--out` las lista para revisarlas.
+- `uv run --frozen --with dnfile==0.17.0 python -m tests.dotnet_eval corpus <dir> --limit 100 --out <nuevo.jsonl>`: comparación independiente de los metadatos .NET y comprobación de su proyección a evidencias. Es secuencial; `--recursive` incluye subdirectorios y `--stride N` selecciona uno de cada N archivos elegibles en orden. El JSONL se crea sin sobrescribir y registra selección, versiones, huellas del código, hash de cada archivo, campos comparados, diferencias, omisiones y datos no comparables. El código de salida es 0 si completa sin discrepancias, 1 ante diferencias o fallos y 2 si la comparación queda incompleta, incluso por alcanzar los límites publicados. `dnfile` solo se necesita para esta evaluación; las pruebas del adaptador real se ejecutan con `uv run --frozen --with dnfile==0.17.0 pytest tests/test_dotnet_eval.py`.
 - `uv run python -m tests.upx_eval pairs <empaquetados> <originales> --output <nuevo.jsonl>`: copias benignas empaquetadas por quien evalúa frente a sus originales (punto de entrada, base, secciones e importaciones); `false-positives <dir>...` busca bloques UPX en binarios sin empaquetar.
 - `uv run python -m tests.learning_eval --manifest <lista.jsonl> --output <nuevo.jsonl> --jobs 1`: coherencia de retos y exportación a Ghidra por archivo; la lista tiene una ruta por línea (`{"path": ...}`).
 - `uv run python -m tests.check_ghidra_integration --ghidra <carpeta de Ghidra> --root <carpeta nueva>`: el importador en un Ghidra real, en modo headless, con Java en el PATH; `--mutate-rollback` comprueba que la prueba detecta una reversión rota.

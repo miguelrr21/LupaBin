@@ -28,7 +28,14 @@ from lupabin.evidence.models import Report
 from lupabin.explain.capabilities import CAPABILITIES, cases
 from lupabin.explain.families import FAMILIES, family_of
 from lupabin.explain.models import Explanation, Item, Note, ReportRef
-from lupabin.explain.rules import RULES, executable_sections, groups, procedure_name, upx_groups
+from lupabin.explain.rules import (
+    RULES,
+    dotnet_groups,
+    executable_sections,
+    groups,
+    procedure_name,
+    upx_groups,
+)
 from lupabin.explain.text import COMPONENTS, MESSAGES, SOURCES, STATUSES, name
 from lupabin.glossary.catalog import Glossary
 
@@ -99,6 +106,22 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
                 yield "toolchain.go_buildinfo_pointer@1", (fact,)
             else:
                 yield f"toolchain.{fact.data.marker}@1", (fact,)
+    dotnet = dotnet_groups(report)
+    if dotnet.root is not None:
+        yield "dotnet.metadata@1", (dotnet.root,)
+        for library, rows in dotnet.pinvokes.items():
+            rule = "dotnet.pinvoke@1" if library else "dotnet.pinvoke_unnamed@1"
+            yield rule, tuple(facts[ref] for ref in rows)
+        for assembly, rows in dotnet.members.items():
+            rule = "dotnet.members@1" if assembly else "dotnet.members_local@1"
+            yield rule, tuple(facts[ref] for ref in rows)
+        if dotnet.types:
+            yield "dotnet.types@1", (dotnet.root, *(facts[ref] for ref in dotnet.types))
+        if dotnet.user_strings:
+            yield (
+                "dotnet.user_strings@1",
+                (dotnet.root, *(facts[ref] for ref in dotnet.user_strings)),
+            )
     for fact in evidence:
         if isinstance(fact, UpxImageEvidence):
             described = fact.data.original_sections is not None

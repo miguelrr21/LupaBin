@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
-from lupabin.evidence import toolchain, upx
+from lupabin.evidence import dotnet, toolchain, upx
 from lupabin.evidence.primitives import (
     Component,
     EvidenceId,
@@ -763,6 +763,156 @@ class UpxImportEvidence(Model):
         return self
 
 
+class DotnetStream(Model):
+    name: Annotated[str, Field(min_length=1, max_length=dotnet.STREAM_NAME_MAX)]
+    offset: NonNegative  # in the file
+    size: NonNegative
+
+
+Version = Annotated[int, Field(ge=0, le=65535)]
+Rows = Annotated[int, Field(ge=0, le=dotnet.ROWS_MAX)]
+
+
+class DotnetAssembly(Model):
+    name: Name
+    version: tuple[Version, Version, Version, Version]
+
+
+class DotnetMetadataData(Model):
+    """The metadata root of a .NET assembly (evidence/dotnet.py): its streams, how many
+    rows its tables declare and the assemblies it names. The location is the root, up to
+    the end of its stream headers."""
+
+    method_id: Literal["ecma335-metadata-v1"] = "ecma335-metadata-v1"
+    version: Annotated[str, Field(min_length=1, max_length=dotnet.VERSION_MAX)]
+    flags: UInt  # of the CLI header
+    entry_point: UInt  # token or RVA, as the CLI header declares it
+    streams: Annotated[tuple[DotnetStream, ...], Field(min_length=1, max_length=dotnet.STREAMS_MAX)]
+    type_refs: Rows
+    type_defs: Rows
+    methods: Rows
+    member_refs: Rows
+    module_refs: Rows
+    pinvokes: Rows
+    assembly_refs: Rows
+    assembly: DotnetAssembly | None = None
+    # the first ones of the AssemblyRef table, in its order
+    references: Annotated[tuple[DotnetAssembly, ...], Field(max_length=dotnet.ASSEMBLY_REFS)]
+    # rows left out because a name or an index of theirs could not be read
+    unreadable: NonNegative
+    # entries of the #US stream that are not empty, among those examined
+    user_strings: NonNegative
+
+    @model_validator(mode="after")
+    def consistent(self) -> Self:
+        if len(self.references) > self.assembly_refs:
+            raise ValueError("more assembly references than the table declares")
+        names = [stream.name for stream in self.streams]
+        if len(names) != len(set(names)) or "#~" not in names:
+            raise ValueError("the method reads one #~ stream and no repeated names")
+        return self
+
+
+class DotnetMetadataEvidence(Fact):
+    kind: Literal["dotnet_metadata"] = "dotnet_metadata"
+    data: DotnetMetadataData
+
+    @model_validator(mode="after")
+    def cites_only_its_bytes(self) -> Self:
+        if self.provenance.evidence_ids:
+            raise ValueError("the metadata root cites nothing but its own bytes")
+        return self
+
+
+class DotnetPinvokeData(Model):
+    """A row of the ImplMap table: a method the assembly forwards to native code
+    (P/Invoke). `module` and `function` are None when the row leaves that name empty, as
+    C++/CLI does for native code of the file itself."""
+
+    row: Annotated[int, Field(ge=1, le=dotnet.ROWS_MAX)]
+    flags: Annotated[int, Field(ge=0, le=65535)]
+    module: Name | None = None
+    function: Name | None = None
+    method: Name | None = None
+
+
+class DotnetMemberData(Model):
+    """A row of the MemberRef table: a method or field the assembly names without
+    defining it in that row. `assembly` is set when its type belongs to another
+    assembly; a member of a constructed type (`type_spec`) carries no type name."""
+
+    row: Annotated[int, Field(ge=1, le=dotnet.ROWS_MAX)]
+    parent: Literal["type_ref", "type_def", "module_ref", "method_def", "type_spec"]
+    assembly: Name | None = None
+    namespace: Name | None = None
+    type: Name | None = None
+    name: Name
+    member: Literal["field", "method"]
+
+    @model_validator(mode="after")
+    def scope_matches_parent(self) -> Self:
+        if self.assembly is not None and self.parent != "type_ref":
+            raise ValueError("only a type reference resolves to another assembly")
+        if (self.type is None) != (self.parent in ("method_def", "type_spec")):
+            raise ValueError("a member names its type unless its parent is a method or a spec")
+        if self.namespace is not None and self.parent not in ("type_ref", "type_def"):
+            raise ValueError("only a type has a namespace")
+        return self
+
+
+class DotnetTypeData(Model):
+    """A row of the TypeDef table: a type the assembly defines and how many methods of
+    the method table belong to it."""
+
+    row: Annotated[int, Field(ge=1, le=dotnet.ROWS_MAX)]
+    flags: UInt
+    namespace: Name | None = None
+    name: Name
+    methods: Rows
+
+
+class _DotnetRow(Fact):
+    @model_validator(mode="after")
+    def cites_the_metadata(self) -> Self:
+        if len(self.provenance.evidence_ids) != 1:
+            raise ValueError("a metadata row cites its metadata root")
+        return self
+
+
+class DotnetStringData(StringData):
+    """A literal of the #US stream, where the code's string literals are kept: printable
+    ASCII of at least four characters, read entry by entry. `index` is where its entry
+    starts in the stream."""
+
+    index: Annotated[int, Field(gt=0, le=0xFFFFFF)]
+
+    @model_validator(mode="after")
+    def utf16(self) -> Self:
+        if self.encoding != "utf-16-le":
+            raise ValueError("the literals of #US are UTF-16LE")
+        return self
+
+
+class DotnetStringEvidence(_DotnetRow):
+    kind: Literal["dotnet_string"] = "dotnet_string"
+    data: DotnetStringData
+
+
+class DotnetPinvokeEvidence(_DotnetRow):
+    kind: Literal["dotnet_pinvoke"] = "dotnet_pinvoke"
+    data: DotnetPinvokeData
+
+
+class DotnetMemberEvidence(_DotnetRow):
+    kind: Literal["dotnet_member"] = "dotnet_member"
+    data: DotnetMemberData
+
+
+class DotnetTypeEvidence(_DotnetRow):
+    kind: Literal["dotnet_type"] = "dotnet_type"
+    data: DotnetTypeData
+
+
 class YaraEvidence(Model):
     id: EvidenceId
     source: Literal["yara"] = "yara"
@@ -794,6 +944,11 @@ Evidence = Annotated[
     | UpxImageEvidence
     | UpxImportEvidence
     | UpxStringEvidence
+    | DotnetMetadataEvidence
+    | DotnetPinvokeEvidence
+    | DotnetStringEvidence
+    | DotnetMemberEvidence
+    | DotnetTypeEvidence
     | YaraEvidence
     | DecodedStringEvidence
     | ApiCallEvidence
@@ -817,6 +972,11 @@ Payload = (
     | UpxImageData
     | UpxImportData
     | UpxStringData
+    | DotnetMetadataData
+    | DotnetPinvokeData
+    | DotnetStringData
+    | DotnetMemberData
+    | DotnetTypeData
     | YaraMatchData
     | DecodedStringData
     | ApiCallData

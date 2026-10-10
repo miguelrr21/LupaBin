@@ -4,6 +4,7 @@ from lupabin.evidence.collector import Collector, Progress
 from lupabin.evidence.primitives import Component, Source
 from lupabin.extractors.base import Extraction
 from lupabin.extractors.pe_checks import read_checks
+from lupabin.extractors.pe_dotnet import read_dotnet
 from lupabin.extractors.pe_exports import read_exports
 from lupabin.extractors.pe_imports import read_imports
 from lupabin.extractors.pe_layout import InvalidPE, InvalidTable, parse_layout
@@ -49,4 +50,5 @@ class PEExtractor:
         read_checks(layout, collector, progress)
         read_toolchain(layout, collector, progress)
         read_upx(layout, collector, progress)
+        read_dotnet(layout, collector, progress)
         return Extraction("PE32" if layout.bits == 32 else "PE32+", progress)

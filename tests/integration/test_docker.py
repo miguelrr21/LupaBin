@@ -8,7 +8,7 @@ from lupabin.errors import LupaBinError
 from lupabin.evidence.models import Limits
 from lupabin.runner import IMAGE, container_args, remove_owned_container, run_isolated
 from lupabin.transport import DockerCLI
-from tests.fixtures.pe_builder import build_pe
+from tests.fixtures.pe_builder import build_dotnet_demo, build_pe
 
 pytestmark = pytest.mark.docker
 
@@ -20,7 +20,7 @@ def require_docker():
         info = await client.run(("info", "--format", "{{.OSType}}"))
         assert info.code == 0 and info.stdout.strip() == b"linux", "Linux Docker is required"
         image = await client.run(("image", "inspect", "--format", "{{.Id}}", IMAGE))
-        assert image.code == 0, "Build lupabin-worker:0.13.0 before integration tests"
+        assert image.code == 0, "Build lupabin-worker:0.14.0 before integration tests"
 
     asyncio.run(check())
 
@@ -35,6 +35,64 @@ def test_real_worker_round_trip(bits):
     assert {"pe_header", "section", "entropy", "string"} <= {f.kind for f in report.evidence}
 
 
+@pytest.mark.parametrize("bits", [32, 64])
+def test_dotnet_round_trip_has_all_five_kinds_and_host_checked_locations(bits):
+    from lupabin.evidence.dotnet_checks import verify_dotnet
+    from lupabin.evidence.models import Report
+
+    data = build_dotnet_demo(bits=bits)
+    report = asyncio.run(run_isolated(data, Limits(), DockerCLI()))
+    restored = Report.model_validate_json(report.model_dump_json())
+    assert restored.analysis.status == "completed"
+    assert {
+        "dotnet_metadata",
+        "dotnet_pinvoke",
+        "dotnet_string",
+        "dotnet_member",
+        "dotnet_type",
+    } <= {fact.kind for fact in restored.evidence}
+    verify_dotnet(restored.evidence, data, 1024)
+    root = next(fact for fact in restored.evidence if fact.kind == "dotnet_metadata")
+    assert root.data.assembly.name.raw_hex == b"training".hex()
+    assert root.data.assembly.version == (1, 2, 3, 4)
+    assert (root.data.type_defs, root.data.member_refs, root.data.pinvokes) == (2, 2, 1)
+    for fact in restored.evidence:
+        if fact.kind.startswith("dotnet_"):
+            assert fact.location.offset + fact.location.length <= len(data)
+            if fact is not root:
+                assert fact.provenance.evidence_ids == (root.id,)
+
+
+def test_dotnet_unoptimized_layout_is_explicitly_blocked_in_container():
+    report = asyncio.run(run_isolated(build_dotnet_demo(stream=b"#-"), Limits(), DockerCLI()))
+    assert not any(fact.kind.startswith("dotnet_") for fact in report.evidence)
+    assert "dotnet_unsupported_layout" in {
+        issue.code for issue in (*report.extractor_errors, *report.limitations)
+    }
+    pe = next(run for run in report.extractor_runs if run.source == "pe")
+    assert next(part for part in pe.components if part.name == "dotnet").status == "blocked"
+
+
+def test_dotnet_unreadable_row_is_counted_and_keeps_next_ordinal_in_container():
+    from lupabin.evidence import dotnet
+    from lupabin.evidence.dotnet_checks import verify_dotnet
+
+    data = build_dotnet_demo()
+    offset = dotnet.read(data).members[0].offset + 2
+    broken = data[:offset] + b"\xff\x7f" + data[offset + 2 :]
+    report = asyncio.run(run_isolated(broken, Limits(), DockerCLI()))
+    root = next(fact for fact in report.evidence if fact.kind == "dotnet_metadata")
+    assert (root.data.unreadable, root.data.member_refs) == (1, 2)
+    members = [fact for fact in report.evidence if fact.kind == "dotnet_member"]
+    assert [(fact.data.row, fact.data.name.raw_hex) for fact in members] == [(2, b"Empty".hex())]
+    assert "dotnet_unreadable_rows" in {
+        issue.code for issue in (*report.extractor_errors, *report.limitations)
+    }
+    pe = next(run for run in report.extractor_runs if run.source == "pe")
+    assert next(part for part in pe.components if part.name == "dotnet").status == "partial"
+    verify_dotnet(report.evidence, broken, 1024)
+
+
 @pytest.mark.parametrize("corrupt", [False, True])
 def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
     from typer.testing import CliRunner
@@ -47,7 +105,7 @@ def test_real_cli_full_and_partial_reports(tmp_path, corrupt):
     result = CliRunner().invoke(app, ["analyze", str(path), "--json"])
     assert result.exit_code == (3 if corrupt else 0)
     report = json.loads(result.stdout)
-    assert report["schema_version"] == "0.13.0"
+    assert report["schema_version"] == "0.14.0"
     kinds = {fact["kind"] for fact in report["evidence"]}
     assert {"pe_header", "section", "entropy", "string"} <= kinds
     assert ("header_anomaly" in kinds) == corrupt

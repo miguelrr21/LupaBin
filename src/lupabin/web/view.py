@@ -16,7 +16,7 @@ from lupabin.challenge.engine import web_challenge
 from lupabin.evidence.models import Report
 from lupabin.explain.models import Explanation, Item
 from lupabin.glossary.catalog import Glossary
-from lupabin.render import document, external
+from lupabin.render import document, external, html
 from lupabin.render.safe import visible
 from lupabin.virustotal.contrast import local_context
 from lupabin.virustotal.models import VirusTotalReport
@@ -62,6 +62,7 @@ QUESTIONS = (
         (
             Topic("format", "Formato y cabecera", ("pe.header@",)),
             Topic("toolchain", "Con qué se hizo", ("toolchain.",)),
+            Topic("dotnet", "Ensamblado .NET", ("dotnet.metadata@", "dotnet.types@")),
             Topic("sections", "Secciones", ("pe.section",)),
             Topic("exports", "Funciones que exporta", ("exports.",)),
             Topic("anomalies", "Anomalías de la estructura", ("anomaly.",)),
@@ -74,6 +75,11 @@ QUESTIONS = (
         "código contenga una llamada no demuestra que el programa llegue a hacerla.",
         (
             Topic("capabilities", "Capacidades reconocidas", ("capability.",)),
+            Topic(
+                "dotnet_names",
+                "Lo que nombra el código .NET",
+                ("dotnet.pinvoke", "dotnet.members"),
+            ),
             Topic("main", "La función main y el arranque", ("code.main_call@", "code.reach_")),
             Topic("calls", "Recorrido y llamadas del código", ("code.",)),
             Topic("imports", "Funciones que importa", ("imports.",)),
@@ -87,6 +93,7 @@ QUESTIONS = (
         (
             Topic("packing", "Programa empaquetado con UPX", ("upx.",)),
             Topic("decoded", "Datos decodificados", ("decoded.",)),
+            Topic("dotnet_strings", "Textos literales del código .NET", ("dotnet.user_strings@",)),
             Topic("strings", "Cadenas de texto", ("strings.",)),
             Topic("entropy", "Entropía", ("entropy.",)),
             Topic("yara", "Reglas YARA", ("yara.",)),
@@ -194,6 +201,8 @@ def build(
     items: tuple[Item, ...],
     glossary: Glossary,
     vt: VirusTotalReport | None,
+    *,
+    origin: str | None = None,
 ) -> dict[str, Any]:
     used = document._glossary_order(explanation, items)
     practice = web_challenge(report)
@@ -256,6 +265,10 @@ def build(
     # the downloads are the documents themselves, byte for byte
     shown["downloads"] = {
         "report": report.model_dump_json(indent=2),
-        "markdown": document.to_markdown(explanation, items, report, glossary, None, vt),
+        "markdown": document.to_markdown(explanation, items, report, glossary, origin, vt),
     }
+    try:
+        shown["downloads"]["html"] = html.to_html(explanation, items, report, glossary, origin, vt)
+    except html.HtmlLimitError as error:
+        shown["downloads"]["html_error"] = str(error)
     return shown

@@ -1,0 +1,13 @@
+id = "dotnet.member_reference"
+title = "Referencia a un miembro (.NET)"
+revision = "1.0.0"
+lang = "es"
+summary = "Cuando el código de un ensamblado .NET usa un método o un campo que no está definido en él, los metadatos guardan una referencia con su nombre, el tipo al que pertenece y el ensamblado de ese tipo."
+body = "Esas referencias están en la tabla MemberRef. Cada una apunta al tipo que contiene el miembro; si ese tipo es de otro ensamblado, se puede seguir hasta el nombre del ensamblado (por ejemplo, System.Net.WebClient::DownloadString, de «System»).\n\nSon lo más parecido que tiene un programa .NET a la lista de imports de un programa nativo: dicen qué partes de las bibliotecas nombra el código.\n\nCuando el miembro pertenece a un tipo construido, como un genérico o una matriz, la referencia apunta a una firma y no a un nombre de tipo; LupaBin publica entonces solo el nombre del miembro."
+not_proven = "Nombrar un miembro no demuestra que el código lo use. Un programa también puede usar miembros por reflexión, buscándolos por un nombre que construye al ejecutarse, sin dejar una referencia."
+related = ["dotnet.metadata", "pe.imports"]
+sources = [
+  { title = "MemberReference Struct", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/dotnet/api/system.reflection.metadata.memberreference", verified_on = 2026-10-03 },
+  { title = "ECMA-335: Common Language Infrastructure (CLI)", publisher = "Ecma International", url = "https://www.ecma-international.org/publications-and-standards/standards/ecma-335/", verified_on = 2026-10-03 },
+  { title = "Cómo trabaja LupaBin: metadatos de .NET", publisher = "Proyecto LupaBin", document = "docs/metodo.md#metadatos-de-net", verified_on = 2026-10-03 },
+]

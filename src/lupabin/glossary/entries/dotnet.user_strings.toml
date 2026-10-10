@@ -1,0 +1,13 @@
+id = "dotnet.user_strings"
+title = "Textos literales del código .NET (#US)"
+revision = "1.0.0"
+lang = "es"
+summary = "Los textos que aparecen escritos en el código de un programa .NET se guardan juntos en un flujo de los metadatos llamado «#US», en UTF-16."
+body = "Cuando el código necesita uno de esos textos, lo carga indicando su posición en «#US». Por eso una cadena que está ahí es un literal que el compilador sacó del código, a diferencia de otras cadenas del archivo, que pueden ser nombres de los metadatos o datos de recursos.\n\nLupaBin lee ese flujo entrada a entrada y publica los textos de al menos 4 caracteres ASCII imprimibles, hasta 2.048."
+not_proven = "Que un texto esté en «#US» no demuestra que el código llegue a usarlo ni para qué. Un ofuscador puede guardar los textos cifrados en otra parte y dejar este flujo casi vacío."
+related = ["dotnet.metadata", "strings.literal"]
+sources = [
+  { title = "MetadataReader.GetUserString Method", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/dotnet/api/system.reflection.metadata.metadatareader.getuserstring", verified_on = 2026-10-03 },
+  { title = "ECMA-335: Common Language Infrastructure (CLI)", publisher = "Ecma International", url = "https://www.ecma-international.org/publications-and-standards/standards/ecma-335/", verified_on = 2026-10-03 },
+  { title = "Cómo trabaja LupaBin: metadatos de .NET", publisher = "Proyecto LupaBin", document = "docs/metodo.md#metadatos-de-net", verified_on = 2026-10-03 },
+]

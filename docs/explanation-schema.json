@@ -151,6 +151,9 @@
                 "toolchain_limit",
                 "upx_layout_unrecognized",
                 "upx_rebuild_unrecognized",
+                "dotnet_unsupported_layout",
+                "dotnet_unreadable_rows",
+                "dotnet_limit",
                 "evidence_budget",
                 "dependency_omitted",
                 "output_limit",
@@ -209,6 +212,7 @@
                 "anomalies",
                 "toolchain",
                 "upx",
+                "dotnet",
                 "ascii",
                 "utf16le",
                 "yara_rules",
@@ -284,7 +288,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "0.13.0",
+          "const": "0.14.0",
           "title": "Schema Version",
           "type": "string"
         }

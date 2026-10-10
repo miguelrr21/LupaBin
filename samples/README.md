@@ -34,4 +34,10 @@ uv run python -m tests.fixtures.pe_builder --scenario capability-demo --output s
 uv run --frozen lupabin analyze samples/capability-demo.bin --no-virustotal
 ```
 
+`--scenario dotnet-demo`: el fixture `demo` con una cabecera CLI y los metadatos de un ensamblado .NET mínimo, escritos fila a fila: un tipo `LupaBin.Training.Program` con dos métodos sin cuerpo, una declaración P/Invoke de `MessageBoxW` (`user32.dll`), una referencia a `System.Net.WebClient::DownloadString` y otra al campo `System.String::Empty`, y un texto literal con una URL del dominio reservado `.invalid`. No contiene código IL.
+
+```text
+uv run python -m tests.fixtures.pe_builder --scenario dotnet-demo --output samples/dotnet-demo.bin
+```
+
 El generador exige una ruta nueva y no sobrescribe archivos. Los archivos `.bin`, `.exe` y `.dll` están ignorados por Git. Para analizar el fixture, usa la CLI después de construir y verificar el worker Docker; no lo abras como programa.

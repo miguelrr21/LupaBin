@@ -26,8 +26,8 @@
           "type": "string"
         },
         "version": {
-          "const": "0.13.0",
-          "default": "0.13.0",
+          "const": "0.14.0",
+          "default": "0.14.0",
           "title": "Version",
           "type": "string"
         }
@@ -92,6 +92,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -756,6 +757,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -956,6 +958,853 @@
       "title": "DecodedStringEvidence",
       "type": "object"
     },
+    "DotnetAssembly": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Name"
+        },
+        "version": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "title": "Version",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "DotnetAssembly",
+      "type": "object"
+    },
+    "DotnetMemberData": {
+      "additionalProperties": false,
+      "description": "A row of the MemberRef table: a method or field the assembly names without\ndefining it in that row. `assembly` is set when its type belongs to another\nassembly; a member of a constructed type (`type_spec`) carries no type name.",
+      "properties": {
+        "assembly": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "member": {
+          "enum": [
+            "field",
+            "method"
+          ],
+          "title": "Member",
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/Name"
+        },
+        "namespace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "parent": {
+          "enum": [
+            "type_ref",
+            "type_def",
+            "module_ref",
+            "method_def",
+            "type_spec"
+          ],
+          "title": "Parent",
+          "type": "string"
+        },
+        "row": {
+          "maximum": 16777215,
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "row",
+        "parent",
+        "name",
+        "member"
+      ],
+      "title": "DotnetMemberData",
+      "type": "object"
+    },
+    "DotnetMemberEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "toolchain",
+            "upx",
+            "dotnet",
+            "ascii",
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence",
+            "decode_strings",
+            "decode_xor",
+            "disassembly",
+            "api_calls",
+            "call_arguments",
+            "string_references",
+            "main_function"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/DotnetMemberData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "dotnet_member",
+          "default": "dotnet_member",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings",
+            "yara",
+            "decode",
+            "code"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "DotnetMemberEvidence",
+      "type": "object"
+    },
+    "DotnetMetadataData": {
+      "additionalProperties": false,
+      "description": "The metadata root of a .NET assembly (evidence/dotnet.py): its streams, how many\nrows its tables declare and the assemblies it names. The location is the root, up to\nthe end of its stream headers.",
+      "properties": {
+        "assembly": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DotnetAssembly"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "assembly_refs": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Assembly Refs",
+          "type": "integer"
+        },
+        "entry_point": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Entry Point",
+          "type": "integer"
+        },
+        "flags": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Flags",
+          "type": "integer"
+        },
+        "member_refs": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Member Refs",
+          "type": "integer"
+        },
+        "method_id": {
+          "const": "ecma335-metadata-v1",
+          "default": "ecma335-metadata-v1",
+          "title": "Method Id",
+          "type": "string"
+        },
+        "methods": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Methods",
+          "type": "integer"
+        },
+        "module_refs": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Module Refs",
+          "type": "integer"
+        },
+        "pinvokes": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Pinvokes",
+          "type": "integer"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/$defs/DotnetAssembly"
+          },
+          "maxItems": 128,
+          "title": "References",
+          "type": "array"
+        },
+        "streams": {
+          "items": {
+            "$ref": "#/$defs/DotnetStream"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Streams",
+          "type": "array"
+        },
+        "type_defs": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Type Defs",
+          "type": "integer"
+        },
+        "type_refs": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Type Refs",
+          "type": "integer"
+        },
+        "unreadable": {
+          "minimum": 0,
+          "title": "Unreadable",
+          "type": "integer"
+        },
+        "user_strings": {
+          "minimum": 0,
+          "title": "User Strings",
+          "type": "integer"
+        },
+        "version": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "flags",
+        "entry_point",
+        "streams",
+        "type_refs",
+        "type_defs",
+        "methods",
+        "member_refs",
+        "module_refs",
+        "pinvokes",
+        "assembly_refs",
+        "references",
+        "unreadable",
+        "user_strings"
+      ],
+      "title": "DotnetMetadataData",
+      "type": "object"
+    },
+    "DotnetMetadataEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "toolchain",
+            "upx",
+            "dotnet",
+            "ascii",
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence",
+            "decode_strings",
+            "decode_xor",
+            "disassembly",
+            "api_calls",
+            "call_arguments",
+            "string_references",
+            "main_function"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/DotnetMetadataData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "dotnet_metadata",
+          "default": "dotnet_metadata",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings",
+            "yara",
+            "decode",
+            "code"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "DotnetMetadataEvidence",
+      "type": "object"
+    },
+    "DotnetPinvokeData": {
+      "additionalProperties": false,
+      "description": "A row of the ImplMap table: a method the assembly forwards to native code\n(P/Invoke). `module` and `function` are None when the row leaves that name empty, as\nC++/CLI does for native code of the file itself.",
+      "properties": {
+        "flags": {
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Flags",
+          "type": "integer"
+        },
+        "function": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "module": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "row": {
+          "maximum": 16777215,
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "row",
+        "flags"
+      ],
+      "title": "DotnetPinvokeData",
+      "type": "object"
+    },
+    "DotnetPinvokeEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "toolchain",
+            "upx",
+            "dotnet",
+            "ascii",
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence",
+            "decode_strings",
+            "decode_xor",
+            "disassembly",
+            "api_calls",
+            "call_arguments",
+            "string_references",
+            "main_function"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/DotnetPinvokeData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "dotnet_pinvoke",
+          "default": "dotnet_pinvoke",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings",
+            "yara",
+            "decode",
+            "code"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "DotnetPinvokeEvidence",
+      "type": "object"
+    },
+    "DotnetStream": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "size"
+      ],
+      "title": "DotnetStream",
+      "type": "object"
+    },
+    "DotnetStringData": {
+      "additionalProperties": false,
+      "description": "A literal of the #US stream, where the code's string literals are kept: printable\nASCII of at least four characters, read entry by entry. `index` is where its entry\nstarts in the stream.",
+      "properties": {
+        "characters": {
+          "maximum": 1024,
+          "minimum": 4,
+          "title": "Characters",
+          "type": "integer"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "encoding": {
+          "enum": [
+            "ascii",
+            "utf-16-le"
+          ],
+          "title": "Encoding",
+          "type": "string"
+        },
+        "index": {
+          "exclusiveMinimum": 0,
+          "maximum": 16777215,
+          "title": "Index",
+          "type": "integer"
+        },
+        "raw_hex": {
+          "maxLength": 4096,
+          "pattern": "^(?:[a-f0-9]{2})+$",
+          "title": "Raw Hex",
+          "type": "string"
+        },
+        "repertoire": {
+          "const": "ascii-printable-v1",
+          "default": "ascii-printable-v1",
+          "title": "Repertoire",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 1024,
+          "minLength": 4,
+          "title": "Text",
+          "type": "string"
+        },
+        "total_characters": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Characters"
+        }
+      },
+      "required": [
+        "encoding",
+        "text",
+        "raw_hex",
+        "characters",
+        "complete",
+        "index"
+      ],
+      "title": "DotnetStringData",
+      "type": "object"
+    },
+    "DotnetStringEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "toolchain",
+            "upx",
+            "dotnet",
+            "ascii",
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence",
+            "decode_strings",
+            "decode_xor",
+            "disassembly",
+            "api_calls",
+            "call_arguments",
+            "string_references",
+            "main_function"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/DotnetStringData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "dotnet_string",
+          "default": "dotnet_string",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings",
+            "yara",
+            "decode",
+            "code"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "DotnetStringEvidence",
+      "type": "object"
+    },
+    "DotnetTypeData": {
+      "additionalProperties": false,
+      "description": "A row of the TypeDef table: a type the assembly defines and how many methods of\nthe method table belong to it.",
+      "properties": {
+        "flags": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Flags",
+          "type": "integer"
+        },
+        "methods": {
+          "maximum": 16777215,
+          "minimum": 0,
+          "title": "Methods",
+          "type": "integer"
+        },
+        "name": {
+          "$ref": "#/$defs/Name"
+        },
+        "namespace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "row": {
+          "maximum": 16777215,
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "row",
+        "flags",
+        "name",
+        "methods"
+      ],
+      "title": "DotnetTypeData",
+      "type": "object"
+    },
+    "DotnetTypeEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "headers",
+            "sections",
+            "entropy",
+            "imports_normal",
+            "imports_delay",
+            "exports",
+            "anomalies",
+            "toolchain",
+            "upx",
+            "dotnet",
+            "ascii",
+            "utf16le",
+            "yara_rules",
+            "yara_scan",
+            "yara_evidence",
+            "decode_strings",
+            "decode_xor",
+            "disassembly",
+            "api_calls",
+            "call_arguments",
+            "string_references",
+            "main_function"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "confidence": {
+          "const": "observed",
+          "default": "observed",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/DotnetTypeData"
+        },
+        "id": {
+          "maxLength": 16,
+          "pattern": "^E[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "dotnet_type",
+          "default": "dotnet_type",
+          "title": "Kind",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "enum": [
+            "pe",
+            "strings",
+            "yara",
+            "decode",
+            "code"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "component",
+        "location",
+        "data"
+      ],
+      "title": "DotnetTypeEvidence",
+      "type": "object"
+    },
     "EntropyData": {
       "additionalProperties": false,
       "properties": {
@@ -999,6 +1848,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1147,6 +1997,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1239,6 +2090,9 @@
                 "toolchain_limit",
                 "upx_layout_unrecognized",
                 "upx_rebuild_unrecognized",
+                "dotnet_unsupported_layout",
+                "dotnet_unreadable_rows",
+                "dotnet_limit",
                 "evidence_budget",
                 "dependency_omitted",
                 "output_limit",
@@ -1291,6 +2145,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1456,6 +2311,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -1589,6 +2445,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -2210,7 +3067,7 @@
           "items": {
             "$ref": "#/$defs/ComponentRun"
           },
-          "maxItems": 9,
+          "maxItems": 10,
           "title": "Components",
           "type": "array"
         },
@@ -2401,6 +3258,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -2543,6 +3401,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -2739,6 +3598,7 @@
             "anomalies",
             "toolchain",
             "upx",
+            "dotnet",
             "ascii",
             "utf16le",
             "yara_rules",
@@ -3740,6 +4600,11 @@
             "code_function": "#/$defs/CodeFunctionEvidence",
             "code_reach": "#/$defs/CodeReachEvidence",
             "decoded_string": "#/$defs/DecodedStringEvidence",
+            "dotnet_member": "#/$defs/DotnetMemberEvidence",
+            "dotnet_metadata": "#/$defs/DotnetMetadataEvidence",
+            "dotnet_pinvoke": "#/$defs/DotnetPinvokeEvidence",
+            "dotnet_string": "#/$defs/DotnetStringEvidence",
+            "dotnet_type": "#/$defs/DotnetTypeEvidence",
             "entropy": "#/$defs/EntropyEvidence",
             "export": "#/$defs/ExportEvidence",
             "header_anomaly": "#/$defs/AnomalyEvidence",
@@ -3791,6 +4656,21 @@
           },
           {
             "$ref": "#/$defs/UpxStringEvidence"
+          },
+          {
+            "$ref": "#/$defs/DotnetMetadataEvidence"
+          },
+          {
+            "$ref": "#/$defs/DotnetPinvokeEvidence"
+          },
+          {
+            "$ref": "#/$defs/DotnetStringEvidence"
+          },
+          {
+            "$ref": "#/$defs/DotnetMemberEvidence"
+          },
+          {
+            "$ref": "#/$defs/DotnetTypeEvidence"
           },
           {
             "$ref": "#/$defs/YaraEvidence"
@@ -3856,8 +4736,8 @@
       "$ref": "#/$defs/Sample"
     },
     "schema_version": {
-      "const": "0.13.0",
-      "default": "0.13.0",
+      "const": "0.14.0",
+      "default": "0.14.0",
       "title": "Schema Version",
       "type": "string"
     },

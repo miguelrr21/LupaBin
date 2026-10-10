@@ -18,6 +18,12 @@ from lupabin.evidence.facts import (
     CodeFunctionEvidence,
     CodeReachEvidence,
     DecodedStringEvidence,
+    DotnetAssembly,
+    DotnetMemberEvidence,
+    DotnetMetadataEvidence,
+    DotnetPinvokeEvidence,
+    DotnetStringEvidence,
+    DotnetTypeEvidence,
     EntropyEvidence,
     Evidence,
     ExportEvidence,
@@ -996,6 +1002,188 @@ def _upx_strings(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("upx.packing", "strings.literal")
 
 
+# --- .NET metadata ----------------------------------------------------------------
+
+DOTNET_TEXTS_SHOWN = 100
+DOTNET_NOT_USED = (
+    "LupaBin no lee el código IL de los métodos, así que no sabe si el programa llega a "
+    "usarlo, cuándo ni para qué."
+)
+
+
+@dataclass(frozen=True)
+class DotnetGroups:
+    """The .NET facts of a report as the summaries cite them, in report order."""
+
+    root: DotnetMetadataEvidence | None
+    pinvokes: dict[str, tuple[str, ...]]  # library raw hex ("" if unnamed) -> declarations
+    members: dict[str, tuple[str, ...]]  # assembly raw hex ("" if not another's) -> members
+    types: tuple[str, ...]
+    user_strings: tuple[str, ...]  # the literals of the #US stream
+
+
+_DOTNET: dict[int, tuple[weakref.ref[Report], DotnetGroups]] = {}
+
+
+def dotnet_groups(report: Report) -> DotnetGroups:
+    key = id(report)
+    entry = _DOTNET.get(key)
+    if entry is not None and entry[0]() is report:
+        return entry[1]
+    root = next((f for f in report.evidence if isinstance(f, DotnetMetadataEvidence)), None)
+    pinvokes: dict[str, list[str]] = {}
+    members: dict[str, list[str]] = {}
+    types: list[str] = []
+    texts: list[str] = []
+    for fact in report.evidence:
+        if isinstance(fact, DotnetPinvokeEvidence):
+            library = "" if fact.data.module is None else fact.data.module.raw_hex
+            pinvokes.setdefault(library, []).append(fact.id)
+        elif isinstance(fact, DotnetMemberEvidence):
+            assembly = "" if fact.data.assembly is None else fact.data.assembly.raw_hex
+            members.setdefault(assembly, []).append(fact.id)
+        elif isinstance(fact, DotnetTypeEvidence):
+            types.append(fact.id)
+        elif isinstance(fact, DotnetStringEvidence):
+            texts.append(fact.id)
+    found = DotnetGroups(
+        root,
+        {group: tuple(ids) for group, ids in pinvokes.items()},
+        {group: tuple(ids) for group, ids in members.items()},
+        tuple(types),
+        tuple(texts),
+    )
+
+    def forget(_: weakref.ref[Report]) -> None:
+        _DOTNET.pop(key, None)
+
+    _DOTNET[key] = (weakref.ref(report, forget), found)
+    return found
+
+
+def _assembly_label(assembly: DotnetAssembly) -> str:
+    return f"{name(assembly.name)} {'.'.join(str(part) for part in assembly.version)}"
+
+
+def _dotnet_metadata(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    if len(cited) != 1 or not isinstance(cited[0], DotnetMetadataEvidence):
+        return None
+    data = cited[0].data
+    slots: Slots = {
+        "assembly": "" if data.assembly is None else f" «{_assembly_label(data.assembly)}»",
+        "version": data.version,
+        "type_count": number(data.type_defs),
+        "method_count": number(data.methods),
+        "member_count": number(data.member_refs),
+        "pinvoke_count": number(data.pinvokes),
+        "referenced": number(data.assembly_refs),
+    }
+    if data.references:
+        slots["references"] = tuple(_assembly_label(item) for item in data.references)
+    return slots, ("dotnet.metadata", "toolchain.clr_header")
+
+
+def _dotnet_pinvoke(named: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | None]:
+    def derive(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+        calls = [fact for fact in cited if isinstance(fact, DotnetPinvokeEvidence)]
+        if not calls or len(calls) != len(cited):
+            return None
+        module = calls[0].data.module
+        if (module is not None) != named:
+            return None
+        key = "" if module is None else module.raw_hex
+        if tuple(fact.id for fact in calls) != dotnet_groups(report).pinvokes.get(key):
+            return None  # a summary cites the whole group, in report order
+        functions = []
+        for fact in calls:
+            shown = "(sin nombre)" if fact.data.function is None else name(fact.data.function)
+            if fact.data.method is not None and fact.data.method != fact.data.function:
+                shown += f" (método {name(fact.data.method)})"
+            functions.append(shown)
+        slots: Slots = {
+            "count": number(len(calls)),
+            "noun": "función" if len(calls) == 1 else "funciones",
+            "functions": tuple(functions),
+        }
+        if module is not None:
+            slots["dll"] = _short(name(module))
+        return slots, ("dotnet.pinvoke", "dotnet.metadata")
+
+    return derive
+
+
+def _member_label(fact: DotnetMemberEvidence) -> str:
+    data = fact.data
+    owner = "(tipo construido)" if data.parent == "type_spec" else "(método propio)"
+    if data.type is not None:
+        owner = name(data.type)
+        if data.namespace is not None:
+            owner = f"{name(data.namespace)}.{owner}"
+    return f"{owner}::{name(data.name)}" + (" (campo)" if data.member == "field" else "")
+
+
+def _dotnet_members(external: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | None]:
+    def derive(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+        members = [fact for fact in cited if isinstance(fact, DotnetMemberEvidence)]
+        if not members or len(members) != len(cited):
+            return None
+        assembly = members[0].data.assembly
+        if (assembly is not None) != external:
+            return None
+        key = "" if assembly is None else assembly.raw_hex
+        if tuple(fact.id for fact in members) != dotnet_groups(report).members.get(key):
+            return None
+        slots: Slots = {
+            "count": number(len(members)),
+            "noun": "miembro" if len(members) == 1 else "miembros",
+            "members": tuple(_member_label(fact) for fact in members),
+        }
+        if assembly is not None:
+            slots["assembly"] = _short(name(assembly))
+        return slots, ("dotnet.member_reference", "dotnet.metadata")
+
+    return derive
+
+
+def _dotnet_types(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    found = dotnet_groups(report)
+    types = [fact for fact in cited[1:] if isinstance(fact, DotnetTypeEvidence)]
+    if not types or found.root is None or cited[0] is not found.root:
+        return None
+    if len(types) != len(cited) - 1 or tuple(fact.id for fact in types) != found.types:
+        return None
+    shown = []
+    for fact in types:
+        label = name(fact.data.name)
+        if fact.data.namespace is not None:
+            label = f"{name(fact.data.namespace)}.{label}"
+        methods = fact.data.methods
+        shown.append(f"{label} ({number(methods)} {'método' if methods == 1 else 'métodos'})")
+    slots: Slots = {
+        "declared": number(found.root.data.type_defs),
+        "count": number(len(types)),
+        "types": tuple(shown),
+    }
+    return slots, ("dotnet.type_definition", "dotnet.metadata")
+
+
+def _dotnet_user_strings(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    found = dotnet_groups(report)
+    texts = [fact for fact in cited[1:] if isinstance(fact, DotnetStringEvidence)]
+    if not texts or found.root is None or cited[0] is not found.root:
+        return None
+    if len(texts) != len(cited) - 1 or tuple(fact.id for fact in texts) != found.user_strings:
+        return None
+    shown = texts[:DOTNET_TEXTS_SHOWN]
+    slots: Slots = {
+        "entries": number(found.root.data.user_strings),
+        "count": number(len(texts)),
+        "shown": number(len(shown)),
+        "texts": tuple(fact.data.text for fact in shown),
+    }
+    return slots, ("dotnet.user_strings", "strings.literal")
+
+
 def upx_groups(report: Report) -> list[tuple[UpxImportEvidence, ...]]:
     """The UPX imports in report order, one group per run of the same DLL entry."""
     groups: list[list[UpxImportEvidence]] = []
@@ -1137,6 +1325,66 @@ RULES: dict[str, Rule] = {
             "reubicaciones de UPX. Una cadena no demuestra que el código la use. Los nombres de "
             "las importaciones y los recursos no están en esta parte de la imagen.",
             _upx_strings,
+        ),
+        Rule(
+            "dotnet.metadata@1",
+            "El archivo es un ensamblado .NET{assembly}. Sus metadatos (versión «{version}») "
+            "declaran: tipos propios, {type_count}; métodos, {method_count}; referencias a "
+            "miembros que no define ahí, {member_count}; funciones de código nativo (P/Invoke), "
+            "{pinvoke_count}; ensamblados de los que depende, {referenced}.",
+            "Los metadatos dicen qué declara y qué nombra el ensamblado, no qué hace su código: "
+            "LupaBin no lee el código IL de los métodos. Un ofuscador puede cambiar los nombres, "
+            "o dejar los metadatos en una forma que este método no lee.",
+            _dotnet_metadata,
+        ),
+        Rule(
+            "dotnet.pinvoke@1",
+            "Mediante P/Invoke, los metadatos declaran {count} {noun} de código nativo de «{dll}».",
+            "Una declaración P/Invoke no demuestra que el programa llame a la función. "
+            + DOTNET_NOT_USED,
+            _dotnet_pinvoke(named=True),
+        ),
+        Rule(
+            "dotnet.pinvoke_unnamed@1",
+            "Los metadatos declaran {count} {noun} de código nativo sin nombre de biblioteca: "
+            "es la forma que deja C++/CLI para el código nativo del propio archivo.",
+            "No dice qué hace ese código nativo ni si el programa lo llama. " + DOTNET_NOT_USED,
+            _dotnet_pinvoke(named=False),
+        ),
+        Rule(
+            "dotnet.members@1",
+            "Los metadatos nombran {count} {noun} (métodos y campos) de tipos del ensamblado "
+            "«{assembly}».",
+            "Nombrar un miembro no demuestra que el código lo use. "
+            + DOTNET_NOT_USED
+            + " Un programa también puede llegar a un miembro por reflexión, sin nombrarlo aquí.",
+            _dotnet_members(external=True),
+        ),
+        Rule(
+            "dotnet.members_local@1",
+            "Los metadatos nombran {count} {noun} más a través de tipos del propio ensamblado o "
+            "de tipos construidos (genéricos, matrices): para estos no se indica de qué "
+            "ensamblado viene el tipo.",
+            "Nombrar un miembro no demuestra que el código lo use. " + DOTNET_NOT_USED,
+            _dotnet_members(external=False),
+        ),
+        Rule(
+            "dotnet.types@1",
+            "Tipos que definen los metadatos: {declared}. El informe recoge {count}, en el orden "
+            "de su tabla, con el número de métodos de cada uno.",
+            "Los nombres de tipos y métodos los elige quien compila, y un ofuscador los cambia: "
+            "no dicen qué hace el código. «<Module>» es un tipo que añade el compilador.",
+            _dotnet_types,
+        ),
+        Rule(
+            "dotnet.user_strings@1",
+            "Textos no vacíos en el flujo «#US» de los metadatos, donde .NET guarda los textos "
+            "literales del código: {entries}. El informe recoge los de al menos 4 caracteres ASCII "
+            "imprimibles: {count}. Debajo, los primeros {shown}, en orden.",
+            "Que un texto esté en «#US» indica que el compilador lo guardó como literal, no que "
+            "el código llegue a usarlo ni para qué. Los textos más cortos o con otros caracteres "
+            "no aparecen, y un ofuscador puede guardar los suyos cifrados en otra parte.",
+            _dotnet_user_strings,
         ),
         Rule(
             "pe.section@1",

@@ -4,7 +4,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from lupabin.evidence import toolchain
+from lupabin.evidence import dotnet, toolchain
 from lupabin.evidence.code import (
     validate_argument,
     validate_call,
@@ -55,6 +55,9 @@ ErrorCode = (
         "toolchain_limit",
         "upx_layout_unrecognized",
         "upx_rebuild_unrecognized",
+        "dotnet_unsupported_layout",
+        "dotnet_unreadable_rows",
+        "dotnet_limit",
         "evidence_budget",
         "dependency_omitted",
         "output_limit",
@@ -77,7 +80,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.13.0"] = "0.13.0"
+    version: Literal["0.14.0"] = "0.14.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -116,7 +119,7 @@ class Run(Model):
     source: Source
     version: Annotated[str, Field(min_length=1, max_length=64)]
     status: Status
-    components: Annotated[tuple[ComponentRun, ...], Field(max_length=9)]
+    components: Annotated[tuple[ComponentRun, ...], Field(max_length=10)]
     evidence_count: NonNegative
 
     @model_validator(mode="after")
@@ -149,7 +152,7 @@ def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | 
 
 
 class Report(Model):
-    schema_version: Literal["0.13.0"] = "0.13.0"
+    schema_version: Literal["0.14.0"] = "0.14.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -180,6 +183,11 @@ class Report(Model):
             "upx_image": 1,
             "upx_import": limits.imports,
             "upx_string": limits.strings,
+            "dotnet_metadata": 1,
+            "dotnet_pinvoke": dotnet.PINVOKES,
+            "dotnet_string": dotnet.USER_STRINGS,
+            "dotnet_member": dotnet.MEMBERS,
+            "dotnet_type": dotnet.TYPES,
             "yara_match": limits.yara.matches,
             "api_call": limits.code.calls,
             "call_argument": limits.code.arguments,
@@ -488,6 +496,11 @@ class Report(Model):
                 "export": "exports",
                 "header_anomaly": "anomalies",
                 "toolchain_marker": "toolchain",
+                "dotnet_metadata": "dotnet",
+                "dotnet_pinvoke": "dotnet",
+                "dotnet_string": "dotnet",
+                "dotnet_member": "dotnet",
+                "dotnet_type": "dotnet",
             }.get(fact.kind)
             if fact.kind == "import":
                 expected_component = "imports_" + fact.data.table
@@ -539,6 +552,30 @@ class Report(Model):
                     or fact.data.byte_count != section.data.raw_size
                 ):
                     raise ValueError("entropy span disagrees with section")
+            if fact.kind == "dotnet_string":
+                if facts[refs[0]].kind != "dotnet_metadata":
+                    raise ValueError("a metadata row cites the metadata root")
+                if fact.location.length != len(bytes.fromhex(fact.data.raw_hex)):
+                    raise ValueError("string location disagrees with bytes")
+                if fact.data.characters > limits.string_characters:
+                    raise ValueError("string exceeds character limit")
+            if (
+                fact.kind == "dotnet_pinvoke"
+                or fact.kind == "dotnet_member"
+                or fact.kind == "dotnet_type"
+            ):
+                root = facts[refs[0]]
+                if root.kind != "dotnet_metadata":
+                    raise ValueError("a metadata row cites the metadata root")
+                declared = (
+                    root.data.pinvokes
+                    if fact.kind == "dotnet_pinvoke"
+                    else root.data.member_refs
+                    if fact.kind == "dotnet_member"
+                    else root.data.type_defs
+                )
+                if fact.data.row > declared:
+                    raise ValueError("a metadata row lies outside the table the root declares")
             if fact.kind == "header_anomaly":
                 if not refs or any(facts[ref].kind not in ("pe_header", "section") for ref in refs):
                     raise ValueError("anomaly requires structural evidence")

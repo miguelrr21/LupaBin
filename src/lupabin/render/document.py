@@ -30,6 +30,9 @@ ABSENCE = (
 )
 EXTRA = {
     "functions": "Funciones",
+    "references": "Ensamblados de los que depende",
+    "members": "Miembros",
+    "types": "Tipos",
     "sites": "Desde (RVA)",
     "cases": "Casos",
     "ranges": "Rangos (RVA)",
@@ -118,16 +121,16 @@ def main_line(items: tuple[Item, ...]) -> str | None:
 
 
 def areas_line(items: tuple[Item, ...]) -> str | None:
-    """The families the calls reachable from main touch, and those they do not."""
+    """The count and names of families with calls reachable from main."""
     found = next((item for item in items if item.rule == "code.areas@1"), None)
     if found is None:
         return None
-    touched, untouched = found.slots["touched"], found.slots["untouched"]
-    if not isinstance(touched, tuple) or not isinstance(untouched, tuple):
+    touched = found.slots["touched"]
+    if not isinstance(touched, tuple):
         return None
     return (
-        f"con llamadas: {', '.join(touched)} · sin llamadas vistas: {', '.join(untouched)} "
-        f"({found.id})"
+        f"{found.slots['count']} de {found.slots['total']} familias con llamadas desde main: "
+        f"{', '.join(touched)} ({found.id})"
     )
 
 

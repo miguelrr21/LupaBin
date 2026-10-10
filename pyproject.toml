@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lupabin"
-version = "0.13.0"
+version = "0.14.0"
 description = "Evidence-first static analysis tutor; samples are never executed."
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
@@ -32,7 +32,7 @@ web = [
 packages = ["src/lupabin"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs/evidence-schema.json", "docs/explanation-schema.json", "pyproject.toml", "LICENSE", "NOTICE", "TRADEMARKS.md", "CLA.md", "README.md"]
+only-include = ["src", "tests", "docs/evidence-schema.json", "docs/explanation-schema.json", "pyproject.toml", "LICENSE", "NOTICE", "TRADEMARKS.md", "CLA.md", "README.md"]
 
 [tool.uv]
 exclude-newer = "2026-09-13T00:00:00Z"

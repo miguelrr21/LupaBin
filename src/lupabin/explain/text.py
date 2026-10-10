@@ -21,6 +21,7 @@ COMPONENTS: dict[Component, str] = {
     "anomalies": "anomalías estructurales",
     "toolchain": "marcas de compilador",
     "upx": "empaquetado UPX",
+    "dotnet": "metadatos de .NET",
     "ascii": "cadenas ASCII",
     "utf16le": "cadenas UTF-16LE",
     "yara_rules": "catálogo de reglas",
@@ -75,6 +76,19 @@ MESSAGES: dict[str, str] = {
     ),
     "anomaly_limit": "Se alcanzó el máximo de anomalías conservadas.",
     "toolchain_limit": "Se alcanzó el máximo de marcas de GCC distintas conservadas.",
+    "dotnet_unsupported_layout": (
+        "El archivo declara metadatos de .NET, pero no tienen la forma que LupaBin lee (un "
+        "solo flujo «#~», sin tablas de punteros ni datos fuera del estándar): no se publica "
+        "nada de ellos. Los ofuscadores producen esas formas."
+    ),
+    "dotnet_unreadable_rows": (
+        "Algunas filas de los metadatos de .NET tienen un nombre o un índice que no se pudo "
+        "leer y no aparecen; su número está en la evidencia de los metadatos."
+    ),
+    "dotnet_limit": (
+        "Los metadatos de .NET declaran más de lo que se conserva: hay referencias, tipos, "
+        "funciones nativas o textos literales que no aparecen."
+    ),
     "upx_rebuild_unrecognized": (
         "El bloque de UPX usa un filtro o unas reubicaciones que no se han medido: no se "
         "reconstruye la imagen original ni se publican sus cadenas."
