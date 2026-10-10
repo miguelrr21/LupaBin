@@ -320,6 +320,137 @@ def test_the_reader_is_bounded_on_declared_sizes():
             pass
 
 
+def table_stream(rows, payload, heap_sizes=0):
+    present = sorted(rows)
+    header = struct.pack(
+        "<IBBBBQQ", 0, 2, 0, heap_sizes, 1, sum(1 << table for table in present), 0
+    )
+    return header + b"".join(struct.pack("<I", rows[table]) for table in present) + payload
+
+
+@pytest.mark.parametrize("heap_sizes", range(8))
+def test_method_spec_precedes_generic_param_constraint_with_heap_widths(heap_sizes):
+    blob_width = 4 if heap_sizes & 4 else 2
+    method_specs = b"".join(
+        struct.pack("<H", method) + blob.to_bytes(blob_width, "little")
+        for method, blob in ((2, 0x1234), (5, 0x5678))
+    )
+    constraints = struct.pack("<HHHH", 1, 5, 2, 9)
+    stream = table_stream({43: 2, 44: 2}, method_specs + constraints, heap_sizes)
+    prefix = b"outside"
+    data = prefix + stream + b"trailing bytes outside the stream"
+    tables = dotnet._Tables(data, dotnet.Stream("#~", len(prefix), len(stream)))
+    start = len(prefix) + 32
+    method_size = 2 + blob_width
+    assert tables.widths[43] == (2, blob_width)
+    assert tables.widths[44] == (2, 2)
+    assert tables.sizes[43:45] == (method_size, 4)
+    assert tables.starts[43:45] == [start, start + 2 * method_size]
+    assert tables.row(43, 1) == (start, (2, 0x1234))
+    assert tables.row(43, 2) == (start + method_size, (5, 0x5678))
+    assert tables.row(44, 1) == (start + 2 * method_size, (1, 5))
+    assert tables.row(44, 2) == (start + 2 * method_size + 4, (2, 9))
+    with pytest.raises(ValueError, match="do not fit"):
+        dotnet._Tables(data, dotnet.Stream("#~", len(prefix), len(stream) - 1))
+
+
+@pytest.mark.parametrize("heap_sizes", [0, 4])
+@pytest.mark.parametrize("wide", [False, True])
+@pytest.mark.parametrize(
+    ("target", "threshold", "narrow_row_size", "wide_row_size"),
+    [
+        (6, 0x8000, 14, 14),
+        (10, 0x8000, 6, 6),
+        (42, 0x10000, 8, 8),
+        (1, 0x4000, 6, 8),
+        (2, 0x4000, 14, 16),
+        (27, 0x4000, 2, 2),
+    ],
+)
+def test_generic_tables_use_their_own_index_width_thresholds(
+    target, threshold, narrow_row_size, wide_row_size, wide, heap_sizes
+):
+    count = threshold if wide else threshold - 1
+    blob_width = 4 if heap_sizes & 4 else 2
+    method_width = 4 if wide and target in (6, 10) else 2
+    owner_width = 4 if wide and target == 42 else 2
+    constraint_width = 4 if wide and target in (1, 2, 27) else 2
+    target_size = wide_row_size if wide else narrow_row_size
+    if target in (6, 10, 27):
+        target_size += blob_width - 2
+    method_value = 0x10001 if method_width == 4 else 3
+    blob_value = 0x10002 if blob_width == 4 else 2
+    owner_value = 0x10000 if owner_width == 4 else 1
+    constraint_value = 0x10005 if constraint_width == 4 else 5
+    method_spec = method_value.to_bytes(method_width, "little") + blob_value.to_bytes(
+        blob_width, "little"
+    )
+    constraint = owner_value.to_bytes(owner_width, "little") + constraint_value.to_bytes(
+        constraint_width, "little"
+    )
+    stream = table_stream(
+        {target: count, 43: 1, 44: 1},
+        bytes(count * target_size) + method_spec + constraint,
+        heap_sizes,
+    )
+    assert len(stream) < 600_000
+    tables = dotnet._Tables(stream, dotnet.Stream("#~", 0, len(stream)))
+    start = 36 + count * target_size
+    assert tables.widths[43] == (method_width, blob_width)
+    assert tables.widths[44] == (owner_width, constraint_width)
+    assert tables.sizes[43:45] == (len(method_spec), len(constraint))
+    assert tables.starts[43:45] == [start, start + len(method_spec)]
+    assert tables.row(43, 1) == (start, (method_value, blob_value))
+    assert tables.row(44, 1) == (start + len(method_spec), (owner_value, constraint_value))
+    with pytest.raises(ValueError, match="do not fit"):
+        dotnet._Tables(stream, dotnet.Stream("#~", 0, len(stream) - 1))
+
+
+@pytest.mark.parametrize(("tag", "table"), [(20, 44), (21, 43)])
+def test_generic_custom_attribute_tags_keep_their_standard_targets(tag, table):
+    assert dotnet._Tables.coded("HasCustomAttribute", (7 << 5) | tag) == (table, 7)
+
+
+@pytest.mark.parametrize(
+    ("kind", "tag", "bits"),
+    [
+        ("HasCustomAttribute", 22, 5),
+        ("HasCustomAttribute", 31, 5),
+        ("TypeDefOrRef", 3, 2),
+        ("CustomAttributeType", 0, 3),
+        ("CustomAttributeType", 1, 3),
+        ("CustomAttributeType", 5, 3),
+        ("CustomAttributeType", 7, 3),
+    ],
+)
+def test_coded_indexes_reject_unused_tags(kind, tag, bits):
+    with pytest.raises(ValueError, match="tag"):
+        dotnet._Tables.coded(kind, (7 << bits) | tag)
+
+
+@pytest.mark.parametrize("table", [43, 44])
+@pytest.mark.parametrize("heap_sizes", [0, 4])
+@pytest.mark.parametrize("truncated", [False, True])
+def test_public_reader_checks_the_size_of_each_generic_table(table, heap_sizes, truncated):
+    blob_width = 4 if heap_sizes & 4 else 2
+    row = struct.pack("<H", 2) + (1).to_bytes(blob_width if table == 43 else 2, "little")
+    stream = table_stream({table: 1}, row, heap_sizes)
+    declared_size = len(stream) - int(truncated)
+    root = struct.pack("<4sHHII", b"BSJB", 1, 1, 0, 4) + b"v4\0\0"
+    root += struct.pack("<HHII4s", 0, 1, 36, declared_size, b"#~\0\0") + stream
+    data = patched(build_dotnet_demo(), DOTNET_ROOT, root)
+    data = patched(data, DOTNET_ROOT - 72 + 12, struct.pack("<I", len(root)))
+    if truncated:
+        with pytest.raises(ValueError, match="do not fit"):
+            dotnet.read(data)
+    else:
+        metadata = dotnet.read(data)
+        assert metadata is not None
+        assert metadata.rows[table] == 1 and sum(metadata.rows) == 1
+        assert metadata.unreadable == 0
+        assert metadata.streams == (dotnet.Stream("#~", DOTNET_ROOT + 36, declared_size),)
+
+
 def test_every_fact_is_explained_with_its_limit():
     report = analyze_bytes(build_dotnet_demo())
     explanation = explain(report, GLOSSARY)

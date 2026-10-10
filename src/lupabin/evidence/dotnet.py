@@ -109,8 +109,8 @@ SCHEMA: tuple[tuple[Column, ...], ...] = (
     ("w4", "w4", "S", "Implementation"),  # 40 ManifestResource
     (2, 2),  # 41 NestedClass
     ("w2", "w2", "TypeOrMethodDef", "S"),  # 42 GenericParam
-    (42, "TypeDefOrRef"),  # 43 GenericParamConstraint
-    ("MethodDefOrRef", "B"),  # 44 MethodSpec
+    ("MethodDefOrRef", "B"),  # 43 MethodSpec
+    (42, "TypeDefOrRef"),  # 44 GenericParamConstraint
 )
 
 
