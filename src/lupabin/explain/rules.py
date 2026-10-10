@@ -15,6 +15,7 @@ from lupabin.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
     CallArgumentEvidence,
+    CertificateEvidence,
     CodeFunctionEvidence,
     CodeReachEvidence,
     DecodedStringEvidence,
@@ -31,6 +32,8 @@ from lupabin.evidence.facts import (
     ImportEvidence,
     LocalLinkEvidence,
     MainCallEvidence,
+    OverlayEvidence,
+    PdbEvidence,
     SectionEvidence,
     StringEvidence,
     StringReferenceEvidence,
@@ -38,6 +41,7 @@ from lupabin.evidence.facts import (
     UpxImageEvidence,
     UpxImportEvidence,
     UpxStringEvidence,
+    VersionStringEvidence,
     YaraEvidence,
 )
 from lupabin.evidence.models import Report
@@ -1216,6 +1220,125 @@ def _upx_imports(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
     return slots, ("upx.import_list", "pe.imports")
 
 
+# --- Triage ---------------------------------------------------------------------
+
+VERSION_STRINGS_SHOWN = 12
+VERSION_VALUE_SHOWN = 80
+# wCertificateType values of the PE format specification (wincrypt.h WIN_CERT_TYPE_*).
+CERTIFICATE_TYPES = {
+    0x0001: "X.509",
+    0x0002: "PKCS#7 SignedData, el de Authenticode",
+    0x0003: "reservado",
+    0x0004: "Terminal Server",
+}
+
+
+def _pdb(named: bool) -> Callable[[tuple[Evidence, ...], Report], Derived | None]:
+    def derive(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+        if len(cited) != 1 or not isinstance(cited[0], PdbEvidence):
+            return None
+        data = cited[0].data
+        if (data.path is not None) != named:
+            return None
+        slots: Slots = {
+            "offset": hexadecimal(cited[0].location.offset or 0),
+            "guid": data.guid,
+            "age": data.age,
+        }
+        if data.path is not None:
+            slots["path"] = name(data.path)
+        return slots, ("pe.debug_pdb",)
+
+    return derive
+
+
+def version_tables(report: Report) -> list[tuple[Evidence, ...]]:
+    """The version strings of each language and code page, in report order."""
+    tables: dict[tuple[int, int], list[Evidence]] = {}
+    for fact in report.evidence:
+        if isinstance(fact, VersionStringEvidence):
+            tables.setdefault((fact.data.language, fact.data.codepage), []).append(fact)
+    return [tuple(table) for table in tables.values()]
+
+
+def _version_strings(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    strings = [fact for fact in cited if isinstance(fact, VersionStringEvidence)]
+    if not strings or len(strings) != len(cited):
+        return None
+    ids = tuple(fact.id for fact in strings)
+    if ids not in {tuple(fact.id for fact in table) for table in version_tables(report)}:
+        return None
+
+    def shown(text: str) -> str:
+        return (
+            text
+            if len(text) <= VERSION_VALUE_SHOWN
+            else f"{text[:VERSION_VALUE_SHOWN]}… ({len(text)} caracteres)"
+        )
+
+    listed = "; ".join(
+        f"{shown(fact.data.key)} = «{shown(fact.data.value)}»"
+        for fact in strings[:VERSION_STRINGS_SHOWN]
+    )
+    if len(strings) > VERSION_STRINGS_SHOWN:
+        listed += f" y {number(len(strings) - VERSION_STRINGS_SHOWN)} más"
+    slots: Slots = {
+        "language": hexadecimal(strings[0].data.language, 4),
+        "codepage": strings[0].data.codepage,
+        "count": len(strings),
+        "noun": "texto" if len(strings) == 1 else "textos",
+        "listed": listed,
+    }
+    return slots, ("pe.version_info",)
+
+
+def _certificates(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    entries = [fact for fact in cited if isinstance(fact, CertificateEvidence)]
+    if not entries or len(entries) != len(cited):
+        return None
+    if tuple(fact.id for fact in entries) != tuple(
+        fact.id for fact in report.evidence if isinstance(fact, CertificateEvidence)
+    ):
+        return None
+
+    def described(fact: CertificateEvidence) -> str:
+        kind = hexadecimal(fact.data.certificate_type, 4)
+        label = CERTIFICATE_TYPES.get(fact.data.certificate_type)
+        return (
+            f"tipo {kind}{f' ({label})' if label else ''}, "
+            f"{number(fact.location.length or 0)} bytes"
+        )
+
+    slots: Slots = {
+        "offset": hexadecimal(entries[0].location.offset or 0),
+        "count": len(entries),
+        "noun": "entrada" if len(entries) == 1 else "entradas",
+        "entries": "; ".join(described(fact) for fact in entries),
+    }
+    return slots, ("pe.certificate_table",)
+
+
+def _overlay(cited: tuple[Evidence, ...], report: Report) -> Derived | None:
+    spans = [fact for fact in cited if isinstance(fact, OverlayEvidence)]
+    if not spans or len(spans) != len(cited):
+        return None
+    if tuple(fact.id for fact in spans) != tuple(
+        fact.id for fact in report.evidence if isinstance(fact, OverlayEvidence)
+    ):
+        return None
+    slots: Slots = {
+        "total": number(sum(fact.location.length or 0 for fact in spans)),
+        "count": len(spans),
+        "noun": "tramo" if len(spans) == 1 else "tramos",
+        "spans": "; ".join(
+            f"{number(fact.location.length or 0)} bytes desde el desplazamiento "
+            f"{hexadecimal(fact.location.offset or 0)}, SHA-256 {fact.data.sha256}"
+            for fact in spans
+        ),
+    }
+    return slots, ("pe.overlay",)
+
+
 RULES: dict[str, Rule] = {
     rule.id: rule
     for rule in (
@@ -1285,6 +1408,54 @@ RULES: dict[str, Rule] = {
             "LupaBin solo analiza el cargador que abre ese archivo, no el código Python que "
             "contiene. La cookie puede copiarse.",
             _marker("pyinstaller_cookie"),
+        ),
+        Rule(
+            "debug.pdb@1",
+            "El directorio de depuración apunta a un registro CodeView RSDS (desplazamiento "
+            "{offset}) con el identificador {guid}, la edad {age} y la ruta de PDB «{path}»: "
+            "son los datos con que un depurador busca el archivo de símbolos de este "
+            "programa.",
+            "El registro es texto y números que escribió quien enlazó el programa: pueden "
+            "cambiarse o borrarse después. No demuestran quién hizo el programa ni qué hace.",
+            _pdb(named=True),
+        ),
+        Rule(
+            "debug.pdb_unnamed@1",
+            "El directorio de depuración apunta a un registro CodeView RSDS (desplazamiento "
+            "{offset}) con el identificador {guid} y la edad {age}, sin ruta de PDB: el "
+            "registro identifica esta compilación, pero no nombra ningún archivo de "
+            "símbolos.",
+            "El registro es texto y números que escribió quien enlazó el programa: pueden "
+            "cambiarse o borrarse después. No demuestran quién hizo el programa ni qué hace.",
+            _pdb(named=False),
+        ),
+        Rule(
+            "version.strings@1",
+            "El recurso de versión (idioma {language}, página de códigos {codepage}) declara "
+            "{count} {noun}: {listed}.",
+            "Son textos que escribió quien hizo el archivo: cualquiera puede poner el nombre "
+            "de otra empresa o de otro producto. No demuestran de dónde viene el archivo ni "
+            "qué hace.",
+            _version_strings,
+        ),
+        Rule(
+            "signature.certificates@1",
+            "El archivo lleva una tabla de certificados (desplazamiento {offset}) con {count} "
+            "{noun}: {entries}.",
+            "LupaBin no descodifica ni valida su contenido: no comprueba que la firma "
+            "corresponda a este archivo, quién la emitió ni si ha caducado o se ha revocado. "
+            "Que haya una tabla de certificados no significa que el archivo esté bien firmado "
+            "ni que sea de confianza.",
+            _certificates,
+        ),
+        Rule(
+            "overlay.data@1",
+            "Después de la última sección hay {total} bytes que no pertenecen a ninguna "
+            "sección ni a la tabla de certificados, en {count} {noun}: {spans}.",
+            "LupaBin no interpreta esos bytes. Las cabeceras no los asignan a ninguna "
+            "sección, pero el programa puede leerlos de su propio archivo; que existan no "
+            "dice qué contienen ni para qué se usan.",
+            _overlay,
         ),
         Rule(
             "upx.image@1",

@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
-from lupabin.evidence import dotnet, toolchain, upx
+from lupabin.evidence import dotnet, toolchain, triage, upx
 from lupabin.evidence.primitives import (
     Component,
     EvidenceId,
@@ -602,6 +602,124 @@ class ToolchainEvidence(Fact):
         return self
 
 
+def _own_bytes(fact: Fact, size: int) -> None:
+    """A triage fact is a span of the file and cites nothing else."""
+    where = fact.location
+    if where.offset is None or where.length != size:
+        raise ValueError("a triage fact locates exactly its bytes")
+    if where.rva is not None or where.section is not None:
+        raise ValueError("a triage fact claims no place in the image")
+    if fact.provenance.evidence_ids:
+        raise ValueError("a triage fact cites nothing but its own bytes")
+
+
+class PdbData(Model):
+    """A CodeView RSDS record that an entry of the debug directory points to: the
+    identifier and age that tie the file to its PDB, and the PDB path the linker wrote."""
+
+    debug_index: Annotated[int, Field(ge=0, lt=64)]
+    raw_hex: Annotated[str, Field(pattern=r"^(?:[a-f0-9]{2})+$", max_length=2098)]
+    guid: Annotated[str, Field(pattern=r"^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$")]
+    age: UInt
+    path: Name | None = None  # None when the record carries an empty path
+
+    @model_validator(mode="after")
+    def exact_form(self) -> Self:
+        guid, age, path = triage.rsds_fields(bytes.fromhex(self.raw_hex))
+        if (guid, age) != (self.guid, self.age):
+            raise ValueError("PDB identifier or age disagrees with the record")
+        if (Name.from_bytes(path) if path else None) != self.path:
+            raise ValueError("PDB path disagrees with the record")
+        return self
+
+
+class PdbEvidence(Fact):
+    kind: Literal["pdb_reference"] = "pdb_reference"
+    data: PdbData
+
+    @model_validator(mode="after")
+    def locates_its_bytes(self) -> Self:
+        _own_bytes(self, len(self.data.raw_hex) // 2)
+        return self
+
+
+class CertificateData(Model):
+    """One WIN_CERTIFICATE entry of the certificate table: its header and the digest of
+    its content, which is neither decoded nor validated."""
+
+    index: Annotated[int, Field(ge=0, lt=triage.CERTIFICATES)]
+    header_hex: Annotated[str, Field(pattern=r"^[a-f0-9]{16}$")]
+    revision: Annotated[int, Field(ge=0, le=65535)]
+    certificate_type: Annotated[int, Field(ge=0, le=65535)]
+    content_sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    padding: Annotated[int, Field(ge=0, lt=8)]
+
+    @model_validator(mode="after")
+    def exact_form(self) -> Self:
+        length, revision, kind = triage.certificate_header(bytes.fromhex(self.header_hex))
+        if (revision, kind) != (self.revision, self.certificate_type):
+            raise ValueError("certificate fields disagree with the header")
+        if length < 8 or self.padding != -length % 8:
+            raise ValueError("certificate length or padding disagrees with the header")
+        return self
+
+
+class CertificateEvidence(Fact):
+    kind: Literal["certificate_entry"] = "certificate_entry"
+    data: CertificateData
+
+    @model_validator(mode="after")
+    def locates_its_bytes(self) -> Self:
+        _own_bytes(self, triage.certificate_header(bytes.fromhex(self.data.header_hex))[0])
+        if (self.location.offset or 0) % 8:
+            raise ValueError("a certificate entry starts on an 8-byte boundary")
+        return self
+
+
+class OverlayData(Model):
+    """Bytes after the last section that belong to no section and to no certificate."""
+
+    sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+
+
+class OverlayEvidence(Fact):
+    kind: Literal["overlay"] = "overlay"
+    data: OverlayData
+
+    @model_validator(mode="after")
+    def locates_its_bytes(self) -> Self:
+        _own_bytes(self, self.location.length or 0)
+        return self
+
+
+class VersionStringData(Model):
+    """One String block of a version resource: text the file declares about itself."""
+
+    language: Annotated[int, Field(ge=0, le=65535)]
+    codepage: Annotated[int, Field(ge=0, le=65535)]
+    raw_hex: Annotated[
+        str, Field(pattern=r"^(?:[a-f0-9]{2})+$", max_length=2 * triage.VERSION_BLOCK_BYTES)
+    ]
+    key: Annotated[str, Field(min_length=1, max_length=triage.VERSION_KEY_CHARACTERS)]
+    value: Annotated[str, Field(max_length=1024)]
+
+    @model_validator(mode="after")
+    def exact_form(self) -> Self:
+        if triage.string_block(bytes.fromhex(self.raw_hex)) != (self.key, self.value):
+            raise ValueError("version text disagrees with its block")
+        return self
+
+
+class VersionStringEvidence(Fact):
+    kind: Literal["version_string"] = "version_string"
+    data: VersionStringData
+
+    @model_validator(mode="after")
+    def locates_its_bytes(self) -> Self:
+        _own_bytes(self, len(self.data.raw_hex) // 2)
+        return self
+
+
 class UpxSection(Model):
     """A section of the original program, as the header copy in the block lists it."""
 
@@ -941,6 +1059,10 @@ Evidence = Annotated[
     | StringEvidence
     | AnomalyEvidence
     | ToolchainEvidence
+    | PdbEvidence
+    | CertificateEvidence
+    | OverlayEvidence
+    | VersionStringEvidence
     | UpxImageEvidence
     | UpxImportEvidence
     | UpxStringEvidence
@@ -969,6 +1091,10 @@ Payload = (
     | StringData
     | AnomalyData
     | ToolchainData
+    | PdbData
+    | CertificateData
+    | OverlayData
+    | VersionStringData
     | UpxImageData
     | UpxImportData
     | UpxStringData

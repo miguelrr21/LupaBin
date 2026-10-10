@@ -142,4 +142,4 @@ def test_built_distributions_contain_only_expected_paths_and_resources():
 def test_package_version():
     import lupabin
 
-    assert lupabin.__version__ == "0.14.0"
+    assert lupabin.__version__ == "0.15.0"

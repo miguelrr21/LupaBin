@@ -1,7 +1,7 @@
 {
  "format_version": "1",
  "catalog_id": "lupabin_glossary",
- "revision": "1.14.0",
+ "revision": "1.15.0",
  "entries": [
   {
    "id": "analysis.coverage",
@@ -229,6 +229,16 @@
    "sha256": "d8671a35a343fa8b942c1cfd17daa62bae4d623871cc0eebba50dd96acc65863"
   },
   {
+   "id": "pe.certificate_table",
+   "filename": "pe.certificate_table.toml",
+   "sha256": "0690ae62976822de6ca319968ef538df519391781f61171d7794604171ff24f7"
+  },
+  {
+   "id": "pe.debug_pdb",
+   "filename": "pe.debug_pdb.toml",
+   "sha256": "e598985572d8c2356efa558a46421036a2a94a4331095c25017b52ac58c07a61"
+  },
+  {
    "id": "pe.exports",
    "filename": "pe.exports.toml",
    "sha256": "0cccc11685afe1536a59f245083226a04982342f169b9783c379031abd6901fe"
@@ -269,6 +279,11 @@
    "sha256": "e4110c6affe848857c7e1d0194695da61209445326b16e4fbc7fe3b05b125767"
   },
   {
+   "id": "pe.overlay",
+   "filename": "pe.overlay.toml",
+   "sha256": "22a1c5fb8a733c93b7ecdf3747394dbf27031d7eb3abd074c8c4a45d25127726"
+  },
+  {
    "id": "pe.section",
    "filename": "pe.section.toml",
    "sha256": "2efb4748a1fe1b99fa3e3a53cb4a616f77584691f4a4bdf22a7c175fdb7aa00f"
@@ -277,6 +292,11 @@
    "id": "pe.section.permissions",
    "filename": "pe.section.permissions.toml",
    "sha256": "f4a581385459e79706ea97b280eb48320afc9e7694b2d12582c095bc7ae94725"
+  },
+  {
+   "id": "pe.version_info",
+   "filename": "pe.version_info.toml",
+   "sha256": "49287eea65711a9be5815ee6886b15accba76b3a7222ce92a7864c614163a512"
   },
   {
    "id": "strings.literal",

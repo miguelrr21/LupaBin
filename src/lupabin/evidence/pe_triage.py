@@ -4,6 +4,7 @@ from dataclasses import dataclass, fields
 from typing import Literal
 from uuid import UUID
 
+RESOURCE_DIRECTORY = 2
 SECURITY_DIRECTORY = 4
 DEBUG_DIRECTORY = 6
 CODEVIEW_TYPE = 2
@@ -83,6 +84,7 @@ class Layout:
     sections: tuple[Section, ...]
     security: Directory
     debug: Directory
+    resources: Directory
 
 
 @dataclass(frozen=True)
@@ -223,6 +225,7 @@ def _layout(data: bytes, budgets: Budgets) -> Layout:
         tuple(sections),
         directory(SECURITY_DIRECTORY),
         directory(DEBUG_DIRECTORY),
+        directory(RESOURCE_DIRECTORY),
     )
 
 

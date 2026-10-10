@@ -62,6 +62,9 @@ QUESTIONS = (
         (
             Topic("format", "Formato y cabecera", ("pe.header@",)),
             Topic("toolchain", "Con qué se hizo", ("toolchain.",)),
+            Topic("debug", "Referencia al PDB", ("debug.",)),
+            Topic("version", "Lo que el archivo dice de sí mismo", ("version.",)),
+            Topic("signature", "Tabla de certificados", ("signature.",)),
             Topic("dotnet", "Ensamblado .NET", ("dotnet.metadata@", "dotnet.types@")),
             Topic("sections", "Secciones", ("pe.section",)),
             Topic("exports", "Funciones que exporta", ("exports.",)),
@@ -96,6 +99,7 @@ QUESTIONS = (
             Topic("dotnet_strings", "Textos literales del código .NET", ("dotnet.user_strings@",)),
             Topic("strings", "Cadenas de texto", ("strings.",)),
             Topic("entropy", "Entropía", ("entropy.",)),
+            Topic("overlay", "Datos tras la última sección", ("overlay.",)),
             Topic("yara", "Reglas YARA", ("yara.",)),
             # nothing is left out of the page because a rule has no topic yet
             Topic(OTHER, "Otras afirmaciones", ("",)),

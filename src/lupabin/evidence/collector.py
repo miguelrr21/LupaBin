@@ -4,11 +4,12 @@ from collections.abc import Mapping
 
 from pydantic import TypeAdapter
 
-from lupabin.evidence import dotnet, toolchain
+from lupabin.evidence import dotnet, toolchain, triage
 from lupabin.evidence.facts import (
     AnomalyData,
     ApiCallData,
     CallArgumentData,
+    CertificateData,
     CodeFunctionData,
     CodeReachData,
     DecodedStringData,
@@ -24,7 +25,9 @@ from lupabin.evidence.facts import (
     ImportData,
     LocalLinkData,
     MainCallData,
+    OverlayData,
     Payload,
+    PdbData,
     SectionData,
     StringData,
     StringReferenceData,
@@ -32,6 +35,7 @@ from lupabin.evidence.facts import (
     UpxImageData,
     UpxImportData,
     UpxStringData,
+    VersionStringData,
 )
 from lupabin.evidence.models import (
     ComponentRun,
@@ -54,6 +58,10 @@ KINDS = {
     StringData: "string",
     AnomalyData: "header_anomaly",
     ToolchainData: "toolchain_marker",
+    PdbData: "pdb_reference",
+    CertificateData: "certificate_entry",
+    OverlayData: "overlay",
+    VersionStringData: "version_string",
     UpxImageData: "upx_image",
     UpxImportData: "upx_import",
     UpxStringData: "upx_string",
@@ -143,6 +151,10 @@ class Collector:
             "export": limits.exports,
             "header_anomaly": limits.anomalies,
             "toolchain_marker": toolchain.QUOTA,
+            "pdb_reference": triage.PDBS,
+            "certificate_entry": triage.CERTIFICATES,
+            "overlay": triage.OVERLAYS,
+            "version_string": triage.VERSION_STRINGS,
             "upx_image": 1,
             "upx_import": limits.imports,
             "upx_string": limits.strings,
@@ -189,6 +201,10 @@ class Collector:
                 "export": "export_limit",
                 "string": "string_limit",
                 "header_anomaly": "anomaly_limit",
+                "pdb_reference": "triage_limit",
+                "certificate_entry": "triage_limit",
+                "overlay": "triage_limit",
+                "version_string": "triage_limit",
                 "yara_match": "yara_match_limit",
                 "api_call": "api_call_limit",
                 "call_argument": "call_argument_limit",

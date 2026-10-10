@@ -1,0 +1,13 @@
+id = "pe.version_info"
+title = "Textos de versión"
+revision = "1.0.0"
+lang = "es"
+summary = "El recurso de versión de un PE guarda textos con los que el archivo se describe a sí mismo: empresa, producto, descripción, versión o nombre original. Son los que Windows muestra en las propiedades del archivo."
+body = "El recurso de versión (VS_VERSIONINFO) es una estructura en árbol. Dentro de «StringFileInfo» hay una tabla por idioma y página de códigos, y cada tabla contiene bloques «String» con una clave y un valor de texto.\n\nLa clave es un texto libre. Microsoft recomienda nombres como CompanyName, FileDescription, FileVersion, InternalName, LegalCopyright, OriginalFilename, ProductName y ProductVersion, pero son solo una guía: quien hace el archivo decide qué claves y qué valores pone.\n\nLupaBin publica cada bloque de texto que pudo leer entero, con su idioma y su página de códigos. Un bloque dañado, con un valor sin terminar o más largo que el máximo no se publica, y el informe lo dice."
+not_proven = "Son textos declarados por quien hizo el archivo: cualquiera puede escribir el nombre de otra empresa o de otro producto. No demuestran de dónde viene el archivo ni qué hace."
+related = ["pe.format"]
+sources = [
+  { title = "VS_VERSIONINFO structure", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/menurc/vs-versioninfo", verified_on = 2026-10-10 },
+  { title = "String structure", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/menurc/string-str", verified_on = 2026-10-10 },
+  { title = "Cómo trabaja LupaBin: datos de triaje", publisher = "Proyecto LupaBin", document = "docs/metodo.md#datos-de-triaje", verified_on = 2026-10-10 },
+]

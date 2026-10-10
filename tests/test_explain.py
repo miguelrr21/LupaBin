@@ -28,6 +28,7 @@ from tests.fixtures.pe_builder import (
     build_toolchain_demo,
     build_upx_demo,
 )
+from tests.test_triage import build as build_triage_demo
 
 GLOSSARY = load_glossary()
 
@@ -90,6 +91,8 @@ SAMPLES = {
     "dotnet": build_dotnet_demo,
     "dotnet-own": lambda: build_dotnet_demo(library=b"", own_field=True),
     "upx-plain": lambda: build_upx_demo(bits=64, method="nrv2e", tail=False),
+    "triage": build_triage_demo,
+    "triage-unnamed": lambda: build_triage_demo(bits=64, path=b""),
     "not-pe": lambda: b"just some text, not a PE file at all " * 4,
 }
 

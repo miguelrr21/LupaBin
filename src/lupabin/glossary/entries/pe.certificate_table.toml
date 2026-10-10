@@ -1,0 +1,12 @@
+id = "pe.certificate_table"
+title = "Tabla de certificados"
+revision = "1.0.0"
+lang = "es"
+summary = "La tabla de certificados es la parte de un PE donde se guardan las firmas digitales. Está al final del archivo, fuera de las secciones, y Windows no la carga en memoria como parte de la imagen."
+body = "El directorio «Certificate Table» de la cabecera es distinto de los demás: su primer campo no es una dirección en memoria (RVA), sino una posición del archivo.\n\nLa tabla es una serie de entradas contiguas, alineadas a 8 bytes. Cada entrada empieza con su longitud (dwLength), una revisión (wRevision) y un tipo (wCertificateType), y sigue con el contenido. El tipo 0x0002 indica una estructura PKCS#7 SignedData, que es la que usa Authenticode, la firma de código de Windows.\n\nLupaBin recorre la tabla entera, comprueba que las entradas encajan exactamente en el tamaño declarado y publica de cada una su cabecera, su tamaño y el SHA-256 de su contenido. No descodifica ese contenido."
+not_proven = "Que haya una tabla de certificados no significa que la firma sea válida: LupaBin no comprueba que corresponda a este archivo, quién la emitió ni si ha caducado o se ha revocado."
+related = ["pe.header", "pe.overlay"]
+sources = [
+  { title = "PE Format: The Attribute Certificate Table (Image Only)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-attribute-certificate-table-image-only", verified_on = 2026-10-10 },
+  { title = "Cómo trabaja LupaBin: datos de triaje", publisher = "Proyecto LupaBin", document = "docs/metodo.md#datos-de-triaje", verified_on = 2026-10-10 },
+]
