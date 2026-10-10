@@ -66,7 +66,8 @@ Si VirusTotal no conoce el archivo, **LupaBin lo sube** con el nombre genérico 
 
 ## Web, Ghidra y práctica
 
-- **Web:** `uv sync --extra web` y `uv run lupabin-web` (en `http://127.0.0.1:8080`) sirven el mismo análisis aislado en el navegador, sin guardar muestras ni informes. Para un servidor dedicado: `deploy/server/` (systemd y Caddy).
+- **Web:** `uv sync --extra web` y `uv run lupabin-web` (en `http://127.0.0.1:8080`) sirven el mismo análisis aislado en el navegador, sin guardar las muestras recibidas ni sus informes. Para un servidor dedicado: `deploy/server/` (systemd y Caddy).
+- **Ejemplo y descargas:** *Ver informe de ejemplo* permite explorar un informe sintético, sus citas y la práctica sin aportar un archivo ni consultar VirusTotal. El menú *Descargar* ofrece también un HTML autónomo para leer sin conexión, con evidencias, glosario y límites; conserva el informe local, no los resultados de VirusTotal recibidos después.
 - **Ghidra:** `lupabin export-ghidra informe.json --sample archivo.exe --output evidencias.zip` genera un JSON y un script que, en Ghidra, comprueba el SHA-256, muestra una revisión previa y añade las evidencias como comentarios sin tocar tus anotaciones. [Detalles](docs/metodo.md#exportación-a-ghidra).
 - **Práctica:** `lupabin challenge informe.json --practice`, o *Practicar con este informe* en la web, plantea preguntas tipo test sobre el propio informe y las corrige citando las evidencias. [Detalles](docs/metodo.md#retos-autocorregibles).
 
@@ -82,7 +83,7 @@ uv run --frozen ruff check .
 uv run --frozen mypy src
 uv run --frozen pytest -m "not docker"
 uv run --frozen pytest -m docker
-node --test tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs tests/test_web_report.cjs
+node --test --test-concurrency=1 tests/test_web_vt.cjs tests/test_web_challenge.cjs tests/test_web_ghidra.cjs tests/test_web_report.cjs tests/test_web_example.cjs
 ```
 
 Las pruebas de la web necesitan Node.js 22 o posterior, sin paquetes npm. La CI ejecuta además las comprobaciones de los esquemas, el build y la distribución del catálogo YARA; tras cambiar los modelos, los esquemas se regeneran con `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. Las mediciones sobre binarios benignos se repiten con las herramientas `tests/*_eval.py` ([cómo](docs/metodo.md#repetir-las-mediciones)).

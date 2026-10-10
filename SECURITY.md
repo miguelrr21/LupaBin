@@ -27,7 +27,7 @@ La descompresión de UPX también ocurre en el worker y se repite en el host par
 La web recibe archivos de cualquiera y los analiza con el mismo aislamiento que la CLI: un contenedor nuevo por análisis, sin red, de solo lectura, sin privilegios y con límites. El proceso web no analiza la muestra: lee sus bytes, calcula hashes y la pasa al worker por stdin. Aun así:
 - **El usuario del servicio pertenece al grupo `docker`**, que equivale a root en esa máquina. Despliégala en un servidor dedicado que no guarde nada más y no esté en tu red doméstica. El servicio solo escucha en `127.0.0.1` detrás de Caddy, y systemd lo aísla (`deploy/server/lupabin-web.service`).
 - **Todo texto de la muestra o de VirusTotal se neutraliza en el servidor**, y la página lo inserta solo con `textContent`, bajo una CSP sin código en línea. No se usan cookies, terceros ni analítica.
-- **No se guardan muestras ni informes**, y no hay registro de accesos. Los límites por IP y la cuota de VirusTotal viven en memoria y se reinician con el servicio.
+- **No se guardan las muestras recibidas ni los informes de sus análisis**, y no hay registro de accesos. El informe de ejemplo es un recurso estático del paquete, generado a partir de un fixture sintético, no de una muestra recibida. Los límites por IP y la cuota de VirusTotal viven en memoria y se reinician con el servicio.
 - **VirusTotal:** con la configuración por defecto, un archivo que VirusTotal no conoce se sube con la clave del servidor, y lo subido puede compartirse con sus clientes de pago. La página lo avisa antes de enviar. `LUPABIN_VIRUSTOTAL_UPLOAD=off` lo desactiva.
 
 ## Datos y veracidad

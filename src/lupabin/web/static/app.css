@@ -100,6 +100,10 @@ main.wrap { padding-top: 24px; padding-bottom: 40px; }
 }
 .panel-head { margin-bottom: 14px; }
 .panel-head p { margin: 0; }
+.example-entry { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.example-entry p { margin: .65rem 0 0; }
+.example-notice { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.example-notice p { margin: .5rem 0 0; }
 
 /* upload */
 .drop {

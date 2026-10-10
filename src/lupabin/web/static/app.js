@@ -11,6 +11,8 @@ const STATUS = { completed: "Análisis completo", partial: "Análisis parcial", 
 let config = { max_bytes: 20 * 1024 * 1024, virustotal: false, upload: false };
 let chosen = null;
 let lastResult = null;
+let reportRequest = null;
+let progressTimer = null;
 let painted = new Set(); // panes already built for the current result (built when opened)
 let shownItems = new Map(); // item id -> { node, entry, lists } for the panes already built
 let shownTopics = []; // { node, entries, counter } for the panes already built
@@ -81,43 +83,111 @@ async function loadConfig() {
     : "Consultar VirusTotal por el SHA-256 del archivo";
 }
 
+function resetReport() {
+  if (reportRequest) reportRequest.abort();
+  reportRequest = null;
+  clearInterval(progressTimer);
+  progressTimer = null;
+  stopFollowing();
+  lastResult = null;
+  challenge_reset();
+  painted = new Set();
+  shownItems = new Map();
+  shownTopics = [];
+  filter = { words: [], level: "all" };
+  $("search").value = "";
+  $("downloads").open = false;
+  $("example-notice").hidden = true;
+  $("vt-status").hidden = true;
+  $("progress-time").textContent = "";
+}
+
+function startReport() {
+  resetReport();
+  reportRequest = new AbortController();
+  show("progress");
+  return reportRequest;
+}
+
+function returnToUpload() {
+  resetReport();
+  $("file").value = "";
+  choose(null);
+  show("upload");
+}
+
+async function showExample() {
+  const request = startReport();
+  $("file").value = "";
+  choose(null);
+  $("progress-text").textContent = "Cargando el informe de ejemplo, sin enviar archivos…";
+  try {
+    const response = await fetch("/static/example.json", { signal: request.signal });
+    if (request !== reportRequest) return;
+    if (!response.ok) throw new Error(`El servidor respondió con el código ${response.status}.`);
+    const data = await response.json();
+    if (request !== reportRequest) return;
+    if (!data || data.example !== "capability-demo" || data.virustotal !== null ||
+        !data.downloads || typeof data.downloads.report !== "string" ||
+        typeof data.downloads.markdown !== "string") {
+      throw new Error("El archivo de ejemplo no tiene el formato esperado.");
+    }
+    lastResult = { data, name: "EJEMPLO SINTÉTICO · capability-demo", file: null, vt: null, example: true };
+    render(data, lastResult.name);
+    show("result");
+  } catch (_) {
+    if (request !== reportRequest) return;
+    resetReport();
+    fail("No se pudo cargar el informe de ejemplo. Vuelve a intentarlo o analiza tu propio archivo.", "No se pudo cargar el ejemplo");
+  }
+}
+
 async function submit(event) {
   event.preventDefault();
   if (!chosen) return;
+  const file = chosen;
+  const request = startReport();
   const vt = config.virustotal && $("vt").checked;
   const upload = vt && config.upload;
   show("progress");
   $("progress-text").textContent = "Enviando el archivo…";
   const started = Date.now();
   const timer = setInterval(() => {
+    if (request !== reportRequest) return;
     const seconds = Math.round((Date.now() - started) / 1000);
     $("progress-time").textContent = `${seconds} s`;
     if (seconds >= 1) $("progress-text").textContent = "Analizando en un contenedor aislado, sin red…";
   }, 500);
+  progressTimer = timer;
   let response;
   let data = null;
   try {
-    const body = await chosen.arrayBuffer();
+    const body = await file.arrayBuffer();
+    if (request !== reportRequest) return;
     response = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body,
+      signal: request.signal,
     });
     data = await response.json().catch(() => null);
   } catch (_) {
+    if (request !== reportRequest) return;
     fail("No se pudo contactar con el servidor. Comprueba la conexión y vuelve a intentarlo.");
     return;
   } finally {
     clearInterval(timer);
-    $("progress-time").textContent = "";
+    if (progressTimer === timer) progressTimer = null;
+    if (request === reportRequest) $("progress-time").textContent = "";
   }
+  if (request !== reportRequest) return;
   if (!response.ok || !data || data.error) {
     fail(data && data.message ? data.message : `El servidor respondió con el código ${response.status}.`);
     return;
   }
   try {
-    lastResult = { data, name: chosen.name, file: chosen, vt: vt ? { state: "loading", upload } : null };
-    render(data, chosen.name); // uses lastResult to paint panes when they open
+    lastResult = { data, name: file.name, file, vt: vt ? { state: "loading", upload } : null };
+    render(data, file.name); // uses lastResult to paint panes when they open
     show("result");
     if (vt) askVirusTotal(upload);
   } catch (error) {
@@ -126,7 +196,8 @@ async function submit(event) {
   }
 }
 
-function fail(message) {
+function fail(message, title = "No se pudo analizar") {
+  $("error-title").textContent = title;
   $("error-text").textContent = message;
   show("error");
 }
@@ -150,10 +221,13 @@ function ghidra_download() {
   if (!lastResult || !lastResult.data.downloads.ghidra) return;
   const raw = atob(lastResult.data.downloads.ghidra);
   const archive = Uint8Array.from(raw, (character) => character.charCodeAt(0));
-  download(archive, `${lastResult.data.sample.sha256}.lupabin-ghidra.zip`, "application/zip");
+  download(archive, `${lastResult.example ? "ejemplo-sintetico-" : ""}${lastResult.data.sample.sha256}.lupabin-ghidra.zip`, "application/zip");
 }
 
 function renderHead(data, name) {
+  $("download-html").disabled = !data.downloads || !data.downloads.html;
+  $("download-html").title = data.downloads && data.downloads.html_error ||
+    "Abre el informe sin conexión, con sus evidencias, citas y límites. No incluye consultas externas posteriores.";
   $("ghidra-download").disabled = !data.downloads || !data.downloads.ghidra;
   $("ghidra-download").title = data.downloads && data.downloads.ghidra_error ||
     "Extrae el ZIP y ejecuta ImportLupaBin.java desde el gestor de scripts de Ghidra. Exige hash y revisión previa.";
@@ -584,13 +658,20 @@ function applyVirusTotal(result, vt) {
 
 async function askVirusTotal(upload) {
   const result = lastResult;
+  const request = reportRequest;
+  if (!result || result.example || !result.file || !request) return;
   try {
+    const body = await result.file.arrayBuffer();
+    if (result !== lastResult || request !== reportRequest) return;
     const response = await fetch(`/api/virustotal?upload=${upload ? "1" : "0"}`, {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
-      body: await result.file.arrayBuffer(),
+      body,
+      signal: request.signal,
     });
+    if (result !== lastResult || request !== reportRequest) return;
     const vt = await response.json().catch(() => null);
+    if (result !== lastResult || request !== reportRequest) return;
     if (!response.ok || !vt || vt.error) {
       virusTotalFailed(result, vt && vt.message ? vt.message : "no se pudo consultar.");
       return;
@@ -803,6 +884,7 @@ function challenge_toggle(open) {
 }
 
 function render(data, name) {
+  $("example-notice").hidden = !(lastResult && lastResult.example);
   challenge_reset();
   painted = new Set();
   renderHead(data, name);
@@ -895,16 +977,10 @@ document.addEventListener("DOMContentLoaded", () => {
     $("tab-vt").scrollIntoView({ block: "start" });
   });
   $("form").addEventListener("submit", submit);
-  $("error-back").addEventListener("click", () => show("upload"));
-  $("again").addEventListener("click", () => {
-    challenge_reset();
-    stopFollowing();
-    lastResult = null;
-    $("vt-status").hidden = true;
-    $("file").value = "";
-    choose(null);
-    show("upload");
-  });
+  $("example-open").addEventListener("click", showExample);
+  $("error-back").addEventListener("click", returnToUpload);
+  $("progress-back").addEventListener("click", returnToUpload);
+  $("again").addEventListener("click", returnToUpload);
   $("search").addEventListener("input", () => setFilter($("search").value, filter.level));
   for (const level of ["all", "observed", "inferred"]) {
     $(`level-${level}`).addEventListener("click", () => setFilter($("search").value, level));
@@ -914,11 +990,15 @@ document.addEventListener("DOMContentLoaded", () => {
   $("ghidra-download").addEventListener("click", () => { closeMenu(); ghidra_download(); });
   $("download-json").addEventListener("click", () => {
     closeMenu();
-    if (lastResult) download(lastResult.data.downloads.report, `${lastResult.data.sample.sha256}.lupabin.json`, "application/json");
+    if (lastResult) download(lastResult.data.downloads.report, `${lastResult.example ? "ejemplo-sintetico-" : ""}${lastResult.data.sample.sha256}.lupabin.json`, "application/json");
   });
   $("download-md").addEventListener("click", () => {
     closeMenu();
-    if (lastResult) download(lastResult.data.downloads.markdown, `${lastResult.data.sample.sha256}.lupabin.md`, "text/markdown");
+    if (lastResult) download(lastResult.data.downloads.markdown, `${lastResult.example ? "ejemplo-sintetico-" : ""}${lastResult.data.sample.sha256}.lupabin.md`, "text/markdown");
+  });
+  $("download-html").addEventListener("click", () => {
+    closeMenu();
+    if (lastResult && lastResult.data.downloads.html) download(lastResult.data.downloads.html, `${lastResult.example ? "ejemplo-sintetico-" : ""}${lastResult.data.sample.sha256}.lupabin.html`, "text/html;charset=utf-8");
   });
   document.querySelector('[role="tablist"]').addEventListener("click", (event) => {
     const tab = event.target.closest('[role="tab"]');

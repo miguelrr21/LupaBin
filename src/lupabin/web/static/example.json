@@ -1,0 +1,1194 @@
+{
+  "report_schema": "0.14.0",
+  "report_digest": "3e295a448a184f154f99f125e5ff5b54c2bf822fb8bc988d7bc604a90b3aad7a",
+  "sample": {
+    "sha256": "3ed27bc7904e3b7d5784e77b631be065179586800c705b2b5910413c9ffe99bf",
+    "md5": "4ecaed1940dc33a214daf404cb0d0e33",
+    "size": 5120,
+    "type": "PE32"
+  },
+  "status": "completed",
+  "made_with": null,
+  "packed_with": null,
+  "main": null,
+  "areas": null,
+  "texts": null,
+  "summary": {
+    "groups": [
+      {
+        "tactic": "Persistencia",
+        "items": [
+          {
+            "id": "X10",
+            "statement": "El código contiene 1 llamada de este tipo: escribir un valor en una clave de arranque automático (Run). Ninguno de los 3.090 binarios benignos medidos contiene un caso.",
+            "techniques": [
+              "T1547.001 (Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder)"
+            ]
+          }
+        ]
+      }
+    ],
+    "warnings": [
+      {
+        "id": null,
+        "text": "Casi todas las capacidades son de una sola llamada. Solo se encadenan llamadas en un caso: abrir una clave Run o Winlogon y llamar a RegSetValueEx, cuando el identificador pasa por una variable local en un camino recto o, solo en x64, en el mismo rango de función de .pdata sin seguirlo. El resto no aparece."
+      }
+    ]
+  },
+  "notes": [
+    "Estructura PE: análisis completo.",
+    "Cadenas: análisis completo.",
+    "Reglas YARA: análisis completo.",
+    "Decodificación: análisis completo.",
+    "Código: análisis completo."
+  ],
+  "items": [
+    {
+      "id": "X1",
+      "rule": "pe.header@1",
+      "topic": "format",
+      "level": "observed",
+      "statement": "El archivo es PE32 (32 bits, máquina x86, 0x014c). Declara el punto de entrada en la RVA 0x00002000 y un tamaño de imagen de 12.288 bytes.",
+      "extras": [],
+      "not_proven": "Son valores declarados por el archivo: no garantizan que Windows lo cargue así ni dicen nada de lo que hace el programa.",
+      "evidence": [
+        "E1"
+      ],
+      "glossary": [
+        "pe.format",
+        "pe.header"
+      ]
+    },
+    {
+      "id": "X2",
+      "rule": "pe.section@1",
+      "topic": "sections",
+      "level": "observed",
+      "statement": "Sección 0 «.idata»: 4.096 bytes en memoria y 4.096 en disco; permisos declarados: lectura.",
+      "extras": [],
+      "not_proven": "El nombre y los permisos son declarados: no demuestran qué contiene la sección ni cómo la usa el programa.",
+      "evidence": [
+        "E2"
+      ],
+      "glossary": [
+        "pe.section",
+        "pe.section.permissions"
+      ]
+    },
+    {
+      "id": "X3",
+      "rule": "pe.section@1",
+      "topic": "sections",
+      "level": "observed",
+      "statement": "Sección 1 «.text»: 512 bytes en memoria y 512 en disco; permisos declarados: lectura, ejecución.",
+      "extras": [],
+      "not_proven": "El nombre y los permisos son declarados: no demuestran qué contiene la sección ni cómo la usa el programa.",
+      "evidence": [
+        "E4"
+      ],
+      "glossary": [
+        "pe.section",
+        "pe.section.permissions"
+      ]
+    },
+    {
+      "id": "X4",
+      "rule": "entropy.value@1",
+      "topic": "entropy",
+      "level": "observed",
+      "statement": "Los 4.096 bytes en disco de la sección «.idata» tienen una entropía de 0,27 bits por byte (el máximo es 8).",
+      "extras": [],
+      "not_proven": "La entropía no demuestra empaquetado ni cifrado: los datos comprimidos legítimos (imágenes, recursos) también la tienen alta.",
+      "evidence": [
+        "E3",
+        "E2"
+      ],
+      "glossary": [
+        "entropy.shannon"
+      ]
+    },
+    {
+      "id": "X5",
+      "rule": "entropy.value@1",
+      "topic": "entropy",
+      "level": "observed",
+      "statement": "Los 512 bytes en disco de la sección «.text» tienen una entropía de 0,49 bits por byte (el máximo es 8).",
+      "extras": [],
+      "not_proven": "La entropía no demuestra empaquetado ni cifrado: los datos comprimidos legítimos (imágenes, recursos) también la tienen alta.",
+      "evidence": [
+        "E5",
+        "E4"
+      ],
+      "glossary": [
+        "entropy.shannon"
+      ]
+    },
+    {
+      "id": "X6",
+      "rule": "imports.dll@1",
+      "topic": "imports",
+      "level": "observed",
+      "statement": "La tabla de imports declara 1 función de «advapi32.dll».",
+      "extras": [
+        {
+          "label": "Funciones",
+          "values": [
+            "RegSetKeyValueW"
+          ]
+        }
+      ],
+      "not_proven": "Un import no demuestra que la función se ejecute ni con qué fin; y un programa puede usar funciones que no aparecen en esta tabla.",
+      "evidence": [
+        "E6"
+      ],
+      "glossary": [
+        "pe.imports"
+      ]
+    },
+    {
+      "id": "X7",
+      "rule": "code.calls@1",
+      "topic": "calls",
+      "level": "observed",
+      "statement": "El código contiene 1 llamada a la función importada «RegSetKeyValueW» de «advapi32.dll».",
+      "extras": [
+        {
+          "label": "Desde (RVA)",
+          "values": [
+            "0x00002016 (directa)"
+          ]
+        }
+      ],
+      "not_proven": "Que el código contenga la llamada no demuestra que se ejecute: depende de condiciones y entradas que el análisis estático no resuelve, y un binario empaquetado solo muestra el código de su desempaquetador.",
+      "evidence": [
+        "E6",
+        "E13"
+      ],
+      "glossary": [
+        "code.import_call",
+        "pe.imports"
+      ]
+    },
+    {
+      "id": "X8",
+      "rule": "code.arguments@1",
+      "topic": "calls",
+      "level": "inferred",
+      "statement": "En 0x00002016 el código llama a «RegSetKeyValueW» con hKey = HKEY_CURRENT_USER, lpSubKey = «Software\\Microsoft\\Windows\\CurrentVersion\\Run», lpValueName = «LupaBinTraining», dwType = 0x1.",
+      "extras": [],
+      "not_proven": "Es una inferencia a partir de las instrucciones que preceden a la llamada en el mismo tramo: no demuestra que la llamada se ejecute, ni descarta que un camino que el recorrido no ve llegue a ella con otros valores.",
+      "evidence": [
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E17"
+      ],
+      "glossary": [
+        "code.call_argument",
+        "code.import_call",
+        "evidence.confidence"
+      ]
+    },
+    {
+      "id": "X9",
+      "rule": "strings.references@1",
+      "topic": "strings",
+      "level": "observed",
+      "statement": "Instrucciones del código recorrido toman la dirección donde empiezan 2 cadenas del archivo: son textos que el código usa, no solo bytes que parecen texto.",
+      "extras": [
+        {
+          "label": "Textos",
+          "values": [
+            "«LupaBinTraining»",
+            "«Software\\Microsoft\\Windows\\CurrentVersion\\Run»"
+          ]
+        }
+      ],
+      "not_proven": "Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni para qué se usa el texto. No aparecen los textos que el código construye o descifra al ejecutarse, ni los que solo alcanza por caminos que el recorrido no ve.",
+      "evidence": [
+        "E18",
+        "E19"
+      ],
+      "glossary": [
+        "code.string_reference",
+        "strings.literal"
+      ]
+    },
+    {
+      "id": "X10",
+      "rule": "capability.run_key_value@1",
+      "topic": "capabilities",
+      "level": "inferred",
+      "statement": "El código contiene 1 llamada de este tipo: escribir un valor en una clave de arranque automático (Run). Ninguno de los 3.090 binarios benignos medidos contiene un caso.",
+      "extras": [
+        {
+          "label": "Casos",
+          "values": [
+            "0x00002016 RegSetKeyValueW: «HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run», valor «LupaBinTraining» (T1547.001)"
+          ]
+        },
+        {
+          "label": "Técnicas de MITRE ATT&CK con el mismo mecanismo",
+          "values": [
+            "T1547.001 (Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder)"
+          ]
+        }
+      ],
+      "not_proven": "Muchos instaladores y programas legítimos se registran así para arrancar con Windows. Los argumentos son una inferencia a partir de las instrucciones que preceden a cada llamada: que el código la contenga no demuestra que se ejecute, y un binario empaquetado solo muestra el código de su desempaquetador.",
+      "evidence": [
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E17"
+      ],
+      "glossary": [
+        "api.family.registry",
+        "capability.static",
+        "code.call_argument",
+        "code.import_call",
+        "evidence.confidence",
+        "attack.technique",
+        "attack.t1547_001"
+      ]
+    },
+    {
+      "id": "X11",
+      "rule": "strings.summary@1",
+      "topic": "strings",
+      "level": "observed",
+      "statement": "Se extrajeron 4 cadenas ASCII y 2 cadenas UTF-16LE de al menos cuatro caracteres imprimibles.",
+      "extras": [],
+      "not_proven": "Una cadena no demuestra que el programa la use: puede venir de una biblioteca incluida o de datos que nunca se leen.",
+      "evidence": [
+        "E7",
+        "E8",
+        "E9",
+        "E10",
+        "E11",
+        "E12"
+      ],
+      "glossary": [
+        "strings.literal"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "identity",
+      "title": "¿Qué es?",
+      "intro": "El formato del archivo, con qué herramientas se hizo y cómo está organizado.",
+      "topics": [
+        {
+          "id": "format",
+          "title": "Formato y cabecera"
+        },
+        {
+          "id": "toolchain",
+          "title": "Con qué se hizo"
+        },
+        {
+          "id": "dotnet",
+          "title": "Ensamblado .NET"
+        },
+        {
+          "id": "sections",
+          "title": "Secciones"
+        },
+        {
+          "id": "exports",
+          "title": "Funciones que exporta"
+        },
+        {
+          "id": "anomalies",
+          "title": "Anomalías de la estructura"
+        }
+      ]
+    },
+    {
+      "id": "code",
+      "title": "¿Qué contiene su código?",
+      "intro": "Las funciones de Windows que el archivo importa y las que su código llama. Que el código contenga una llamada no demuestra que el programa llegue a hacerla.",
+      "topics": [
+        {
+          "id": "capabilities",
+          "title": "Capacidades reconocidas"
+        },
+        {
+          "id": "dotnet_names",
+          "title": "Lo que nombra el código .NET"
+        },
+        {
+          "id": "main",
+          "title": "La función main y el arranque"
+        },
+        {
+          "id": "calls",
+          "title": "Recorrido y llamadas del código"
+        },
+        {
+          "id": "imports",
+          "title": "Funciones que importa"
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "title": "¿Qué textos y datos lleva?",
+      "intro": "Las cadenas de texto, lo que aparece al decodificar o descomprimir sin ejecutar nada, y lo que indican la entropía y las reglas YARA.",
+      "topics": [
+        {
+          "id": "packing",
+          "title": "Programa empaquetado con UPX"
+        },
+        {
+          "id": "decoded",
+          "title": "Datos decodificados"
+        },
+        {
+          "id": "dotnet_strings",
+          "title": "Textos literales del código .NET"
+        },
+        {
+          "id": "strings",
+          "title": "Cadenas de texto"
+        },
+        {
+          "id": "entropy",
+          "title": "Entropía"
+        },
+        {
+          "id": "yara",
+          "title": "Reglas YARA"
+        },
+        {
+          "id": "other",
+          "title": "Otras afirmaciones"
+        }
+      ]
+    }
+  ],
+  "omitted": 0,
+  "glossary": [
+    {
+      "id": "analysis.coverage",
+      "title": "Cobertura, análisis parcial y limitaciones",
+      "summary": "Cada extractor declara qué pudo revisar: completo, parcial o bloqueado. Un análisis parcial significa que una parte no se revisó, por un límite, un error o un formato no soportado.",
+      "not_proven": "No encontrar algo no demuestra que no esté, ni que la muestra sea segura.",
+      "sources": [
+        {
+          "title": "Cómo trabaja LupaBin: cobertura, estados y abstención",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/metodo.md#cobertura-estados-y-abstención"
+        },
+        {
+          "title": "Contrato de evidencias: regla principal",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/evidence-schema.md#regla-principal-no-inventar-datos"
+        }
+      ]
+    },
+    {
+      "id": "pe.format",
+      "title": "Formato PE (Portable Executable)",
+      "summary": "PE es el formato de los ejecutables y bibliotecas de Windows (.exe, .dll, .sys): una cabecera que describe cómo cargar el archivo, seguida de secciones con código y datos.",
+      "not_proven": "Que un archivo tenga formato PE válido no dice nada sobre lo que hace el programa.",
+      "sources": [
+        {
+          "title": "PE Format",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "pe.header",
+      "title": "Cabecera PE",
+      "summary": "La cabecera PE declara, entre otras cosas, si el archivo es PE32 o PE32+, dónde empieza a ejecutarse (punto de entrada) y cuánto ocupa una vez cargado (SizeOfImage).",
+      "not_proven": "Los valores declarados pueden ser inconsistentes o estar manipulados; su presencia no garantiza que Windows cargue el archivo así.",
+      "sources": [
+        {
+          "title": "PE Format: Optional Header (Image Only)",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-image-only",
+          "document": null
+        },
+        {
+          "title": "PE Format: Machine Types",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#machine-types",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "pe.section",
+      "title": "Sección",
+      "summary": "Una sección es un bloque del PE con nombre (.text, .data, .rsrc…) que el cargador coloca en memoria con unos permisos. Cada una tiene un tamaño en disco y otro en memoria.",
+      "not_proven": "El nombre de una sección no demuestra qué contiene.",
+      "sources": [
+        {
+          "title": "PE Format: Section Table (Section Headers)",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "pe.section.permissions",
+      "title": "Permisos de una sección",
+      "summary": "Cada sección de un PE declara si su contenido podrá leerse, escribirse o ejecutarse como código una vez cargado en memoria.",
+      "not_proven": "Los permisos declarados no demuestran que el programa escriba en esa sección ni que ejecute lo que haya en ella.",
+      "sources": [
+        {
+          "title": "PE Format: Section Flags",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-flags",
+          "document": null
+        },
+        {
+          "title": "Memory Protection Constants",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "entropy.shannon",
+      "title": "Entropía de bytes (Shannon)",
+      "summary": "La entropía mide, de 0 a 8 bits por byte, lo uniforme que es la distribución de valores de los bytes: 0 si todos son iguales y cerca de 8 si los 256 valores aparecen con la misma frecuencia.",
+      "not_proven": "Una entropía alta no demuestra empaquetado, cifrado ni intención maliciosa; una baja tampoco demuestra que no lo haya.",
+      "sources": [
+        {
+          "title": "A Mathematical Theory of Communication (C. E. Shannon, 1948)",
+          "publisher": "Bell System Technical Journal (copia en Harvard)",
+          "url": "https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf",
+          "document": null
+        },
+        {
+          "title": "Obfuscated Files or Information: Software Packing (T1027.002)",
+          "publisher": "MITRE ATT&CK",
+          "url": "https://attack.mitre.org/techniques/T1027/002/",
+          "document": null
+        },
+        {
+          "title": "Cómo trabaja LupaBin: entropía de bytes",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/metodo.md#entropía-de-bytes"
+        }
+      ]
+    },
+    {
+      "id": "pe.imports",
+      "title": "Tabla de imports",
+      "summary": "La tabla de imports enumera las DLL y las funciones de otras bibliotecas que el programa pide al cargador de Windows que resuelva al arrancar (enlace en tiempo de carga).",
+      "not_proven": "Un import no demuestra que la función se ejecute ni con qué fin; su ausencia no demuestra que no se use.",
+      "sources": [
+        {
+          "title": "PE Format: The .idata Section",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-idata-section",
+          "document": null
+        },
+        {
+          "title": "Load-Time Dynamic Linking",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/dlls/load-time-dynamic-linking",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "code.import_call",
+      "title": "Llamada a una función importada",
+      "summary": "Una instrucción del código que llama a una función de otra DLL a través de su casilla en la tabla de direcciones de import (IAT), donde el cargador escribe la dirección real de la función.",
+      "not_proven": "Que el código contenga una llamada no demuestra que se ejecute ni con qué fin; que no aparezca no demuestra que el programa no llame a la función.",
+      "sources": [
+        {
+          "title": "Importing function calls using __declspec(dllimport)",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/cpp/build/importing-function-calls-using-declspec-dllimport",
+          "document": null
+        },
+        {
+          "title": "PE Format: Import Address Table",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-address-table",
+          "document": null
+        },
+        {
+          "title": "x64 exception handling",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "code.call_argument",
+      "title": "Argumento constante de una llamada",
+      "summary": "Un valor fijo que el código prepara justo antes de llamar a una función importada: una clave predefinida del registro, un número o la dirección de una cadena que está en el propio archivo.",
+      "not_proven": "Es una inferencia: no demuestra que la llamada se ejecute, ni que otro camino que el recorrido no ve no llegue a ella con otros valores, ni cuál es la clave que se abre de verdad (una clave predefinida puede redirigirse con RegOverridePredefKey). Que un argumento no aparezca no significa que no tenga valor.",
+      "sources": [
+        {
+          "title": "x64 calling convention: Parameter passing",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#parameter-passing",
+          "document": null
+        },
+        {
+          "title": "x64 calling convention: Caller/callee saved registers",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#callercallee-saved-registers",
+          "document": null
+        },
+        {
+          "title": "__stdcall",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/cpp/cpp/stdcall",
+          "document": null
+        },
+        {
+          "title": "Predefined Keys",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys",
+          "document": null
+        },
+        {
+          "title": "RegOpenKeyExW function (winreg.h)",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "evidence.confidence",
+      "title": "Observado frente a inferido",
+      "summary": "LupaBin separa lo que se lee directamente de los bytes (observed, observado) de lo que se obtiene aplicando a esos bytes un método exacto, como una transformación o una regla del recorrido del código (inferred, inferido).",
+      "not_proven": null,
+      "sources": [
+        {
+          "title": "Contrato de evidencias: regla principal",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/evidence-schema.md#regla-principal-no-inventar-datos"
+        },
+        {
+          "title": "Contrato de evidencias: estructura del informe",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/evidence-schema.md#estructura-del-informe"
+        }
+      ]
+    },
+    {
+      "id": "code.string_reference",
+      "title": "Textos que usa el código",
+      "summary": "Una cadena del archivo que una instrucción del código recorrido usa: la instrucción toma la dirección exacta donde empieza la cadena, por ejemplo para pasarla a una función que la muestra.",
+      "not_proven": "Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni para qué se usa. Los textos que el código construye o descifra al ejecutarse no aparecen.",
+      "sources": [
+        {
+          "title": "Cómo trabaja LupaBin: textos que usa el código",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/metodo.md#textos-que-usa-el-código"
+        }
+      ]
+    },
+    {
+      "id": "strings.literal",
+      "title": "Cadenas literales (ASCII y UTF-16LE)",
+      "summary": "Una cadena literal es una secuencia de bytes que forman texto legible dentro del archivo. LupaBin busca texto ASCII imprimible codificado de dos formas: un byte por carácter (ASCII) y dos bytes por carácter (UTF-16LE).",
+      "not_proven": "Una cadena no demuestra que el programa la use: puede venir de una biblioteca incluida, de un mensaje nunca mostrado o de datos de relleno.",
+      "sources": [
+        {
+          "title": "Unicode (Win32)",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/intl/unicode",
+          "document": null
+        },
+        {
+          "title": "RFC 2781: UTF-16, an encoding of ISO 10646",
+          "publisher": "IETF / RFC Editor",
+          "url": "https://www.rfc-editor.org/rfc/rfc2781",
+          "document": null
+        },
+        {
+          "title": "RFC 20: ASCII format for Network Interchange",
+          "publisher": "IETF / RFC Editor",
+          "url": "https://www.rfc-editor.org/rfc/rfc20",
+          "document": null
+        },
+        {
+          "title": "Cómo trabaja LupaBin: cadenas literales",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/metodo.md#cadenas-literales"
+        }
+      ]
+    },
+    {
+      "id": "api.family.registry",
+      "title": "Funciones del registro de Windows",
+      "summary": "Funciones para abrir, crear, leer, escribir y borrar claves y valores del registro de Windows.",
+      "not_proven": "Importar funciones de esta familia no demuestra ningún comportamiento: el 10,6 % de los binarios benignos medidos lo hace.",
+      "sources": [
+        {
+          "title": "RegOpenKeyExA function",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexa",
+          "document": null
+        },
+        {
+          "title": "RegCreateKeyExA function",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexa",
+          "document": null
+        },
+        {
+          "title": "RegSetValueExA function",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regsetvalueexa",
+          "document": null
+        },
+        {
+          "title": "RegQueryValueExA function",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexa",
+          "document": null
+        },
+        {
+          "title": "RegDeleteValueA function",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regdeletevaluea",
+          "document": null
+        }
+      ]
+    },
+    {
+      "id": "capability.static",
+      "title": "Capacidad (en LupaBin)",
+      "summary": "Una frase sobre lo que contiene el código, construida con llamadas a funciones importadas y sus argumentos constantes: por ejemplo, una llamada que crea un servicio con un nombre y un binario concretos.",
+      "not_proven": "Una capacidad no demuestra que el programa haga eso ni con qué intención: depende de que la llamada se ejecute, y muchos programas legítimos contienen las mismas llamadas. Que no aparezca ninguna no demuestra que no las haya.",
+      "sources": [
+        {
+          "title": "Cómo trabaja LupaBin: qué se puede afirmar y qué no",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/metodo.md#qué-se-puede-afirmar-y-qué-no"
+        },
+        {
+          "title": "Cómo trabaja LupaBin: explicaciones, no hechos nuevos",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/metodo.md#explicaciones-no-hechos-nuevos"
+        }
+      ]
+    },
+    {
+      "id": "attack.technique",
+      "title": "MITRE ATT&CK: tácticas y técnicas",
+      "summary": "ATT&CK es una base de conocimiento pública de MITRE sobre el comportamiento de los atacantes. Una táctica es el objetivo (el porqué) y una técnica, la forma de conseguirlo (el cómo).",
+      "not_proven": "Coincidir con una técnica no demuestra intención: muchos programas legítimos usan el mismo mecanismo.",
+      "sources": [
+        {
+          "title": "FAQ",
+          "publisher": "MITRE ATT&CK",
+          "url": "https://attack.mitre.org/resources/faq/",
+          "document": null
+        },
+        {
+          "title": "Cómo trabaja LupaBin: catálogo de capacidades",
+          "publisher": "Proyecto LupaBin",
+          "url": null,
+          "document": "docs/metodo.md#catálogo-de-capacidades"
+        }
+      ]
+    },
+    {
+      "id": "attack.t1547_001",
+      "title": "T1547.001: claves Run del registro y carpeta de inicio",
+      "summary": "Técnica de persistencia de ATT&CK: añadir un programa a una clave Run del registro, o a la carpeta de inicio, para que se ejecute cuando el usuario inicia sesión.",
+      "not_proven": "Muchos instaladores y programas legítimos se registran así para arrancar con Windows.",
+      "sources": [
+        {
+          "title": "Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder",
+          "publisher": "MITRE ATT&CK",
+          "url": "https://attack.mitre.org/techniques/T1547/001/",
+          "document": null
+        },
+        {
+          "title": "Run and RunOnce Registry Keys",
+          "publisher": "Microsoft Learn",
+          "url": "https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys",
+          "document": null
+        }
+      ]
+    }
+  ],
+  "challenge": {
+    "challenge_id": "5aafdc34c6ddb5c246cda4a511fcd1d4c677c58f3e57028912b110be5ca53f2a",
+    "challenge": {
+      "schema_version": "0.1.0",
+      "catalog": "lupabin-challenges-v1",
+      "id": "5aafdc34c6ddb5c246cda4a511fcd1d4c677c58f3e57028912b110be5ca53f2a",
+      "sample_sha256": "3ed27bc7904e3b7d5784e77b631be065179586800c705b2b5910413c9ffe99bf",
+      "report_schema": "0.14.0",
+      "report_digest": "3e295a448a184f154f99f125e5ff5b54c2bf822fb8bc988d7bc604a90b3aad7a",
+      "questions": [
+        {
+          "id": "Q1",
+          "rule": "header",
+          "level": "observed",
+          "prompt": "¿Cuántas secciones declara NumberOfSections en la cabecera E1?",
+          "options": [
+            {
+              "id": "A",
+              "text": "2"
+            },
+            {
+              "id": "B",
+              "text": "3"
+            },
+            {
+              "id": "C",
+              "text": "1"
+            }
+          ],
+          "citations": [
+            {
+              "evidence_id": "E1",
+              "path": "data.number_of_sections",
+              "value": "2"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "rule": "section",
+          "level": "observed",
+          "prompt": "En E2, ¿qué representa SizeOfRawData = 4096?",
+          "options": [
+            {
+              "id": "A",
+              "text": "El tamaño declarado de los datos de la sección en disco."
+            },
+            {
+              "id": "B",
+              "text": "La dirección virtual relativa donde comienza la sección."
+            },
+            {
+              "id": "C",
+              "text": "El tamaño virtual declarado de la sección."
+            }
+          ],
+          "citations": [
+            {
+              "evidence_id": "E2",
+              "path": "data.raw_size",
+              "value": "4096"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "rule": "import",
+          "level": "observed",
+          "prompt": "¿Qué acredita por sí sola la importación E6 (advapi32.dll!RegSetKeyValueW)?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Un símbolo en la tabla de exportaciones."
+            },
+            {
+              "id": "B",
+              "text": "Una entrada en la tabla de importaciones indicada."
+            },
+            {
+              "id": "C",
+              "text": "Una instrucción de llamada localizada en el código."
+            }
+          ],
+          "citations": [
+            {
+              "evidence_id": "E6",
+              "path": "kind",
+              "value": "import"
+            },
+            {
+              "evidence_id": "E6",
+              "path": "data.table",
+              "value": "normal"
+            },
+            {
+              "evidence_id": "E6",
+              "path": "data.dll.text",
+              "value": "advapi32.dll"
+            },
+            {
+              "evidence_id": "E6",
+              "path": "data.dll.raw_hex",
+              "value": "61647661706933322e646c6c"
+            },
+            {
+              "evidence_id": "E6",
+              "path": "data.function.text",
+              "value": "RegSetKeyValueW"
+            },
+            {
+              "evidence_id": "E6",
+              "path": "data.function.raw_hex",
+              "value": "5265675365744b657956616c756557"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "rule": "call",
+          "level": "observed",
+          "prompt": "¿Qué añade la evidencia api_call E13 a la importación que cita?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Una transferencia de llamada reconocida en estático hacia la casilla de ese import."
+            },
+            {
+              "id": "B",
+              "text": "Una entrada adicional en la tabla de exportaciones."
+            },
+            {
+              "id": "C",
+              "text": "Solo el nombre de una cadena, sin relación estática con un import."
+            }
+          ],
+          "citations": [
+            {
+              "evidence_id": "E13",
+              "path": "kind",
+              "value": "api_call"
+            },
+            {
+              "evidence_id": "E13",
+              "path": "data.via",
+              "value": "direct"
+            },
+            {
+              "evidence_id": "E13",
+              "path": "data.raw_hex",
+              "value": "ff1540114000"
+            },
+            {
+              "evidence_id": "E13",
+              "path": "location.offset",
+              "value": "4630"
+            },
+            {
+              "evidence_id": "E13",
+              "path": "location.rva",
+              "value": "8214"
+            },
+            {
+              "evidence_id": "E13",
+              "path": "provenance.evidence_ids",
+              "value": "[\"E6\"]"
+            },
+            {
+              "evidence_id": "E6",
+              "path": "kind",
+              "value": "import"
+            },
+            {
+              "evidence_id": "E6",
+              "path": "data.iat_rva",
+              "value": "4416"
+            }
+          ]
+        },
+        {
+          "id": "Q5",
+          "rule": "string",
+          "level": "observed",
+          "prompt": "¿Cómo se clasifica el texto literal de E7 publicado por el extractor de cadenas?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Conocimiento educativo general, independiente de los bytes de la muestra."
+            },
+            {
+              "id": "B",
+              "text": "Inferencia obtenida al aplicar un algoritmo de decodificación de contenido."
+            },
+            {
+              "id": "C",
+              "text": "Observación de bytes interpretados con la codificación indicada."
+            }
+          ],
+          "citations": [
+            {
+              "evidence_id": "E7",
+              "path": "kind",
+              "value": "string"
+            },
+            {
+              "evidence_id": "E7",
+              "path": "confidence",
+              "value": "observed"
+            },
+            {
+              "evidence_id": "E7",
+              "path": "data.encoding",
+              "value": "ascii"
+            },
+            {
+              "evidence_id": "E7",
+              "path": "data.text",
+              "value": ".idata"
+            },
+            {
+              "evidence_id": "E7",
+              "path": "data.complete",
+              "value": "true"
+            }
+          ]
+        }
+      ],
+      "notice": "Práctica educativa, no examen protegido contra trampas. Las opciones son alternativas del ejercicio, no hechos adicionales del informe. La puntuación mide respuestas, no riesgo de la muestra. Sin LLM ni red; las soluciones web son inspeccionables.",
+      "empty_reason": null
+    },
+    "feedback": [
+      {
+        "question_id": "Q1",
+        "rule": "header",
+        "correct_option": "A",
+        "explanation": "E1 declara NumberOfSections = 2. Se pregunta por el campo, no por contar resultados.",
+        "not_proven": "El número declarado no garantiza que todas las secciones se hayan podido analizar.",
+        "citations": [
+          {
+            "evidence_id": "E1",
+            "path": "data.number_of_sections",
+            "value": "2"
+          }
+        ]
+      },
+      {
+        "question_id": "Q2",
+        "rule": "section",
+        "correct_option": "A",
+        "explanation": "El campo data.raw_size de E2 vale 4096: es SizeOfRawData, un tamaño declarado en disco.",
+        "not_proven": "No demuestra que ese rango esté íntegramente dentro del archivo ni sus permisos efectivos.",
+        "citations": [
+          {
+            "evidence_id": "E2",
+            "path": "data.raw_size",
+            "value": "4096"
+          }
+        ]
+      },
+      {
+        "question_id": "Q3",
+        "rule": "import",
+        "correct_option": "B",
+        "explanation": "E6 es kind=import, tabla normal. Identifica una entrada de importación, no una llamada.",
+        "not_proven": "Una importación no prueba ejecución, intención ni que haya una llamada a ella.",
+        "citations": [
+          {
+            "evidence_id": "E6",
+            "path": "kind",
+            "value": "import"
+          },
+          {
+            "evidence_id": "E6",
+            "path": "data.table",
+            "value": "normal"
+          },
+          {
+            "evidence_id": "E6",
+            "path": "data.dll.text",
+            "value": "advapi32.dll"
+          },
+          {
+            "evidence_id": "E6",
+            "path": "data.dll.raw_hex",
+            "value": "61647661706933322e646c6c"
+          },
+          {
+            "evidence_id": "E6",
+            "path": "data.function.text",
+            "value": "RegSetKeyValueW"
+          },
+          {
+            "evidence_id": "E6",
+            "path": "data.function.raw_hex",
+            "value": "5265675365744b657956616c756557"
+          }
+        ]
+      },
+      {
+        "question_id": "Q4",
+        "rule": "call",
+        "correct_option": "A",
+        "explanation": "E13 localiza bytes de una llamada reconocida por la forma direct y cita su import.",
+        "not_proven": "Reconocer una llamada en estático no demuestra que se ejecute ni con qué intención.",
+        "citations": [
+          {
+            "evidence_id": "E13",
+            "path": "kind",
+            "value": "api_call"
+          },
+          {
+            "evidence_id": "E13",
+            "path": "data.via",
+            "value": "direct"
+          },
+          {
+            "evidence_id": "E13",
+            "path": "data.raw_hex",
+            "value": "ff1540114000"
+          },
+          {
+            "evidence_id": "E13",
+            "path": "location.offset",
+            "value": "4630"
+          },
+          {
+            "evidence_id": "E13",
+            "path": "location.rva",
+            "value": "8214"
+          },
+          {
+            "evidence_id": "E13",
+            "path": "provenance.evidence_ids",
+            "value": "[\"E6\"]"
+          },
+          {
+            "evidence_id": "E6",
+            "path": "kind",
+            "value": "import"
+          },
+          {
+            "evidence_id": "E6",
+            "path": "data.iat_rva",
+            "value": "4416"
+          }
+        ]
+      },
+      {
+        "question_id": "Q5",
+        "rule": "string",
+        "correct_option": "C",
+        "explanation": "E7 es kind=string, confidence=observed, encoding=ascii. Su texto procede de sus bytes.",
+        "not_proven": "Una cadena no demuestra que el código la use. Un prefijo incompleto no es la cadena entera.",
+        "citations": [
+          {
+            "evidence_id": "E7",
+            "path": "kind",
+            "value": "string"
+          },
+          {
+            "evidence_id": "E7",
+            "path": "confidence",
+            "value": "observed"
+          },
+          {
+            "evidence_id": "E7",
+            "path": "data.encoding",
+            "value": "ascii"
+          },
+          {
+            "evidence_id": "E7",
+            "path": "data.text",
+            "value": ".idata"
+          },
+          {
+            "evidence_id": "E7",
+            "path": "data.complete",
+            "value": "true"
+          }
+        ]
+      }
+    ]
+  },
+  "vt_local_context": {
+    "sha256": "3ed27bc7904e3b7d5784e77b631be065179586800c705b2b5910413c9ffe99bf",
+    "method": "exact-technique-id-v1",
+    "catalog": "lupabin-capabilities-v4",
+    "catalog_sha256": "a64172c0cf7df395eec93c944c701076c8bb89a65d92911316d2ef1df2bd7e17",
+    "techniques": {
+      "T1547.001": {
+        "status": "static_match",
+        "statement": "El catálogo local asocia un caso estático a este mismo identificador, con las evidencias citadas. Es una inferencia, no una confirmación del comportamiento observado por VirusTotal.",
+        "evidence": [
+          "E13",
+          "E14",
+          "E15",
+          "E16",
+          "E17"
+        ],
+        "rules": [
+          "capability.run_key_value@1"
+        ],
+        "details": [
+          "0x00002016 RegSetKeyValueW: «HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run», valor «LupaBinTraining»"
+        ],
+        "omitted_details": 0
+      },
+      "T1547.004": {
+        "status": "not_observed",
+        "statement": "No se encontró un caso estático de esta técnica con las reglas y los caminos analizados. Esto no descarta lo que reporta VirusTotal.",
+        "evidence": [],
+        "rules": [],
+        "details": [],
+        "omitted_details": 0
+      },
+      "T1543.003": {
+        "status": "not_observed",
+        "statement": "No se encontró un caso estático de esta técnica con las reglas y los caminos analizados. Esto no descarta lo que reporta VirusTotal.",
+        "evidence": [],
+        "rules": [],
+        "details": [],
+        "omitted_details": 0
+      },
+      "T1059.003": {
+        "status": "not_observed",
+        "statement": "No se encontró un caso estático de esta técnica con las reglas y los caminos analizados. Esto no descarta lo que reporta VirusTotal.",
+        "evidence": [],
+        "rules": [],
+        "details": [],
+        "omitted_details": 0
+      },
+      "T1059.001": {
+        "status": "not_observed",
+        "statement": "No se encontró un caso estático de esta técnica con las reglas y los caminos analizados. Esto no descarta lo que reporta VirusTotal.",
+        "evidence": [],
+        "rules": [],
+        "details": [],
+        "omitted_details": 0
+      },
+      "T1105": {
+        "status": "not_observed",
+        "statement": "No se encontró un caso estático de esta técnica con las reglas y los caminos analizados. Esto no descarta lo que reporta VirusTotal.",
+        "evidence": [],
+        "rules": [],
+        "details": [],
+        "omitted_details": 0
+      }
+    }
+  },
+  "virustotal": null,
+  "absence": "Recuerda: que algo no aparezca no demuestra que no esté. Solo significa que los métodos de LupaBin no lo encontraron en las partes que pudieron revisar.",
+  "downloads": {
+    "report": "{\n  \"schema_version\": \"0.14.0\",\n  \"analysis\": {\n    \"version\": \"0.14.0\",\n    \"started_at\": \"2026-10-10T10:07:28.540215Z\",\n    \"finished_at\": \"2026-10-10T10:07:29.312538Z\",\n    \"status\": \"completed\",\n    \"limits\": {\n      \"yara\": {\n        \"rules\": 32,\n        \"source_bytes\": 16384,\n        \"total_source_bytes\": 262144,\n        \"manifest_bytes\": 65536,\n        \"patterns_per_rule\": 8,\n        \"scan_seconds\": 5,\n        \"process_seconds\": 10,\n        \"matches\": 32,\n        \"instances\": 16,\n        \"capture_bytes\": 256,\n        \"output_bytes\": 1048576,\n        \"stderr_bytes\": 65536\n      },\n      \"decode\": {\n        \"strings\": 2000,\n        \"xor\": 256,\n        \"xor_examined\": 200000,\n        \"seconds\": 10\n      },\n      \"code\": {\n        \"instructions\": 8000000,\n        \"entries\": 262144,\n        \"call_sites\": 1048576,\n        \"seconds\": 15,\n        \"calls\": 4096,\n        \"arguments\": 4096,\n        \"argument_instructions\": 65536\n      },\n      \"input_bytes\": 20971520,\n      \"timeout_seconds\": 30,\n      \"memory_bytes\": 536870912,\n      \"cpus\": 1,\n      \"pids\": 64,\n      \"output_bytes\": 8388608,\n      \"imports\": 10000,\n      \"sections\": 96,\n      \"import_descriptors\": 4096,\n      \"exports\": 5000,\n      \"export_names\": 10000,\n      \"strings\": 5000,\n      \"string_characters\": 1024,\n      \"anomalies\": 128,\n      \"entropy_bytes\": 20971520\n    }\n  },\n  \"sample\": {\n    \"sha256\": \"3ed27bc7904e3b7d5784e77b631be065179586800c705b2b5910413c9ffe99bf\",\n    \"md5\": \"4ecaed1940dc33a214daf404cb0d0e33\",\n    \"size\": 5120,\n    \"type\": \"PE32\"\n  },\n  \"evidence\": [\n    {\n      \"id\": \"E1\",\n      \"source\": \"pe\",\n      \"component\": \"headers\",\n      \"location\": {\n        \"offset\": 128,\n        \"rva\": null,\n        \"length\": 248,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"pe_header\",\n      \"data\": {\n        \"machine\": 332,\n        \"number_of_sections\": 2,\n        \"timestamp_raw\": 0,\n        \"characteristics\": 258,\n        \"optional_magic\": 267,\n        \"image_base\": 4194304,\n        \"entry_point_rva\": 8192,\n        \"section_alignment\": 4096,\n        \"file_alignment\": 512,\n        \"size_of_image\": 12288,\n        \"size_of_headers\": 512\n      }\n    },\n    {\n      \"id\": \"E2\",\n      \"source\": \"pe\",\n      \"component\": \"sections\",\n      \"location\": {\n        \"offset\": 376,\n        \"rva\": null,\n        \"length\": 40,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"section\",\n      \"data\": {\n        \"index\": 0,\n        \"name_raw_hex\": \"2e69646174610000\",\n        \"name_text\": \".idata\",\n        \"rva\": 4096,\n        \"virtual_size\": 4096,\n        \"raw_offset\": 512,\n        \"raw_size\": 4096,\n        \"characteristics\": 1073741888,\n        \"raw_status\": \"present\",\n        \"permissions\": [\n          \"read\"\n        ]\n      }\n    },\n    {\n      \"id\": \"E3\",\n      \"source\": \"pe\",\n      \"component\": \"entropy\",\n      \"location\": {\n        \"offset\": 512,\n        \"rva\": null,\n        \"length\": 4096,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E2\"\n        ]\n      },\n      \"kind\": \"entropy\",\n      \"data\": {\n        \"method\": \"shannon-byte-v1\",\n        \"byte_count\": 4096,\n        \"bits_per_byte\": 0.273292\n      }\n    },\n    {\n      \"id\": \"E4\",\n      \"source\": \"pe\",\n      \"component\": \"sections\",\n      \"location\": {\n        \"offset\": 416,\n        \"rva\": null,\n        \"length\": 40,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"section\",\n      \"data\": {\n        \"index\": 1,\n        \"name_raw_hex\": \"2e74657874000000\",\n        \"name_text\": \".text\",\n        \"rva\": 8192,\n        \"virtual_size\": 512,\n        \"raw_offset\": 4608,\n        \"raw_size\": 512,\n        \"characteristics\": 1610612768,\n        \"raw_status\": \"present\",\n        \"permissions\": [\n          \"read\",\n          \"execute\"\n        ]\n      }\n    },\n    {\n      \"id\": \"E5\",\n      \"source\": \"pe\",\n      \"component\": \"entropy\",\n      \"location\": {\n        \"offset\": 4608,\n        \"rva\": null,\n        \"length\": 512,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E4\"\n        ]\n      },\n      \"kind\": \"entropy\",\n      \"data\": {\n        \"method\": \"shannon-byte-v1\",\n        \"byte_count\": 512,\n        \"bits_per_byte\": 0.490432\n      }\n    },\n    {\n      \"id\": \"E6\",\n      \"source\": \"pe\",\n      \"component\": \"imports_normal\",\n      \"location\": {\n        \"offset\": 800,\n        \"rva\": 4384,\n        \"length\": 4,\n        \"section\": {\n          \"raw_hex\": \"2e6964617461\",\n          \"text\": \".idata\"\n        }\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"import\",\n      \"data\": {\n        \"dll\": {\n          \"raw_hex\": \"61647661706933322e646c6c\",\n          \"text\": \"advapi32.dll\"\n        },\n        \"function\": {\n          \"raw_hex\": \"5265675365744b657956616c756557\",\n          \"text\": \"RegSetKeyValueW\"\n        },\n        \"ordinal\": null,\n        \"table\": \"normal\",\n        \"iat_rva\": 4416\n      }\n    },\n    {\n      \"id\": \"E7\",\n      \"source\": \"strings\",\n      \"component\": \"ascii\",\n      \"location\": {\n        \"offset\": 376,\n        \"rva\": null,\n        \"length\": 6,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"string\",\n      \"data\": {\n        \"encoding\": \"ascii\",\n        \"repertoire\": \"ascii-printable-v1\",\n        \"text\": \".idata\",\n        \"raw_hex\": \"2e6964617461\",\n        \"characters\": 6,\n        \"complete\": true,\n        \"total_characters\": 6\n      }\n    },\n    {\n      \"id\": \"E8\",\n      \"source\": \"strings\",\n      \"component\": \"ascii\",\n      \"location\": {\n        \"offset\": 415,\n        \"rva\": null,\n        \"length\": 6,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"string\",\n      \"data\": {\n        \"encoding\": \"ascii\",\n        \"repertoire\": \"ascii-printable-v1\",\n        \"text\": \"@.text\",\n        \"raw_hex\": \"402e74657874\",\n        \"characters\": 6,\n        \"complete\": true,\n        \"total_characters\": 6\n      }\n    },\n    {\n      \"id\": \"E9\",\n      \"source\": \"strings\",\n      \"component\": \"ascii\",\n      \"location\": {\n        \"offset\": 768,\n        \"rva\": null,\n        \"length\": 12,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"string\",\n      \"data\": {\n        \"encoding\": \"ascii\",\n        \"repertoire\": \"ascii-printable-v1\",\n        \"text\": \"advapi32.dll\",\n        \"raw_hex\": \"61647661706933322e646c6c\",\n        \"characters\": 12,\n        \"complete\": true,\n        \"total_characters\": 12\n      }\n    },\n    {\n      \"id\": \"E10\",\n      \"source\": \"strings\",\n      \"component\": \"ascii\",\n      \"location\": {\n        \"offset\": 866,\n        \"rva\": null,\n        \"length\": 15,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"string\",\n      \"data\": {\n        \"encoding\": \"ascii\",\n        \"repertoire\": \"ascii-printable-v1\",\n        \"text\": \"RegSetKeyValueW\",\n        \"raw_hex\": \"5265675365744b657956616c756557\",\n        \"characters\": 15,\n        \"complete\": true,\n        \"total_characters\": 15\n      }\n    },\n    {\n      \"id\": \"E11\",\n      \"source\": \"strings\",\n      \"component\": \"utf16le\",\n      \"location\": {\n        \"offset\": 3072,\n        \"rva\": null,\n        \"length\": 30,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"string\",\n      \"data\": {\n        \"encoding\": \"utf-16-le\",\n        \"repertoire\": \"ascii-printable-v1\",\n        \"text\": \"LupaBinTraining\",\n        \"raw_hex\": \"4c00750070006100420069006e0054007200610069006e0069006e006700\",\n        \"characters\": 15,\n        \"complete\": true,\n        \"total_characters\": 15\n      }\n    },\n    {\n      \"id\": \"E12\",\n      \"source\": \"strings\",\n      \"component\": \"utf16le\",\n      \"location\": {\n        \"offset\": 3104,\n        \"rva\": null,\n        \"length\": 90,\n        \"section\": null\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": []\n      },\n      \"kind\": \"string\",\n      \"data\": {\n        \"encoding\": \"utf-16-le\",\n        \"repertoire\": \"ascii-printable-v1\",\n        \"text\": \"Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run\",\n        \"raw_hex\": \"53006f006600740077006100720065005c004d006900630072006f0073006f00660074005c00570069006e0064006f00770073005c00430075007200720065006e007400560065007200730069006f006e005c00520075006e00\",\n        \"characters\": 45,\n        \"complete\": true,\n        \"total_characters\": 45\n      }\n    },\n    {\n      \"id\": \"E13\",\n      \"source\": \"code\",\n      \"component\": \"api_calls\",\n      \"kind\": \"api_call\",\n      \"location\": {\n        \"offset\": 4630,\n        \"rva\": 8214,\n        \"length\": 6,\n        \"section\": {\n          \"raw_hex\": \"2e74657874\",\n          \"text\": \".text\"\n        }\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E6\"\n        ]\n      },\n      \"data\": {\n        \"via\": \"direct\",\n        \"raw_hex\": \"ff1540114000\",\n        \"helper\": null\n      }\n    },\n    {\n      \"id\": \"E14\",\n      \"source\": \"code\",\n      \"component\": \"call_arguments\",\n      \"kind\": \"call_argument\",\n      \"location\": {\n        \"offset\": 4625,\n        \"rva\": 8209,\n        \"length\": 5,\n        \"section\": {\n          \"raw_hex\": \"2e74657874\",\n          \"text\": \".text\"\n        }\n      },\n      \"confidence\": \"inferred\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E13\"\n        ]\n      },\n      \"data\": {\n        \"catalog\": \"lupabin-api-semantics-v4\",\n        \"method\": \"block-constant-v1\",\n        \"position\": 0,\n        \"name\": \"hKey\",\n        \"type\": \"hkey\",\n        \"value\": 2147483649,\n        \"raw_hex\": \"6801000080\",\n        \"constant\": \"HKEY_CURRENT_USER\",\n        \"string\": null,\n        \"source\": null\n      }\n    },\n    {\n      \"id\": \"E15\",\n      \"source\": \"code\",\n      \"component\": \"call_arguments\",\n      \"kind\": \"call_argument\",\n      \"location\": {\n        \"offset\": 4620,\n        \"rva\": 8204,\n        \"length\": 5,\n        \"section\": {\n          \"raw_hex\": \"2e74657874\",\n          \"text\": \".text\"\n        }\n      },\n      \"confidence\": \"inferred\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E13\"\n        ]\n      },\n      \"data\": {\n        \"catalog\": \"lupabin-api-semantics-v4\",\n        \"method\": \"block-constant-v1\",\n        \"position\": 1,\n        \"name\": \"lpSubKey\",\n        \"type\": \"string\",\n        \"value\": 4200992,\n        \"raw_hex\": \"68201a4000\",\n        \"constant\": null,\n        \"string\": {\n          \"offset\": 3104,\n          \"rva\": 6688,\n          \"raw_hex\": \"53006f006600740077006100720065005c004d006900630072006f0073006f00660074005c00570069006e0064006f00770073005c00430075007200720065006e007400560065007200730069006f006e005c00520075006e000000\",\n          \"text\": \"Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run\"\n        },\n        \"source\": null\n      }\n    },\n    {\n      \"id\": \"E16\",\n      \"source\": \"code\",\n      \"component\": \"call_arguments\",\n      \"kind\": \"call_argument\",\n      \"location\": {\n        \"offset\": 4615,\n        \"rva\": 8199,\n        \"length\": 5,\n        \"section\": {\n          \"raw_hex\": \"2e74657874\",\n          \"text\": \".text\"\n        }\n      },\n      \"confidence\": \"inferred\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E13\"\n        ]\n      },\n      \"data\": {\n        \"catalog\": \"lupabin-api-semantics-v4\",\n        \"method\": \"block-constant-v1\",\n        \"position\": 2,\n        \"name\": \"lpValueName\",\n        \"type\": \"string\",\n        \"value\": 4200960,\n        \"raw_hex\": \"68001a4000\",\n        \"constant\": null,\n        \"string\": {\n          \"offset\": 3072,\n          \"rva\": 6656,\n          \"raw_hex\": \"4c00750070006100420069006e0054007200610069006e0069006e0067000000\",\n          \"text\": \"LupaBinTraining\"\n        },\n        \"source\": null\n      }\n    },\n    {\n      \"id\": \"E17\",\n      \"source\": \"code\",\n      \"component\": \"call_arguments\",\n      \"kind\": \"call_argument\",\n      \"location\": {\n        \"offset\": 4610,\n        \"rva\": 8194,\n        \"length\": 5,\n        \"section\": {\n          \"raw_hex\": \"2e74657874\",\n          \"text\": \".text\"\n        }\n      },\n      \"confidence\": \"inferred\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E13\"\n        ]\n      },\n      \"data\": {\n        \"catalog\": \"lupabin-api-semantics-v4\",\n        \"method\": \"block-constant-v1\",\n        \"position\": 3,\n        \"name\": \"dwType\",\n        \"type\": \"integer\",\n        \"value\": 1,\n        \"raw_hex\": \"6801000000\",\n        \"constant\": null,\n        \"string\": null,\n        \"source\": null\n      }\n    },\n    {\n      \"id\": \"E18\",\n      \"source\": \"code\",\n      \"component\": \"string_references\",\n      \"kind\": \"string_reference\",\n      \"location\": {\n        \"offset\": 4615,\n        \"rva\": 8199,\n        \"length\": 5,\n        \"section\": {\n          \"raw_hex\": \"2e74657874\",\n          \"text\": \".text\"\n        }\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E11\"\n        ]\n      },\n      \"data\": {\n        \"raw_hex\": \"68001a4000\"\n      }\n    },\n    {\n      \"id\": \"E19\",\n      \"source\": \"code\",\n      \"component\": \"string_references\",\n      \"kind\": \"string_reference\",\n      \"location\": {\n        \"offset\": 4620,\n        \"rva\": 8204,\n        \"length\": 5,\n        \"section\": {\n          \"raw_hex\": \"2e74657874\",\n          \"text\": \".text\"\n        }\n      },\n      \"confidence\": \"observed\",\n      \"provenance\": {\n        \"evidence_ids\": [\n          \"E12\"\n        ]\n      },\n      \"data\": {\n        \"raw_hex\": \"68201a4000\"\n      }\n    }\n  ],\n  \"extractor_runs\": [\n    {\n      \"source\": \"pe\",\n      \"version\": \"2024.8.26\",\n      \"status\": \"completed\",\n      \"components\": [\n        {\n          \"name\": \"headers\",\n          \"status\": \"complete\",\n          \"examined\": 1,\n          \"evidence_count\": 1\n        },\n        {\n          \"name\": \"sections\",\n          \"status\": \"complete\",\n          \"examined\": 2,\n          \"evidence_count\": 2\n        },\n        {\n          \"name\": \"entropy\",\n          \"status\": \"complete\",\n          \"examined\": 4608,\n          \"evidence_count\": 2\n        },\n        {\n          \"name\": \"imports_normal\",\n          \"status\": \"complete\",\n          \"examined\": 1,\n          \"evidence_count\": 1\n        },\n        {\n          \"name\": \"imports_delay\",\n          \"status\": \"complete\",\n          \"examined\": 0,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"exports\",\n          \"status\": \"complete\",\n          \"examined\": 0,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"anomalies\",\n          \"status\": \"complete\",\n          \"examined\": 0,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"toolchain\",\n          \"status\": \"complete\",\n          \"examined\": 6,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"upx\",\n          \"status\": \"complete\",\n          \"examined\": 0,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"dotnet\",\n          \"status\": \"complete\",\n          \"examined\": 0,\n          \"evidence_count\": 0\n        }\n      ],\n      \"evidence_count\": 6\n    },\n    {\n      \"source\": \"strings\",\n      \"version\": \"ascii-printable-v1\",\n      \"status\": \"completed\",\n      \"components\": [\n        {\n          \"name\": \"ascii\",\n          \"status\": \"complete\",\n          \"examined\": 4,\n          \"evidence_count\": 4\n        },\n        {\n          \"name\": \"utf16le\",\n          \"status\": \"complete\",\n          \"examined\": 2,\n          \"evidence_count\": 2\n        }\n      ],\n      \"evidence_count\": 6\n    },\n    {\n      \"source\": \"yara\",\n      \"version\": \"lupabin-yara-v1\",\n      \"status\": \"completed\",\n      \"components\": [\n        {\n          \"name\": \"yara_rules\",\n          \"status\": \"complete\",\n          \"examined\": 4,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"yara_scan\",\n          \"status\": \"complete\",\n          \"examined\": 4,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"yara_evidence\",\n          \"status\": \"complete\",\n          \"examined\": 0,\n          \"evidence_count\": 0\n        }\n      ],\n      \"evidence_count\": 0\n    },\n    {\n      \"source\": \"decode\",\n      \"version\": \"lupabin-decode-v1\",\n      \"status\": \"completed\",\n      \"components\": [\n        {\n          \"name\": \"decode_strings\",\n          \"status\": \"complete\",\n          \"examined\": 6,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"decode_xor\",\n          \"status\": \"complete\",\n          \"examined\": 24,\n          \"evidence_count\": 0\n        }\n      ],\n      \"evidence_count\": 0\n    },\n    {\n      \"source\": \"code\",\n      \"version\": \"lupabin-code-v1\",\n      \"status\": \"completed\",\n      \"components\": [\n        {\n          \"name\": \"disassembly\",\n          \"status\": \"complete\",\n          \"examined\": 8,\n          \"evidence_count\": 0\n        },\n        {\n          \"name\": \"api_calls\",\n          \"status\": \"complete\",\n          \"examined\": 1,\n          \"evidence_count\": 1\n        },\n        {\n          \"name\": \"call_arguments\",\n          \"status\": \"complete\",\n          \"examined\": 1,\n          \"evidence_count\": 4\n        },\n        {\n          \"name\": \"string_references\",\n          \"status\": \"complete\",\n          \"examined\": 4,\n          \"evidence_count\": 2\n        },\n        {\n          \"name\": \"main_function\",\n          \"status\": \"complete\",\n          \"examined\": 0,\n          \"evidence_count\": 0\n        }\n      ],\n      \"evidence_count\": 7\n    }\n  ],\n  \"yara_context\": {\n    \"catalog\": {\n      \"format_version\": \"1\",\n      \"catalog_id\": \"lupabin_builtin\",\n      \"revision\": \"1.0.0\",\n      \"manifest_sha256\": \"b5a97bd42736205627767642cd48571fac036073a9a9160177486914161cc67c\",\n      \"ruleset_sha256\": \"67ec41785ae991070bcc73d3dfa910bcd4007cfbe8ff47d32bc5dbaf645d099a\",\n      \"rules\": [\n        {\n          \"rule_id\": \"lupabin_debug_marker_pair\",\n          \"namespace\": \"lupabin_debug_marker_pair\",\n          \"filename\": \"lupabin_debug_marker_pair.yar\",\n          \"revision\": \"1.0.0\",\n          \"pattern_ids\": [\n            \"$signature\",\n            \"$extension\"\n          ],\n          \"description\": \"Presencia de RSDS y .pdb; no acredita una ruta PDB ni una estructura de depuración válida.\",\n          \"license\": \"Apache-2.0\",\n          \"source_sha256\": \"13b9f82b312ac2b8d8bb7030ed68baf086fa86d94e963eb8d7048121c8d4e5ac\"\n        },\n        {\n          \"rule_id\": \"lupabin_dos_stub_text\",\n          \"namespace\": \"lupabin_dos_stub_text\",\n          \"filename\": \"lupabin_dos_stub_text.yar\",\n          \"revision\": \"1.0.0\",\n          \"pattern_ids\": [\n            \"$stub\"\n          ],\n          \"description\": \"Presencia literal del mensaje habitual del stub DOS; no demuestra por sí sola el formato PE.\",\n          \"license\": \"Apache-2.0\",\n          \"source_sha256\": \"65a004441ca8f93d269631bc2a2fe88a6da014d419f90dbe77f462d10b10b804\"\n        },\n        {\n          \"rule_id\": \"lupabin_process_memory_api_names\",\n          \"namespace\": \"lupabin_process_memory_api_names\",\n          \"filename\": \"lupabin_process_memory_api_names.yar\",\n          \"revision\": \"1.0.0\",\n          \"pattern_ids\": [\n            \"$allocate\",\n            \"$write\",\n            \"$thread\"\n          ],\n          \"description\": \"Presencia conjunta de tres nombres de APIs; no demuestra imports, llamadas ni inyección.\",\n          \"license\": \"Apache-2.0\",\n          \"source_sha256\": \"73b81007c0022463629d8b8539a8931e13bd05e69adca8b09d60f5a0ca9342b6\"\n        },\n        {\n          \"rule_id\": \"lupabin_training_marker\",\n          \"namespace\": \"lupabin_training_marker\",\n          \"filename\": \"lupabin_training_marker.yar\",\n          \"revision\": \"1.0.0\",\n          \"pattern_ids\": [\n            \"$marker\"\n          ],\n          \"description\": \"Presencia del marcador de práctica LUPABIN PRACTICE; no identifica una familia.\",\n          \"license\": \"Apache-2.0\",\n          \"source_sha256\": \"42240cfd692c564ba81bbd60a261a2b133c5640079ca0fcc823581ef3f87341e\"\n        }\n      ]\n    },\n    \"package_version\": \"4.5.4\",\n    \"module_version\": \"4.5.4\"\n  },\n  \"extractor_errors\": [],\n  \"limitations\": []\n}",
+    "markdown": "# LupaBin: informe didáctico\n\nAnálisis estático: la muestra no se ejecutó.\n\n- **SHA-256**: `3ed27bc7904e3b7d5784e77b631be065179586800c705b2b5910413c9ffe99bf`\n- **MD5** (solo como referencia; admite colisiones): `4ecaed1940dc33a214daf404cb0d0e33`\n- **Tamaño**: 5120 bytes · **tipo**: PE32\n- **Análisis**: completo\n- **Origen**: EJEMPLO SINTÉTICO: informe preparado offline con el fixture inofensivo capability\\-demo, sin ejecutar sus bytes\\. No procede de un análisis del worker web\\. El informe se validó y se contrastó con los bytes del fixture; sus explicaciones se regeneraron desde las citas\\. No se subió ningún archivo ni se consultó VirusTotal\\.\n\n## Resumen: qué contiene el código\n\nCapacidades reconocidas a partir de las llamadas del código y de sus argumentos constantes\\. Que el código las contenga no demuestra que el programa las use, ni con qué intención; el detalle y el límite de cada una están en la sección 3\\.\n\n### Persistencia\n\n- **X10**: El código contiene `1` `llamada` de este tipo: escribir un valor en una clave de arranque automático (Run). Ninguno de los 3.090 binarios benignos medidos contiene un caso.\n  - Técnicas de MITRE ATT&CK con el mismo mecanismo: T1547\\.001 \\(Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder\\)\n\n- Casi todas las capacidades son de una sola llamada\\. Solo se encadenan llamadas en un caso: abrir una clave Run o Winlogon y llamar a RegSetValueEx, cuando el identificador pasa por una variable local en un camino recto o, solo en x64, en el mismo rango de función de \\.pdata sin seguirlo\\. El resto no aparece\\.\n\n## 1. Qué se pudo analizar\n\n- Estructura PE: análisis completo\\.\n- Cadenas: análisis completo\\.\n- Reglas YARA: análisis completo\\.\n- Decodificación: análisis completo\\.\n- Código: análisis completo\\.\n\n## 2. Hechos observados en los bytes\n\n- **X1**: El archivo es `PE32` (`32` bits, máquina `x86, 0x014c`). Declara el punto de entrada en la RVA `0x00002000` y un tamaño de imagen de `12.288` bytes.\n  - Límite: Son valores declarados por el archivo: no garantizan que Windows lo cargue así ni dicen nada de lo que hace el programa\\.\n  - Evidencia: E1 · Glosario: pe\\.format, pe\\.header\n- **X2**: Sección `0` `.idata`: `4.096` bytes en memoria y `4.096` en disco; permisos declarados: `lectura`.\n  - Evidencia: E2\n- **X3**: Sección `1` `.text`: `512` bytes en memoria y `512` en disco; permisos declarados: `lectura, ejecución`.\n  - Evidencia: E4\n- *Límite de X2 a X3*: El nombre y los permisos son declarados: no demuestran qué contiene la sección ni cómo la usa el programa\\. Glosario: pe\\.section, pe\\.section\\.permissions\n- **X4**: Los `4.096` bytes en disco de la sección `.idata` tienen una entropía de `0,27` bits por byte (el máximo es 8).\n  - Evidencia: E3, E2\n- **X5**: Los `512` bytes en disco de la sección `.text` tienen una entropía de `0,49` bits por byte (el máximo es 8).\n  - Evidencia: E5, E4\n- *Límite de X4 a X5*: La entropía no demuestra empaquetado ni cifrado: los datos comprimidos legítimos \\(imágenes, recursos\\) también la tienen alta\\. Glosario: entropy\\.shannon\n- **X6**: La `tabla de imports` declara `1` `función` de `advapi32.dll`.\n  - Funciones: `RegSetKeyValueW`\n  - Límite: Un import no demuestra que la función se ejecute ni con qué fin; y un programa puede usar funciones que no aparecen en esta tabla\\.\n  - Evidencia: E6 · Glosario: pe\\.imports\n- **X7**: El código contiene `1` `llamada` a la función importada `RegSetKeyValueW` de `advapi32.dll`.\n  - Desde (RVA): `0x00002016 (directa)`\n  - Límite: Que el código contenga la llamada no demuestra que se ejecute: depende de condiciones y entradas que el análisis estático no resuelve, y un binario empaquetado solo muestra el código de su desempaquetador\\.\n  - Evidencia: E6, E13 · Glosario: code\\.import\\_call, pe\\.imports\n- **X9**: Instrucciones del código recorrido toman la dirección donde empiezan `2` `cadenas` del archivo: son textos que el código usa, no solo bytes que parecen texto.\n  - Textos: `«LupaBinTraining», «Software\\Microsoft\\Windows\\CurrentVersion\\Run»`\n  - Límite: Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni para qué se usa el texto\\. No aparecen los textos que el código construye o descifra al ejecutarse, ni los que solo alcanza por caminos que el recorrido no ve\\.\n  - Evidencia: E18, E19 · Glosario: code\\.string\\_reference, strings\\.literal\n- **X11**: Se extrajeron `4` cadenas ASCII y `2` cadenas UTF-16LE de al menos cuatro caracteres imprimibles.\n  - Límite: Una cadena no demuestra que el programa la use: puede venir de una biblioteca incluida o de datos que nunca se leen\\.\n  - Evidencia: E7, E8, E9, E10, E11, E12 · Glosario: strings\\.literal\n\n## 3. Inferencias: resultados de aplicar un método a los bytes, no lecturas directas\n\n- **X8**: En `0x00002016` el código llama a `RegSetKeyValueW` con `hKey = HKEY_CURRENT_USER, lpSubKey = «Software\\Microsoft\\Windows\\CurrentVersion\\Run», lpValueName = «LupaBinTraining», dwType = 0x1`.\n  - Límite: Es una inferencia a partir de las instrucciones que preceden a la llamada en el mismo tramo: no demuestra que la llamada se ejecute, ni descarta que un camino que el recorrido no ve llegue a ella con otros valores\\.\n  - Evidencia: E13, E14, E15, E16, E17 · Glosario: code\\.call\\_argument, code\\.import\\_call, evidence\\.confidence\n- **X10**: El código contiene `1` `llamada` de este tipo: escribir un valor en una clave de arranque automático (Run). Ninguno de los 3.090 binarios benignos medidos contiene un caso.\n  - Casos: `0x00002016 RegSetKeyValueW: «HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run», valor «LupaBinTraining» (T1547.001)`\n  - Técnicas de MITRE ATT&CK con el mismo mecanismo: `T1547.001 (Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder)`\n  - Límite: Muchos instaladores y programas legítimos se registran así para arrancar con Windows\\. Los argumentos son una inferencia a partir de las instrucciones que preceden a cada llamada: que el código la contenga no demuestra que se ejecute, y un binario empaquetado solo muestra el código de su desempaquetador\\.\n  - Evidencia: E13, E14, E15, E16, E17 · Glosario: api\\.family\\.registry, capability\\.static, code\\.call\\_argument, code\\.import\\_call, evidence\\.confidence, attack\\.technique, attack\\.t1547\\_001\n\n## 4. Glosario de los términos usados\n\n### Cobertura, análisis parcial y limitaciones\n\nCada extractor declara qué pudo revisar: completo, parcial o bloqueado\\. Un análisis parcial significa que una parte no se revisó, por un límite, un error o un formato no soportado\\.\n\nUn resultado vacío con cobertura completa significa que se buscó y no se encontró nada con ese método\\. Un resultado vacío con cobertura parcial o bloqueada no significa nada: esa parte no se revisó\\.\n\nLas limitaciones \\(por ejemplo, alcanzar el máximo de cadenas o que el archivo no sea PE\\) se muestran siempre antes que los hallazgos, porque cambian lo que se puede concluir\\.\n\n**Límite**: No encontrar algo no demuestra que no esté, ni que la muestra sea segura\\.\n\n- Cómo trabaja LupaBin: cobertura, estados y abstención (Proyecto LupaBin): `docs/metodo.md#cobertura-estados-y-abstención`\n- Contrato de evidencias: regla principal (Proyecto LupaBin): `docs/evidence-schema.md#regla-principal-no-inventar-datos`\n\n### Formato PE \\(Portable Executable\\)\n\nPE es el formato de los ejecutables y bibliotecas de Windows \\(\\.exe, \\.dll, \\.sys\\): una cabecera que describe cómo cargar el archivo, seguida de secciones con código y datos\\.\n\nUn archivo PE empieza con un pequeño programa MS\\-DOS \\(el stub\\), que al ejecutarse en MS\\-DOS imprime el mensaje «This program cannot be run in DOS mode»\\. Detrás van la firma PE, la cabecera COFF, la cabecera opcional y la tabla de secciones\\.\n\nEl nombre «Portable» indica que el formato no depende de una arquitectura concreta: el mismo esquema sirve para x86, x64 y ARM\\.\n\nLupaBin lee estas estructuras como datos\\. Nunca carga ni ejecuta el archivo\\.\n\n**Límite**: Que un archivo tenga formato PE válido no dice nada sobre lo que hace el programa\\.\n\n- PE Format (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format>\n\n### Cabecera PE\n\nLa cabecera PE declara, entre otras cosas, si el archivo es PE32 o PE32\\+, dónde empieza a ejecutarse \\(punto de entrada\\) y cuánto ocupa una vez cargado \\(SizeOfImage\\)\\.\n\nEl campo Magic de la cabecera opcional distingue PE32 \\(0x10b, imágenes de 32 bits\\) de PE32\\+ \\(0x20b, imágenes de 64 bits\\)\\.\n\nEl campo Machine de la cabecera COFF indica la arquitectura para la que se compiló: por ejemplo 0x14c \\(x86\\), 0x8664 \\(x64\\) o 0xaa64 \\(ARM64\\)\\.\n\nAddressOfEntryPoint es la dirección del punto de entrada, relativa a la base de la imagen \\(RVA\\): en un programa es donde empieza la ejecución; en una DLL es opcional y puede ser cero\\.\n\nSizeOfImage es el tamaño en bytes de la imagen cargada en memoria, incluidas las cabeceras, y debe ser múltiplo de SectionAlignment\\.\n\nSon valores declarados por el archivo\\. LupaBin los lee y los contrasta entre sí, pero no simula el cargador de Windows\\.\n\n**Límite**: Los valores declarados pueden ser inconsistentes o estar manipulados; su presencia no garantiza que Windows cargue el archivo así\\.\n\n- PE Format: Optional Header \\(Image Only\\) (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-image-only>\n- PE Format: Machine Types (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#machine-types>\n\n### Sección\n\nUna sección es un bloque del PE con nombre \\(\\.text, \\.data, \\.rsrc…\\) que el cargador coloca en memoria con unos permisos\\. Cada una tiene un tamaño en disco y otro en memoria\\.\n\nLa tabla de secciones indica para cada sección su dirección relativa en memoria \\(VirtualAddress\\), su tamaño en memoria \\(VirtualSize\\), dónde están sus bytes en el archivo \\(PointerToRawData\\) y cuántos hay \\(SizeOfRawData\\)\\.\n\nSi VirtualSize es mayor que SizeOfRawData, el resto de la sección se rellena con ceros al cargarla\\. Una sección solo con datos sin inicializar puede no tener bytes en disco\\.\n\nLos nombres de sección son convenciones del compilador o del enlazador, no una garantía de contenido: «\\.text» suele contener código, pero nada obliga a ello\\.\n\n**Límite**: El nombre de una sección no demuestra qué contiene\\.\n\n- PE Format: Section Table \\(Section Headers\\) (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers>\n\n### Permisos de una sección\n\nCada sección de un PE declara si su contenido podrá leerse, escribirse o ejecutarse como código una vez cargado en memoria\\.\n\nEl campo Characteristics de la cabecera de cada sección incluye tres indicadores de memoria: IMAGE\\_SCN\\_MEM\\_READ \\(la sección se puede leer\\), IMAGE\\_SCN\\_MEM\\_WRITE \\(se puede escribir\\) e IMAGE\\_SCN\\_MEM\\_EXECUTE \\(se puede ejecutar como código\\)\\. El cargador de Windows los usa para fijar la protección de las páginas donde coloca la sección\\.\n\nLo habitual es que el código esté en una sección de lectura y ejecución, y los datos en secciones de lectura, o de lectura y escritura\\. Una sección que declara escritura y ejecución a la vez es menos común: la usan algunos empaquetadores y programas que generan código en tiempo de ejecución, pero también compiladores y enlazadores antiguos o poco convencionales\\.\n\n**Límite**: Los permisos declarados no demuestran que el programa escriba en esa sección ni que ejecute lo que haya en ella\\.\n\n- PE Format: Section Flags (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-flags>\n- Memory Protection Constants (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants>\n\n### Entropía de bytes \\(Shannon\\)\n\nLa entropía mide, de 0 a 8 bits por byte, lo uniforme que es la distribución de valores de los bytes: 0 si todos son iguales y cerca de 8 si los 256 valores aparecen con la misma frecuencia\\.\n\nLupaBin calcula H = −Σ p·log2\\(p\\) sobre los bytes en disco de cada sección, donde p es la frecuencia de cada uno de los 256 valores posibles\\. Es la medida de información definida por Claude Shannon en 1948, aplicada a bytes\\.\n\nEl texto y el código máquina suelen quedar muy por debajo de 8\\. Los datos comprimidos o cifrados se acercan a 8, porque sus bytes son casi uniformes\\. Por eso la entropía alta es un indicio que se mira al buscar empaquetado \\(programas comprimidos o cifrados que se descomprimen al ejecutarse\\)\\.\n\nPero muchos datos legítimos también tienen entropía alta: imágenes, recursos comprimidos, certificados o tablas precalculadas\\. Y una sección pequeña da una medida poco fiable, porque hay pocos bytes para estimar las frecuencias\\.\n\n**Límite**: Una entropía alta no demuestra empaquetado, cifrado ni intención maliciosa; una baja tampoco demuestra que no lo haya\\.\n\n- A Mathematical Theory of Communication \\(C\\. E\\. Shannon, 1948\\) (Bell System Technical Journal \\(copia en Harvard\\)): <https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf>\n- Obfuscated Files or Information: Software Packing \\(T1027\\.002\\) (MITRE ATT&CK): <https://attack.mitre.org/techniques/T1027/002/>\n- Cómo trabaja LupaBin: entropía de bytes (Proyecto LupaBin): `docs/metodo.md#entropía-de-bytes`\n\n### Tabla de imports\n\nLa tabla de imports enumera las DLL y las funciones de otras bibliotecas que el programa pide al cargador de Windows que resuelva al arrancar \\(enlace en tiempo de carga\\)\\.\n\nPara cada DLL, la tabla contiene una lista de funciones, por nombre o por número \\(ordinal\\)\\. El cargador busca cada una y escribe su dirección en la tabla de direcciones de import \\(IAT\\), a través de la cual llama el programa\\.\n\nUn import indica que el programa se enlazó contra esa función\\. No indica cuántas veces se llama, si se llama alguna vez, ni para qué: muchos imports vienen del compilador o de bibliotecas que el programa incluye sin usarlas\\.\n\nLo contrario tampoco se cumple: un programa puede obtener funciones en tiempo de ejecución sin que aparezcan en esta tabla \\(ver enlace dinámico en tiempo de ejecución\\)\\.\n\n**Límite**: Un import no demuestra que la función se ejecute ni con qué fin; su ausencia no demuestra que no se use\\.\n\n- PE Format: The \\.idata Section (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-idata-section>\n- Load\\-Time Dynamic Linking (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/dlls/load-time-dynamic-linking>\n\n### Llamada a una función importada\n\nUna instrucción del código que llama a una función de otra DLL a través de su casilla en la tabla de direcciones de import \\(IAT\\), donde el cargador escribe la dirección real de la función\\.\n\nEl compilador genera estas llamadas de cuatro formas habituales, que LupaBin reconoce por sus bytes: directa \\(\\`call \\[casilla\\]\\`\\), a través de un pequeño trampolín o thunk \\(un \\`call\\` a una instrucción \\`jmp \\[casilla\\]\\`\\), por registro \\(\\`mov registro, \\[casilla\\]\\` justo antes de \\`call registro\\`\\) y en cola \\(un \\`jmp \\[casilla\\]\\` al final de una función, que deja que la función importada vuelva directamente a quien la llamó\\)\\. Cualquier otra forma no se reconoce\\.\n\nLupaBin recorre el código sin ejecutarlo\\. Parte del punto de entrada, de los exports, de los callbacks TLS y, en x64, de las funciones que declara la tabla de excepciones \\(\\`\\.pdata\\`\\), y sigue los saltos y llamadas cuyo destino es una constante, además de las tablas de \\`switch\\` acotadas que se pueden comprobar\\. El resto del código al que solo se llega por saltos indirectos no se recorre\\.\n\nEl análisis estático puede afirmar que el código contiene la llamada, no que se ejecute: eso depende de condiciones, entradas y del entorno\\. Un binario empaquetado o cifrado solo muestra el código de su desempaquetador hasta que se ejecuta\\.\n\n**Límite**: Que el código contenga una llamada no demuestra que se ejecute ni con qué fin; que no aparezca no demuestra que el programa no llame a la función\\.\n\n- Importing function calls using \\_\\_declspec\\(dllimport\\) (Microsoft Learn): <https://learn.microsoft.com/en-us/cpp/build/importing-function-calls-using-declspec-dllimport>\n- PE Format: Import Address Table (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-address-table>\n- x64 exception handling (Microsoft Learn): <https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64>\n\n### Argumento constante de una llamada\n\nUn valor fijo que el código prepara justo antes de llamar a una función importada: una clave predefinida del registro, un número o la dirección de una cadena que está en el propio archivo\\.\n\nEn x64, los cuatro primeros argumentos enteros o punteros van en los registros \\`RCX\\`, \\`RDX\\`, \\`R8\\` y \\`R9\\`, en ese orden, y esos registros se pierden en cada llamada\\. En x86, las funciones de la API de Win32 usan \\`\\_\\_stdcall\\`: los argumentos se apilan de derecha a izquierda, así que el último \\`push\\` antes de la llamada es el primer argumento\\.\n\nLupaBin recorre hacia delante el tramo de código que termina en la llamada, sin ejecutarlo\\. Solo acepta un valor si una instrucción de forma fija \\(\\`lea\\` relativo a \\`rip\\`, \\`mov\\` con un inmediato, \\`xor\\` de un registro consigo mismo o \\`push\\` de un inmediato\\) lo pone en su sitio y nada lo cambia después\\. Si otro camino puede entrar en medio del tramo, empieza de nuevo desde ahí\\. Además, el valor tiene que ser del tipo que la documentación de la función da al parámetro: por ejemplo, una de las claves predefinidas que lista para \\`hKey\\`\\.\n\nSolo se interpretan las funciones y los parámetros de un catálogo revisado contra Microsoft Learn\\. Una cadena solo se muestra si está en una sección del archivo que no se puede escribir, porque el programa podría cambiar una escribible antes de la llamada\\.\n\n**Límite**: Es una inferencia: no demuestra que la llamada se ejecute, ni que otro camino que el recorrido no ve no llegue a ella con otros valores, ni cuál es la clave que se abre de verdad \\(una clave predefinida puede redirigirse con RegOverridePredefKey\\)\\. Que un argumento no aparezca no significa que no tenga valor\\.\n\n- x64 calling convention: Parameter passing (Microsoft Learn): <https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#parameter-passing>\n- x64 calling convention: Caller/callee saved registers (Microsoft Learn): <https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#callercallee-saved-registers>\n- \\_\\_stdcall (Microsoft Learn): <https://learn.microsoft.com/en-us/cpp/cpp/stdcall>\n- Predefined Keys (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys>\n- RegOpenKeyExW function \\(winreg\\.h\\) (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw>\n\n### Observado frente a inferido\n\nLupaBin separa lo que se lee directamente de los bytes \\(observed, observado\\) de lo que se obtiene aplicando a esos bytes un método exacto, como una transformación o una regla del recorrido del código \\(inferred, inferido\\)\\.\n\nUna evidencia observada, como una sección, un import, una cadena o una llamada del código, describe bytes y estructuras tal como están en el archivo\\. Una evidencia inferida depende además de un método\\. Una decodificación afirma que unos bytes, transformados con un algoritmo y unos parámetros exactos, producen un texto\\. Un argumento constante afirma que una instrucción anterior a la llamada, en el mismo tramo de código, fija ese valor y que el recorrido no vio nada que lo cambie\\. Las dos son reproducibles, pero no significan que el programa haga esa transformación ni que la llamada se ejecute con ese valor\\.\n\nNinguno de los dos niveles es una probabilidad ni una puntuación\\. Las explicaciones de LupaBin heredan el nivel más débil de las evidencias que citan\\.\n\n- Contrato de evidencias: regla principal (Proyecto LupaBin): `docs/evidence-schema.md#regla-principal-no-inventar-datos`\n- Contrato de evidencias: estructura del informe (Proyecto LupaBin): `docs/evidence-schema.md#estructura-del-informe`\n\n### Textos que usa el código\n\nUna cadena del archivo que una instrucción del código recorrido usa: la instrucción toma la dirección exacta donde empieza la cadena, por ejemplo para pasarla a una función que la muestra\\.\n\nEl barrido de cadenas encuentra cualquier secuencia de bytes que parece texto, y en un programa normal son cientos: mensajes de bibliotecas, nombres internos, restos de datos\\. Las que interesan suelen ser las que el código usa\\.\n\nLupaBin busca, entre las instrucciones que decodificó el recorrido, las que toman una dirección con una forma conocida \\(lea con una dirección relativa a RIP en x64; push o mov de una dirección de la imagen en x86\\) y comprueba que esa dirección es exactamente el inicio de una cadena publicada, en una sección que no se puede escribir\\. Publica la primera instrucción que usa cada cadena\\.\n\nCuando LupaBin encuentra main, dice también qué textos usa el código alcanzable desde main: en un programa de consola, suelen ser sus mensajes\\.\n\n**Límite**: Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni para qué se usa\\. Los textos que el código construye o descifra al ejecutarse no aparecen\\.\n\n- Cómo trabaja LupaBin: textos que usa el código (Proyecto LupaBin): `docs/metodo.md#textos-que-usa-el-código`\n\n### Cadenas literales \\(ASCII y UTF\\-16LE\\)\n\nUna cadena literal es una secuencia de bytes que forman texto legible dentro del archivo\\. LupaBin busca texto ASCII imprimible codificado de dos formas: un byte por carácter \\(ASCII\\) y dos bytes por carácter \\(UTF\\-16LE\\)\\.\n\nASCII codifica cada carácter con un byte\\. Windows representa internamente el texto Unicode en UTF\\-16, con dos bytes por carácter en el orden little\\-endian \\(primero el byte menos significativo\\): la «A» se guarda como 41 00\\. Por eso muchas cadenas de binarios de Windows aparecen con ceros intercalados\\.\n\nLupaBin conserva el desplazamiento exacto y los bytes de cada cadena, de modo que cualquiera puede comprobarlos\\. Solo reconoce caracteres imprimibles del rango ASCII \\(U\\+0020–U\\+007E\\) y secuencias de al menos cuatro caracteres\\. No recupera texto en otros alfabetos, cadenas cifradas ni cadenas que el programa construye en memoria\\.\n\nUna cadena es un dato, no una instrucción ni una acción: que aparezca una URL o una ruta no significa que el programa se conecte a ella o cree ese archivo\\.\n\n**Límite**: Una cadena no demuestra que el programa la use: puede venir de una biblioteca incluida, de un mensaje nunca mostrado o de datos de relleno\\.\n\n- Unicode \\(Win32\\) (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/intl/unicode>\n- RFC 2781: UTF\\-16, an encoding of ISO 10646 (IETF / RFC Editor): <https://www.rfc-editor.org/rfc/rfc2781>\n- RFC 20: ASCII format for Network Interchange (IETF / RFC Editor): <https://www.rfc-editor.org/rfc/rfc20>\n- Cómo trabaja LupaBin: cadenas literales (Proyecto LupaBin): `docs/metodo.md#cadenas-literales`\n\n### Funciones del registro de Windows\n\nFunciones para abrir, crear, leer, escribir y borrar claves y valores del registro de Windows\\.\n\nEl registro guarda la configuración de Windows y de los programas, así que estas funciones son habituales\\. También se usan para la persistencia \\(arrancar con el sistema\\) o para cambiar configuraciones\\.\n\nMedición del 2026\\-09\\-23 sobre 55\\.035 binarios PE benignos \\(System32, Program Files y Program Files \\(x86\\)\\): el 10,6 % importa por nombre al menos una función de esta familia\\.\n\nLa familia es una lista curada y versionada de nombres exactos \\(lupabin\\-api\\-families\\-v1\\)\\. LupaBin solo dice que un nombre importado está en la lista; no interpreta el uso\\.\n\n**Límite**: Importar funciones de esta familia no demuestra ningún comportamiento: el 10,6 % de los binarios benignos medidos lo hace\\.\n\n- RegOpenKeyExA function (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexa>\n- RegCreateKeyExA function (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexa>\n- RegSetValueExA function (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regsetvalueexa>\n- RegQueryValueExA function (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexa>\n- RegDeleteValueA function (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regdeletevaluea>\n\n### Capacidad \\(en LupaBin\\)\n\nUna frase sobre lo que contiene el código, construida con llamadas a funciones importadas y sus argumentos constantes: por ejemplo, una llamada que crea un servicio con un nombre y un binario concretos\\.\n\nLupaBin reúne las llamadas y los argumentos que el informe ya verifica y comprueba si cumplen la condición de una capacidad de su catálogo versionado \\(lupabin\\-capabilities\\-v4\\)\\. Cada capacidad cita todas las llamadas del informe que la cumplen, con todos sus argumentos publicados, y se vuelve a derivar al validar la explicación\\. Es una inferencia, porque los argumentos lo son\\.\n\nLa condición es estricta a propósito: si falta un argumento que hace falta, o un valor no es uno de los documentados, LupaBin no reconoce la capacidad antes que arriesgarse a una frase falsa\\. Tampoco afirma lo que no sabe: si no conoce la raíz de una clave del registro o el proceso de destino, lo dice\\.\n\nCasi todas las capacidades son de una sola llamada\\. Solo se encadenan llamadas al abrir una clave Run o Winlogon y escribir en ella con RegSetValueEx: cuando el identificador de la clave pasa por una variable local en un camino recto o, solo en x64, cuando las dos llamadas están en el mismo rango de función que declara \\.pdata; en ese caso no se sabe si la escritura usa la clave abierta\\. Otras combinaciones de llamadas no se reconocen\\.\n\n**Límite**: Una capacidad no demuestra que el programa haga eso ni con qué intención: depende de que la llamada se ejecute, y muchos programas legítimos contienen las mismas llamadas\\. Que no aparezca ninguna no demuestra que no las haya\\.\n\n- Cómo trabaja LupaBin: qué se puede afirmar y qué no (Proyecto LupaBin): `docs/metodo.md#qué-se-puede-afirmar-y-qué-no`\n- Cómo trabaja LupaBin: explicaciones, no hechos nuevos (Proyecto LupaBin): `docs/metodo.md#explicaciones-no-hechos-nuevos`\n\n### MITRE ATT&CK: tácticas y técnicas\n\nATT&CK es una base de conocimiento pública de MITRE sobre el comportamiento de los atacantes\\. Una táctica es el objetivo \\(el porqué\\) y una técnica, la forma de conseguirlo \\(el cómo\\)\\.\n\nCada técnica tiene un identificador, como T1547\\.001, y una página con su definición, ejemplos y formas de detectarla\\. Las subtécnicas llevan un punto y tres cifras\\.\n\nLupaBin solo asocia una técnica a una capacidad cuando el mecanismo del caso coincide con la definición de la técnica: escribir un valor en una clave Run es T1547\\.001\\. No la asocia por parecido\\. Abrir esa clave para escribir no escribe nada; la memoria ejecutable y escribible no es, por sí sola, inyección de código; y lanzar rundll32 no es, por sí solo, su abuso para ejecutar código de forma encubierta\\.\n\nLas técnicas describen lo que hacen los atacantes, pero los mismos mecanismos los usan a diario programas legítimos\\.\n\n**Límite**: Coincidir con una técnica no demuestra intención: muchos programas legítimos usan el mismo mecanismo\\.\n\n- FAQ (MITRE ATT&CK): <https://attack.mitre.org/resources/faq/>\n- Cómo trabaja LupaBin: catálogo de capacidades (Proyecto LupaBin): `docs/metodo.md#catálogo-de-capacidades`\n\n### T1547\\.001: claves Run del registro y carpeta de inicio\n\nTécnica de persistencia de ATT&CK: añadir un programa a una clave Run del registro, o a la carpeta de inicio, para que se ejecute cuando el usuario inicia sesión\\.\n\nWindows ejecuta en cada inicio de sesión las órdenes guardadas como valores en las claves Run, y una sola vez las de RunOnce, tanto las del usuario \\(HKEY\\_CURRENT\\_USER\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run\\) como las del equipo \\(HKEY\\_LOCAL\\_MACHINE\\\\…\\)\\. ATT&CK lista además RunServices, RunServicesOnce y Policies\\\\Explorer\\\\Run\\.\n\nLupaBin asocia esta técnica solo a una llamada que escribe un valor en una de esas claves \\(RegSetKeyValue\\)\\. Abrir la clave con permiso para escribir no escribe nada, así que no se asocia\\.\n\n**Límite**: Muchos instaladores y programas legítimos se registran así para arrancar con Windows\\.\n\n- Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder (MITRE ATT&CK): <https://attack.mitre.org/techniques/T1547/001/>\n- Run and RunOnce Registry Keys (Microsoft Learn): <https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys>\n\nRecuerda: que algo no aparezca no demuestra que no esté\\. Solo significa que los métodos de LupaBin no lo encontraron en las partes que pudieron revisar\\.\n",
+    "html": "<!doctype html>\n<html lang=\"es\"><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;; style-src &#x27;sha256-SPCImYkd8uR/fBkYdh0G2mN/1EHyAE4j5tf6cbU8Xfw=&#x27;; script-src &#x27;none&#x27;; connect-src &#x27;none&#x27;\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>LupaBin: informe didáctico</title><style>\n:root { color-scheme: light; font-family: system-ui, sans-serif; line-height: 1.6; }\nbody { max-width: 78rem; margin: auto; padding: 1.5rem; color: #182536; background: #fff; }\na { color: #174f93; text-decoration: underline; }\nnav ul { display: flex; flex-wrap: wrap; gap: 1.5rem; list-style: none; padding: 0; }\nsection { margin-block: 2rem; }\narticle, details { border: 1px solid #b8c5d4; border-radius: .3rem; padding: 1rem;\n  margin-block: 1rem; }\nsummary { cursor: pointer; font-weight: bold; }\nh1, h2, h3, h4 { line-height: 1.3; }\npre { white-space: pre-wrap; font-size: .85rem; }\np, li, dd, pre, td, th, h3, summary { overflow-wrap: anywhere; }\ndt { font-weight: bold; }\ndd { margin: 0 0 .6rem 1rem; }\ntable { border-collapse: collapse; width: 100%; }\nth, td { border: 1px solid #b8c5d4; text-align: left; padding: .4rem; }\n.limit { border-left: .25rem solid #8a5b00; padding-left: .75rem; }\n:target { outline: 2px solid #174f93; outline-offset: .2rem; }\n@media print {\n  body { max-width: none; padding: 0; color: #000; font-size: 10pt; }\n  nav { display: none; }\n  a { color: inherit; }\n  h1, h2, h3, h4, summary { break-after: avoid; }\n  pre { font-size: 8pt; }\n}\n</style></head><body><header><h1>LupaBin: informe didáctico</h1><p>Análisis estático: LupaBin no ejecuta la muestra al analizarla ni al exportar este informe.</p>\n<dl><dt>Origen</dt><dd>EJEMPLO SINTÉTICO: informe preparado offline con el fixture inofensivo capability-demo, sin ejecutar sus bytes. No procede de un análisis del worker web. El informe se validó y se contrastó con los bytes del fixture; sus explicaciones se regeneraron desde las citas. No se subió ningún archivo ni se consultó VirusTotal.</dd>\n<dt>SHA-256</dt><dd>3ed27bc7904e3b7d5784e77b631be065179586800c705b2b5910413c9ffe99bf</dd>\n<dt>MD5 (solo como referencia; admite colisiones)</dt><dd>4ecaed1940dc33a214daf404cb0d0e33</dd>\n<dt>Tamaño</dt><dd>5120 bytes</dd>\n<dt>Tipo</dt><dd>PE32</dd>\n<dt>Análisis</dt><dd>completo</dd>\n<dt>Contrato del informe</dt><dd>0.14.0</dd>\n<dt>Versión del analizador</dt><dd>0.14.0</dd>\n<dt>Inicio del análisis</dt><dd>2026-10-10T10:07:28.540215+00:00</dd>\n<dt>Fin del análisis</dt><dd>2026-10-10T10:07:29.312538+00:00</dd>\n<dt>Contrato de explicaciones</dt><dd>0.1.0</dd>\n<dt>Glosario</dt><dd>lupabin_glossary · 1.14.0</dd>\n<dt>Digest del glosario</dt><dd>deeab36675d307043ecc30e2e2790be14724026beaef20fc9fb19c35b7678abb</dd>\n</dl><p>Este HTML es una representación del informe; no es una firma de autenticidad.</p>\n</header><nav aria-label=\"Índice\"><ul><li><a href=\"#overview\">Resumen</a></li><li><a href=\"#coverage\">Cobertura</a></li><li><a href=\"#observed\">Hechos observados</a></li><li><a href=\"#inferred\">Inferencias</a></li><li><a href=\"#glossary\">Glosario</a></li><li><a href=\"#external\">Fuente externa</a></li><li><a href=\"#evidence\">Evidencias</a></li></ul></nav><main><section id=\"overview\"><h2>Resumen: qué contiene el código</h2><p>Capacidades reconocidas a partir de las llamadas del código y de sus argumentos constantes. Que el código las contenga no demuestra que el programa las use, ni con qué intención; el detalle y el límite de cada una están en la sección 3.</p>\n<h3>Persistencia</h3><ul><li><a href=\"#item-X10\">X10</a>: El código contiene 1 llamada de este tipo: escribir un valor en una clave de arranque automático (Run). Ninguno de los 3.090 binarios benignos medidos contiene un caso.</li><li>Técnicas de MITRE ATT&amp;CK con el mismo mecanismo: T1547.001 (Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder)</li></ul><p>Casi todas las capacidades son de una sola llamada. Solo se encadenan llamadas en un caso: abrir una clave Run o Winlogon y llamar a RegSetValueEx, cuando el identificador pasa por una variable local en un camino recto o, solo en x64, en el mismo rango de función de .pdata sin seguirlo. El resto no aparece.</p>\n</section><section id=\"coverage\"><h2>1. Qué se pudo analizar</h2><p>Estructura PE: análisis completo.</p>\n<p>Glosario: <a href=\"#glossary-analysis.coverage\">analysis.coverage</a></p>\n<p>Cadenas: análisis completo.</p>\n<p>Glosario: <a href=\"#glossary-analysis.coverage\">analysis.coverage</a></p>\n<p>Reglas YARA: análisis completo.</p>\n<p>Glosario: <a href=\"#glossary-analysis.coverage\">analysis.coverage</a></p>\n<p>Decodificación: análisis completo.</p>\n<p>Glosario: <a href=\"#glossary-analysis.coverage\">analysis.coverage</a></p>\n<p>Código: análisis completo.</p>\n<p>Glosario: <a href=\"#glossary-analysis.coverage\">analysis.coverage</a></p>\n<table><caption>Cobertura por extractor y componente</caption><thead><tr><th scope=\"col\">Extractor · versión</th><th scope=\"col\">Componente</th><th scope=\"col\">Cobertura</th><th scope=\"col\">Examinados</th><th scope=\"col\">Evidencias</th></tr></thead><tbody><tr><td>pe · 2024.8.26</td><td>headers</td><td>complete</td><td>1</td><td>1</td></tr><tr><td>pe · 2024.8.26</td><td>sections</td><td>complete</td><td>2</td><td>2</td></tr><tr><td>pe · 2024.8.26</td><td>entropy</td><td>complete</td><td>4608</td><td>2</td></tr><tr><td>pe · 2024.8.26</td><td>imports_normal</td><td>complete</td><td>1</td><td>1</td></tr><tr><td>pe · 2024.8.26</td><td>imports_delay</td><td>complete</td><td>0</td><td>0</td></tr><tr><td>pe · 2024.8.26</td><td>exports</td><td>complete</td><td>0</td><td>0</td></tr><tr><td>pe · 2024.8.26</td><td>anomalies</td><td>complete</td><td>0</td><td>0</td></tr><tr><td>pe · 2024.8.26</td><td>toolchain</td><td>complete</td><td>6</td><td>0</td></tr><tr><td>pe · 2024.8.26</td><td>upx</td><td>complete</td><td>0</td><td>0</td></tr><tr><td>pe · 2024.8.26</td><td>dotnet</td><td>complete</td><td>0</td><td>0</td></tr><tr><td>strings · ascii-printable-v1</td><td>ascii</td><td>complete</td><td>4</td><td>4</td></tr><tr><td>strings · ascii-printable-v1</td><td>utf16le</td><td>complete</td><td>2</td><td>2</td></tr><tr><td>yara · lupabin-yara-v1</td><td>yara_rules</td><td>complete</td><td>4</td><td>0</td></tr><tr><td>yara · lupabin-yara-v1</td><td>yara_scan</td><td>complete</td><td>4</td><td>0</td></tr><tr><td>yara · lupabin-yara-v1</td><td>yara_evidence</td><td>complete</td><td>0</td><td>0</td></tr><tr><td>decode · lupabin-decode-v1</td><td>decode_strings</td><td>complete</td><td>6</td><td>0</td></tr><tr><td>decode · lupabin-decode-v1</td><td>decode_xor</td><td>complete</td><td>24</td><td>0</td></tr><tr><td>code · lupabin-code-v1</td><td>disassembly</td><td>complete</td><td>8</td><td>0</td></tr><tr><td>code · lupabin-code-v1</td><td>api_calls</td><td>complete</td><td>1</td><td>1</td></tr><tr><td>code · lupabin-code-v1</td><td>call_arguments</td><td>complete</td><td>1</td><td>4</td></tr><tr><td>code · lupabin-code-v1</td><td>string_references</td><td>complete</td><td>4</td><td>2</td></tr><tr><td>code · lupabin-code-v1</td><td>main_function</td><td>complete</td><td>0</td><td>0</td></tr></tbody></table><h3>Errores de extracción</h3><p>Ninguna registrada; no demuestra ausencia de otros límites.</p>\n<h3>Limitaciones registradas</h3><p>Ninguna registrada; no demuestra ausencia de otros límites.</p>\n<details open><summary>Presupuestos del análisis</summary><pre>{&quot;yara&quot;: {&quot;rules&quot;: 32, &quot;source_bytes&quot;: 16384, &quot;total_source_bytes&quot;: 262144, &quot;manifest_bytes&quot;: 65536, &quot;patterns_per_rule&quot;: 8, &quot;scan_seconds&quot;: 5, &quot;process_seconds&quot;: 10, &quot;matches&quot;: 32, &quot;instances&quot;: 16, &quot;capture_bytes&quot;: 256, &quot;output_bytes&quot;: 1048576, &quot;stderr_bytes&quot;: 65536}, &quot;decode&quot;: {&quot;strings&quot;: 2000, &quot;xor&quot;: 256, &quot;xor_examined&quot;: 200000, &quot;seconds&quot;: 10}, &quot;code&quot;: {&quot;instructions&quot;: 8000000, &quot;entries&quot;: 262144, &quot;call_sites&quot;: 1048576, &quot;seconds&quot;: 15, &quot;calls&quot;: 4096, &quot;arguments&quot;: 4096, &quot;argument_instructions&quot;: 65536}, &quot;input_bytes&quot;: 20971520, &quot;timeout_seconds&quot;: 30, &quot;memory_bytes&quot;: 536870912, &quot;cpus&quot;: 1, &quot;pids&quot;: 64, &quot;output_bytes&quot;: 8388608, &quot;imports&quot;: 10000, &quot;sections&quot;: 96, &quot;import_descriptors&quot;: 4096, &quot;exports&quot;: 5000, &quot;export_names&quot;: 10000, &quot;strings&quot;: 5000, &quot;string_characters&quot;: 1024, &quot;anomalies&quot;: 128, &quot;entropy_bytes&quot;: 20971520}</pre>\n</details></section>\n<section id=\"observed\"><h2>2. Hechos observados en los bytes</h2><article id=\"item-X1\"><h3>X1 · observed</h3><p>El archivo es PE32 (32 bits, máquina x86, 0x014c). Declara el punto de entrada en la RVA 0x00002000 y un tamaño de imagen de 12.288 bytes.</p>\n<dl><dt>Regla</dt><dd>pe.header@1</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> Son valores declarados por el archivo: no garantizan que Windows lo cargue así ni dicen nada de lo que hace el programa.</p><p>Evidencia: <a href=\"#evidence-E1\">E1</a></p>\n<p>Glosario: <a href=\"#glossary-pe.format\">pe.format</a>, <a href=\"#glossary-pe.header\">pe.header</a></p>\n</article>\n<article id=\"item-X2\"><h3>X2 · observed</h3><p>Sección 0 «.idata»: 4.096 bytes en memoria y 4.096 en disco; permisos declarados: lectura.</p>\n<dl><dt>Regla</dt><dd>pe.section@1</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> El nombre y los permisos son declarados: no demuestran qué contiene la sección ni cómo la usa el programa.</p><p>Evidencia: <a href=\"#evidence-E2\">E2</a></p>\n<p>Glosario: <a href=\"#glossary-pe.section\">pe.section</a>, <a href=\"#glossary-pe.section.permissions\">pe.section.permissions</a></p>\n</article>\n<article id=\"item-X3\"><h3>X3 · observed</h3><p>Sección 1 «.text»: 512 bytes en memoria y 512 en disco; permisos declarados: lectura, ejecución.</p>\n<dl><dt>Regla</dt><dd>pe.section@1</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> El nombre y los permisos son declarados: no demuestran qué contiene la sección ni cómo la usa el programa.</p><p>Evidencia: <a href=\"#evidence-E4\">E4</a></p>\n<p>Glosario: <a href=\"#glossary-pe.section\">pe.section</a>, <a href=\"#glossary-pe.section.permissions\">pe.section.permissions</a></p>\n</article>\n<article id=\"item-X4\"><h3>X4 · observed</h3><p>Los 4.096 bytes en disco de la sección «.idata» tienen una entropía de 0,27 bits por byte (el máximo es 8).</p>\n<dl><dt>Regla</dt><dd>entropy.value@1</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> La entropía no demuestra empaquetado ni cifrado: los datos comprimidos legítimos (imágenes, recursos) también la tienen alta.</p><p>Evidencia: <a href=\"#evidence-E3\">E3</a>, <a href=\"#evidence-E2\">E2</a></p>\n<p>Glosario: <a href=\"#glossary-entropy.shannon\">entropy.shannon</a></p>\n</article>\n<article id=\"item-X5\"><h3>X5 · observed</h3><p>Los 512 bytes en disco de la sección «.text» tienen una entropía de 0,49 bits por byte (el máximo es 8).</p>\n<dl><dt>Regla</dt><dd>entropy.value@1</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> La entropía no demuestra empaquetado ni cifrado: los datos comprimidos legítimos (imágenes, recursos) también la tienen alta.</p><p>Evidencia: <a href=\"#evidence-E5\">E5</a>, <a href=\"#evidence-E4\">E4</a></p>\n<p>Glosario: <a href=\"#glossary-entropy.shannon\">entropy.shannon</a></p>\n</article>\n<article id=\"item-X6\"><h3>X6 · observed</h3><p>La tabla de imports declara 1 función de «advapi32.dll».</p>\n<dl><dt>Regla</dt><dd>imports.dll@1</dd>\n<dt>Funciones</dt><dd>RegSetKeyValueW</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> Un import no demuestra que la función se ejecute ni con qué fin; y un programa puede usar funciones que no aparecen en esta tabla.</p><p>Evidencia: <a href=\"#evidence-E6\">E6</a></p>\n<p>Glosario: <a href=\"#glossary-pe.imports\">pe.imports</a></p>\n</article>\n<article id=\"item-X7\"><h3>X7 · observed</h3><p>El código contiene 1 llamada a la función importada «RegSetKeyValueW» de «advapi32.dll».</p>\n<dl><dt>Regla</dt><dd>code.calls@1</dd>\n<dt>Desde (RVA)</dt><dd>0x00002016 (directa)</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> Que el código contenga la llamada no demuestra que se ejecute: depende de condiciones y entradas que el análisis estático no resuelve, y un binario empaquetado solo muestra el código de su desempaquetador.</p><p>Evidencia: <a href=\"#evidence-E6\">E6</a>, <a href=\"#evidence-E13\">E13</a></p>\n<p>Glosario: <a href=\"#glossary-code.import_call\">code.import_call</a>, <a href=\"#glossary-pe.imports\">pe.imports</a></p>\n</article>\n<article id=\"item-X9\"><h3>X9 · observed</h3><p>Instrucciones del código recorrido toman la dirección donde empiezan 2 cadenas del archivo: son textos que el código usa, no solo bytes que parecen texto.</p>\n<dl><dt>Regla</dt><dd>strings.references@1</dd>\n<dt>Textos</dt><dd>«LupaBinTraining», «Software\\Microsoft\\Windows\\CurrentVersion\\Run»</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni para qué se usa el texto. No aparecen los textos que el código construye o descifra al ejecutarse, ni los que solo alcanza por caminos que el recorrido no ve.</p><p>Evidencia: <a href=\"#evidence-E18\">E18</a>, <a href=\"#evidence-E19\">E19</a></p>\n<p>Glosario: <a href=\"#glossary-code.string_reference\">code.string_reference</a>, <a href=\"#glossary-strings.literal\">strings.literal</a></p>\n</article>\n<article id=\"item-X11\"><h3>X11 · observed</h3><p>Se extrajeron 4 cadenas ASCII y 2 cadenas UTF-16LE de al menos cuatro caracteres imprimibles.</p>\n<dl><dt>Regla</dt><dd>strings.summary@1</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> Una cadena no demuestra que el programa la use: puede venir de una biblioteca incluida o de datos que nunca se leen.</p><p>Evidencia: <a href=\"#evidence-E7\">E7</a>, <a href=\"#evidence-E8\">E8</a>, <a href=\"#evidence-E9\">E9</a>, <a href=\"#evidence-E10\">E10</a>, <a href=\"#evidence-E11\">E11</a>, <a href=\"#evidence-E12\">E12</a></p>\n<p>Glosario: <a href=\"#glossary-strings.literal\">strings.literal</a></p>\n</article>\n</section><section id=\"inferred\"><h2>3. Inferencias: resultados de aplicar un método a los bytes, no lecturas directas</h2><article id=\"item-X8\"><h3>X8 · inferred</h3><p>En 0x00002016 el código llama a «RegSetKeyValueW» con hKey = HKEY_CURRENT_USER, lpSubKey = «Software\\Microsoft\\Windows\\CurrentVersion\\Run», lpValueName = «LupaBinTraining», dwType = 0x1.</p>\n<dl><dt>Regla</dt><dd>code.arguments@1</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> Es una inferencia a partir de las instrucciones que preceden a la llamada en el mismo tramo: no demuestra que la llamada se ejecute, ni descarta que un camino que el recorrido no ve llegue a ella con otros valores.</p><p>Evidencia: <a href=\"#evidence-E13\">E13</a>, <a href=\"#evidence-E14\">E14</a>, <a href=\"#evidence-E15\">E15</a>, <a href=\"#evidence-E16\">E16</a>, <a href=\"#evidence-E17\">E17</a></p>\n<p>Glosario: <a href=\"#glossary-code.call_argument\">code.call_argument</a>, <a href=\"#glossary-code.import_call\">code.import_call</a>, <a href=\"#glossary-evidence.confidence\">evidence.confidence</a></p>\n</article>\n<article id=\"item-X10\"><h3>X10 · inferred</h3><p>El código contiene 1 llamada de este tipo: escribir un valor en una clave de arranque automático (Run). Ninguno de los 3.090 binarios benignos medidos contiene un caso.</p>\n<dl><dt>Regla</dt><dd>capability.run_key_value@1</dd>\n<dt>Casos</dt><dd>0x00002016 RegSetKeyValueW: «HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run», valor «LupaBinTraining» (T1547.001)</dd>\n<dt>Técnicas de MITRE ATT&amp;CK con el mismo mecanismo</dt><dd>T1547.001 (Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder)</dd>\n</dl><p class=\"limit\"><strong>Límite (not_proven):</strong> Muchos instaladores y programas legítimos se registran así para arrancar con Windows. Los argumentos son una inferencia a partir de las instrucciones que preceden a cada llamada: que el código la contenga no demuestra que se ejecute, y un binario empaquetado solo muestra el código de su desempaquetador.</p><p>Evidencia: <a href=\"#evidence-E13\">E13</a>, <a href=\"#evidence-E14\">E14</a>, <a href=\"#evidence-E15\">E15</a>, <a href=\"#evidence-E16\">E16</a>, <a href=\"#evidence-E17\">E17</a></p>\n<p>Glosario: <a href=\"#glossary-api.family.registry\">api.family.registry</a>, <a href=\"#glossary-capability.static\">capability.static</a>, <a href=\"#glossary-code.call_argument\">code.call_argument</a>, <a href=\"#glossary-code.import_call\">code.import_call</a>, <a href=\"#glossary-evidence.confidence\">evidence.confidence</a>, <a href=\"#glossary-attack.technique\">attack.technique</a>, <a href=\"#glossary-attack.t1547_001\">attack.t1547_001</a></p>\n</article>\n</section><section id=\"glossary\"><h2>4. Glosario de los términos usados</h2><p>Conocimiento educativo general; no son afirmaciones sobre la muestra.</p>\n<article id=\"glossary-analysis.coverage\"><h3>Cobertura, análisis parcial y limitaciones (analysis.coverage)</h3><p>Cada extractor declara qué pudo revisar: completo, parcial o bloqueado. Un análisis parcial significa que una parte no se revisó, por un límite, un error o un formato no soportado.</p>\n<p>Un resultado vacío con cobertura completa significa que se buscó y no se encontró nada con ese método. Un resultado vacío con cobertura parcial o bloqueada no significa nada: esa parte no se revisó.</p>\n<p>Las limitaciones (por ejemplo, alcanzar el máximo de cadenas o que el archivo no sea PE) se muestran siempre antes que los hallazgos, porque cambian lo que se puede concluir.</p>\n<p class=\"limit\">Límite: No encontrar algo no demuestra que no esté, ni que la muestra sea segura.</p><h4>Fuentes</h4><ul><li>Cómo trabaja LupaBin: cobertura, estados y abstención (Proyecto LupaBin): docs/metodo.md#cobertura-estados-y-abstención · verificada el 2026-09-25</li><li>Contrato de evidencias: regla principal (Proyecto LupaBin): docs/evidence-schema.md#regla-principal-no-inventar-datos · verificada el 2026-09-23</li></ul></article><article id=\"glossary-pe.format\"><h3>Formato PE (Portable Executable) (pe.format)</h3><p>PE es el formato de los ejecutables y bibliotecas de Windows (.exe, .dll, .sys): una cabecera que describe cómo cargar el archivo, seguida de secciones con código y datos.</p>\n<p>Un archivo PE empieza con un pequeño programa MS-DOS (el stub), que al ejecutarse en MS-DOS imprime el mensaje «This program cannot be run in DOS mode». Detrás van la firma PE, la cabecera COFF, la cabecera opcional y la tabla de secciones.</p>\n<p>El nombre «Portable» indica que el formato no depende de una arquitectura concreta: el mismo esquema sirve para x86, x64 y ARM.</p>\n<p>LupaBin lee estas estructuras como datos. Nunca carga ni ejecuta el archivo.</p>\n<p class=\"limit\">Límite: Que un archivo tenga formato PE válido no dice nada sobre lo que hace el programa.</p><h4>Fuentes</h4><ul><li>PE Format (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/debug/pe-format\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/debug/pe-format</a> · verificada el 2026-09-23</li></ul></article><article id=\"glossary-pe.header\"><h3>Cabecera PE (pe.header)</h3><p>La cabecera PE declara, entre otras cosas, si el archivo es PE32 o PE32+, dónde empieza a ejecutarse (punto de entrada) y cuánto ocupa una vez cargado (SizeOfImage).</p>\n<p>El campo Magic de la cabecera opcional distingue PE32 (0x10b, imágenes de 32 bits) de PE32+ (0x20b, imágenes de 64 bits).</p>\n<p>El campo Machine de la cabecera COFF indica la arquitectura para la que se compiló: por ejemplo 0x14c (x86), 0x8664 (x64) o 0xaa64 (ARM64).</p>\n<p>AddressOfEntryPoint es la dirección del punto de entrada, relativa a la base de la imagen (RVA): en un programa es donde empieza la ejecución; en una DLL es opcional y puede ser cero.</p>\n<p>SizeOfImage es el tamaño en bytes de la imagen cargada en memoria, incluidas las cabeceras, y debe ser múltiplo de SectionAlignment.</p>\n<p>Son valores declarados por el archivo. LupaBin los lee y los contrasta entre sí, pero no simula el cargador de Windows.</p>\n<p class=\"limit\">Límite: Los valores declarados pueden ser inconsistentes o estar manipulados; su presencia no garantiza que Windows cargue el archivo así.</p><h4>Fuentes</h4><ul><li>PE Format: Optional Header (Image Only) (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-image-only\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#optional-header-image-only</a> · verificada el 2026-09-23</li><li>PE Format: Machine Types (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#machine-types\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#machine-types</a> · verificada el 2026-09-23</li></ul></article><article id=\"glossary-pe.section\"><h3>Sección (pe.section)</h3><p>Una sección es un bloque del PE con nombre (.text, .data, .rsrc…) que el cargador coloca en memoria con unos permisos. Cada una tiene un tamaño en disco y otro en memoria.</p>\n<p>La tabla de secciones indica para cada sección su dirección relativa en memoria (VirtualAddress), su tamaño en memoria (VirtualSize), dónde están sus bytes en el archivo (PointerToRawData) y cuántos hay (SizeOfRawData).</p>\n<p>Si VirtualSize es mayor que SizeOfRawData, el resto de la sección se rellena con ceros al cargarla. Una sección solo con datos sin inicializar puede no tener bytes en disco.</p>\n<p>Los nombres de sección son convenciones del compilador o del enlazador, no una garantía de contenido: «.text» suele contener código, pero nada obliga a ello.</p>\n<p class=\"limit\">Límite: El nombre de una sección no demuestra qué contiene.</p><h4>Fuentes</h4><ul><li>PE Format: Section Table (Section Headers) (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers</a> · verificada el 2026-09-23</li></ul></article><article id=\"glossary-pe.section.permissions\"><h3>Permisos de una sección (pe.section.permissions)</h3><p>Cada sección de un PE declara si su contenido podrá leerse, escribirse o ejecutarse como código una vez cargado en memoria.</p>\n<p>El campo Characteristics de la cabecera de cada sección incluye tres indicadores de memoria: IMAGE_SCN_MEM_READ (la sección se puede leer), IMAGE_SCN_MEM_WRITE (se puede escribir) e IMAGE_SCN_MEM_EXECUTE (se puede ejecutar como código). El cargador de Windows los usa para fijar la protección de las páginas donde coloca la sección.</p>\n<p>Lo habitual es que el código esté en una sección de lectura y ejecución, y los datos en secciones de lectura, o de lectura y escritura. Una sección que declara escritura y ejecución a la vez es menos común: la usan algunos empaquetadores y programas que generan código en tiempo de ejecución, pero también compiladores y enlazadores antiguos o poco convencionales.</p>\n<p class=\"limit\">Límite: Los permisos declarados no demuestran que el programa escriba en esa sección ni que ejecute lo que haya en ella.</p><h4>Fuentes</h4><ul><li>PE Format: Section Flags (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-flags\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-flags</a> · verificada el 2026-09-23</li><li>Memory Protection Constants (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants</a> · verificada el 2026-09-23</li></ul></article><article id=\"glossary-entropy.shannon\"><h3>Entropía de bytes (Shannon) (entropy.shannon)</h3><p>La entropía mide, de 0 a 8 bits por byte, lo uniforme que es la distribución de valores de los bytes: 0 si todos son iguales y cerca de 8 si los 256 valores aparecen con la misma frecuencia.</p>\n<p>LupaBin calcula H = −Σ p·log2(p) sobre los bytes en disco de cada sección, donde p es la frecuencia de cada uno de los 256 valores posibles. Es la medida de información definida por Claude Shannon en 1948, aplicada a bytes.</p>\n<p>El texto y el código máquina suelen quedar muy por debajo de 8. Los datos comprimidos o cifrados se acercan a 8, porque sus bytes son casi uniformes. Por eso la entropía alta es un indicio que se mira al buscar empaquetado (programas comprimidos o cifrados que se descomprimen al ejecutarse).</p>\n<p>Pero muchos datos legítimos también tienen entropía alta: imágenes, recursos comprimidos, certificados o tablas precalculadas. Y una sección pequeña da una medida poco fiable, porque hay pocos bytes para estimar las frecuencias.</p>\n<p class=\"limit\">Límite: Una entropía alta no demuestra empaquetado, cifrado ni intención maliciosa; una baja tampoco demuestra que no lo haya.</p><h4>Fuentes</h4><ul><li>A Mathematical Theory of Communication (C. E. Shannon, 1948) (Bell System Technical Journal (copia en Harvard)): <a href=\"https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf\" rel=\"noreferrer\">https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf</a> · verificada el 2026-09-23</li><li>Obfuscated Files or Information: Software Packing (T1027.002) (MITRE ATT&amp;CK): <a href=\"https://attack.mitre.org/techniques/T1027/002/\" rel=\"noreferrer\">https://attack.mitre.org/techniques/T1027/002/</a> · verificada el 2026-09-23</li><li>Cómo trabaja LupaBin: entropía de bytes (Proyecto LupaBin): docs/metodo.md#entropía-de-bytes · verificada el 2026-09-25</li></ul></article><article id=\"glossary-pe.imports\"><h3>Tabla de imports (pe.imports)</h3><p>La tabla de imports enumera las DLL y las funciones de otras bibliotecas que el programa pide al cargador de Windows que resuelva al arrancar (enlace en tiempo de carga).</p>\n<p>Para cada DLL, la tabla contiene una lista de funciones, por nombre o por número (ordinal). El cargador busca cada una y escribe su dirección en la tabla de direcciones de import (IAT), a través de la cual llama el programa.</p>\n<p>Un import indica que el programa se enlazó contra esa función. No indica cuántas veces se llama, si se llama alguna vez, ni para qué: muchos imports vienen del compilador o de bibliotecas que el programa incluye sin usarlas.</p>\n<p>Lo contrario tampoco se cumple: un programa puede obtener funciones en tiempo de ejecución sin que aparezcan en esta tabla (ver enlace dinámico en tiempo de ejecución).</p>\n<p class=\"limit\">Límite: Un import no demuestra que la función se ejecute ni con qué fin; su ausencia no demuestra que no se use.</p><h4>Fuentes</h4><ul><li>PE Format: The .idata Section (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-idata-section\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-idata-section</a> · verificada el 2026-09-23</li><li>Load-Time Dynamic Linking (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/dlls/load-time-dynamic-linking\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/dlls/load-time-dynamic-linking</a> · verificada el 2026-09-23</li></ul></article><article id=\"glossary-code.import_call\"><h3>Llamada a una función importada (code.import_call)</h3><p>Una instrucción del código que llama a una función de otra DLL a través de su casilla en la tabla de direcciones de import (IAT), donde el cargador escribe la dirección real de la función.</p>\n<p>El compilador genera estas llamadas de cuatro formas habituales, que LupaBin reconoce por sus bytes: directa (`call [casilla]`), a través de un pequeño trampolín o thunk (un `call` a una instrucción `jmp [casilla]`), por registro (`mov registro, [casilla]` justo antes de `call registro`) y en cola (un `jmp [casilla]` al final de una función, que deja que la función importada vuelva directamente a quien la llamó). Cualquier otra forma no se reconoce.</p>\n<p>LupaBin recorre el código sin ejecutarlo. Parte del punto de entrada, de los exports, de los callbacks TLS y, en x64, de las funciones que declara la tabla de excepciones (`.pdata`), y sigue los saltos y llamadas cuyo destino es una constante, además de las tablas de `switch` acotadas que se pueden comprobar. El resto del código al que solo se llega por saltos indirectos no se recorre.</p>\n<p>El análisis estático puede afirmar que el código contiene la llamada, no que se ejecute: eso depende de condiciones, entradas y del entorno. Un binario empaquetado o cifrado solo muestra el código de su desempaquetador hasta que se ejecuta.</p>\n<p class=\"limit\">Límite: Que el código contenga una llamada no demuestra que se ejecute ni con qué fin; que no aparezca no demuestra que el programa no llame a la función.</p><h4>Fuentes</h4><ul><li>Importing function calls using __declspec(dllimport) (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/cpp/build/importing-function-calls-using-declspec-dllimport\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/cpp/build/importing-function-calls-using-declspec-dllimport</a> · verificada el 2026-09-23</li><li>PE Format: Import Address Table (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-address-table\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-address-table</a> · verificada el 2026-09-23</li><li>x64 exception handling (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64</a> · verificada el 2026-09-23</li></ul></article><article id=\"glossary-code.call_argument\"><h3>Argumento constante de una llamada (code.call_argument)</h3><p>Un valor fijo que el código prepara justo antes de llamar a una función importada: una clave predefinida del registro, un número o la dirección de una cadena que está en el propio archivo.</p>\n<p>En x64, los cuatro primeros argumentos enteros o punteros van en los registros `RCX`, `RDX`, `R8` y `R9`, en ese orden, y esos registros se pierden en cada llamada. En x86, las funciones de la API de Win32 usan `__stdcall`: los argumentos se apilan de derecha a izquierda, así que el último `push` antes de la llamada es el primer argumento.</p>\n<p>LupaBin recorre hacia delante el tramo de código que termina en la llamada, sin ejecutarlo. Solo acepta un valor si una instrucción de forma fija (`lea` relativo a `rip`, `mov` con un inmediato, `xor` de un registro consigo mismo o `push` de un inmediato) lo pone en su sitio y nada lo cambia después. Si otro camino puede entrar en medio del tramo, empieza de nuevo desde ahí. Además, el valor tiene que ser del tipo que la documentación de la función da al parámetro: por ejemplo, una de las claves predefinidas que lista para `hKey`.</p>\n<p>Solo se interpretan las funciones y los parámetros de un catálogo revisado contra Microsoft Learn. Una cadena solo se muestra si está en una sección del archivo que no se puede escribir, porque el programa podría cambiar una escribible antes de la llamada.</p>\n<p class=\"limit\">Límite: Es una inferencia: no demuestra que la llamada se ejecute, ni que otro camino que el recorrido no ve no llegue a ella con otros valores, ni cuál es la clave que se abre de verdad (una clave predefinida puede redirigirse con RegOverridePredefKey). Que un argumento no aparezca no significa que no tenga valor.</p><h4>Fuentes</h4><ul><li>x64 calling convention: Parameter passing (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#parameter-passing\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#parameter-passing</a> · verificada el 2026-09-24</li><li>x64 calling convention: Caller/callee saved registers (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#callercallee-saved-registers\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention#callercallee-saved-registers</a> · verificada el 2026-09-24</li><li>__stdcall (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/cpp/cpp/stdcall\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/cpp/cpp/stdcall</a> · verificada el 2026-09-24</li><li>Predefined Keys (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys</a> · verificada el 2026-09-24</li><li>RegOpenKeyExW function (winreg.h) (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw</a> · verificada el 2026-09-24</li></ul></article><article id=\"glossary-evidence.confidence\"><h3>Observado frente a inferido (evidence.confidence)</h3><p>LupaBin separa lo que se lee directamente de los bytes (observed, observado) de lo que se obtiene aplicando a esos bytes un método exacto, como una transformación o una regla del recorrido del código (inferred, inferido).</p>\n<p>Una evidencia observada, como una sección, un import, una cadena o una llamada del código, describe bytes y estructuras tal como están en el archivo. Una evidencia inferida depende además de un método. Una decodificación afirma que unos bytes, transformados con un algoritmo y unos parámetros exactos, producen un texto. Un argumento constante afirma que una instrucción anterior a la llamada, en el mismo tramo de código, fija ese valor y que el recorrido no vio nada que lo cambie. Las dos son reproducibles, pero no significan que el programa haga esa transformación ni que la llamada se ejecute con ese valor.</p>\n<p>Ninguno de los dos niveles es una probabilidad ni una puntuación. Las explicaciones de LupaBin heredan el nivel más débil de las evidencias que citan.</p>\n<h4>Fuentes</h4><ul><li>Contrato de evidencias: regla principal (Proyecto LupaBin): docs/evidence-schema.md#regla-principal-no-inventar-datos · verificada el 2026-09-23</li><li>Contrato de evidencias: estructura del informe (Proyecto LupaBin): docs/evidence-schema.md#estructura-del-informe · verificada el 2026-09-25</li></ul></article><article id=\"glossary-code.string_reference\"><h3>Textos que usa el código (code.string_reference)</h3><p>Una cadena del archivo que una instrucción del código recorrido usa: la instrucción toma la dirección exacta donde empieza la cadena, por ejemplo para pasarla a una función que la muestra.</p>\n<p>El barrido de cadenas encuentra cualquier secuencia de bytes que parece texto, y en un programa normal son cientos: mensajes de bibliotecas, nombres internos, restos de datos. Las que interesan suelen ser las que el código usa.</p>\n<p>LupaBin busca, entre las instrucciones que decodificó el recorrido, las que toman una dirección con una forma conocida (lea con una dirección relativa a RIP en x64; push o mov de una dirección de la imagen en x86) y comprueba que esa dirección es exactamente el inicio de una cadena publicada, en una sección que no se puede escribir. Publica la primera instrucción que usa cada cadena.</p>\n<p>Cuando LupaBin encuentra main, dice también qué textos usa el código alcanzable desde main: en un programa de consola, suelen ser sus mensajes.</p>\n<p class=\"limit\">Límite: Que una instrucción tome la dirección de un texto no demuestra que se ejecute ni para qué se usa. Los textos que el código construye o descifra al ejecutarse no aparecen.</p><h4>Fuentes</h4><ul><li>Cómo trabaja LupaBin: textos que usa el código (Proyecto LupaBin): docs/metodo.md#textos-que-usa-el-código · verificada el 2026-09-26</li></ul></article><article id=\"glossary-strings.literal\"><h3>Cadenas literales (ASCII y UTF-16LE) (strings.literal)</h3><p>Una cadena literal es una secuencia de bytes que forman texto legible dentro del archivo. LupaBin busca texto ASCII imprimible codificado de dos formas: un byte por carácter (ASCII) y dos bytes por carácter (UTF-16LE).</p>\n<p>ASCII codifica cada carácter con un byte. Windows representa internamente el texto Unicode en UTF-16, con dos bytes por carácter en el orden little-endian (primero el byte menos significativo): la «A» se guarda como 41 00. Por eso muchas cadenas de binarios de Windows aparecen con ceros intercalados.</p>\n<p>LupaBin conserva el desplazamiento exacto y los bytes de cada cadena, de modo que cualquiera puede comprobarlos. Solo reconoce caracteres imprimibles del rango ASCII (U+0020–U+007E) y secuencias de al menos cuatro caracteres. No recupera texto en otros alfabetos, cadenas cifradas ni cadenas que el programa construye en memoria.</p>\n<p>Una cadena es un dato, no una instrucción ni una acción: que aparezca una URL o una ruta no significa que el programa se conecte a ella o cree ese archivo.</p>\n<p class=\"limit\">Límite: Una cadena no demuestra que el programa la use: puede venir de una biblioteca incluida, de un mensaje nunca mostrado o de datos de relleno.</p><h4>Fuentes</h4><ul><li>Unicode (Win32) (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/intl/unicode\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/intl/unicode</a> · verificada el 2026-09-23</li><li>RFC 2781: UTF-16, an encoding of ISO 10646 (IETF / RFC Editor): <a href=\"https://www.rfc-editor.org/rfc/rfc2781\" rel=\"noreferrer\">https://www.rfc-editor.org/rfc/rfc2781</a> · verificada el 2026-09-23</li><li>RFC 20: ASCII format for Network Interchange (IETF / RFC Editor): <a href=\"https://www.rfc-editor.org/rfc/rfc20\" rel=\"noreferrer\">https://www.rfc-editor.org/rfc/rfc20</a> · verificada el 2026-09-23</li><li>Cómo trabaja LupaBin: cadenas literales (Proyecto LupaBin): docs/metodo.md#cadenas-literales · verificada el 2026-09-25</li></ul></article><article id=\"glossary-api.family.registry\"><h3>Funciones del registro de Windows (api.family.registry)</h3><p>Funciones para abrir, crear, leer, escribir y borrar claves y valores del registro de Windows.</p>\n<p>El registro guarda la configuración de Windows y de los programas, así que estas funciones son habituales. También se usan para la persistencia (arrancar con el sistema) o para cambiar configuraciones.</p>\n<p>Medición del 2026-09-23 sobre 55.035 binarios PE benignos (System32, Program Files y Program Files (x86)): el 10,6 % importa por nombre al menos una función de esta familia.</p>\n<p>La familia es una lista curada y versionada de nombres exactos (lupabin-api-families-v1). LupaBin solo dice que un nombre importado está en la lista; no interpreta el uso.</p>\n<p class=\"limit\">Límite: Importar funciones de esta familia no demuestra ningún comportamiento: el 10,6 % de los binarios benignos medidos lo hace.</p><h4>Fuentes</h4><ul><li>RegOpenKeyExA function (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexa\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexa</a> · verificada el 2026-09-23</li><li>RegCreateKeyExA function (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexa\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexa</a> · verificada el 2026-09-23</li><li>RegSetValueExA function (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regsetvalueexa\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regsetvalueexa</a> · verificada el 2026-09-23</li><li>RegQueryValueExA function (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexa\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexa</a> · verificada el 2026-09-23</li><li>RegDeleteValueA function (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regdeletevaluea\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regdeletevaluea</a> · verificada el 2026-09-23</li></ul></article><article id=\"glossary-capability.static\"><h3>Capacidad (en LupaBin) (capability.static)</h3><p>Una frase sobre lo que contiene el código, construida con llamadas a funciones importadas y sus argumentos constantes: por ejemplo, una llamada que crea un servicio con un nombre y un binario concretos.</p>\n<p>LupaBin reúne las llamadas y los argumentos que el informe ya verifica y comprueba si cumplen la condición de una capacidad de su catálogo versionado (lupabin-capabilities-v4). Cada capacidad cita todas las llamadas del informe que la cumplen, con todos sus argumentos publicados, y se vuelve a derivar al validar la explicación. Es una inferencia, porque los argumentos lo son.</p>\n<p>La condición es estricta a propósito: si falta un argumento que hace falta, o un valor no es uno de los documentados, LupaBin no reconoce la capacidad antes que arriesgarse a una frase falsa. Tampoco afirma lo que no sabe: si no conoce la raíz de una clave del registro o el proceso de destino, lo dice.</p>\n<p>Casi todas las capacidades son de una sola llamada. Solo se encadenan llamadas al abrir una clave Run o Winlogon y escribir en ella con RegSetValueEx: cuando el identificador de la clave pasa por una variable local en un camino recto o, solo en x64, cuando las dos llamadas están en el mismo rango de función que declara .pdata; en ese caso no se sabe si la escritura usa la clave abierta. Otras combinaciones de llamadas no se reconocen.</p>\n<p class=\"limit\">Límite: Una capacidad no demuestra que el programa haga eso ni con qué intención: depende de que la llamada se ejecute, y muchos programas legítimos contienen las mismas llamadas. Que no aparezca ninguna no demuestra que no las haya.</p><h4>Fuentes</h4><ul><li>Cómo trabaja LupaBin: qué se puede afirmar y qué no (Proyecto LupaBin): docs/metodo.md#qué-se-puede-afirmar-y-qué-no · verificada el 2026-09-25</li><li>Cómo trabaja LupaBin: explicaciones, no hechos nuevos (Proyecto LupaBin): docs/metodo.md#explicaciones-no-hechos-nuevos · verificada el 2026-09-25</li></ul></article><article id=\"glossary-attack.technique\"><h3>MITRE ATT&amp;CK: tácticas y técnicas (attack.technique)</h3><p>ATT&amp;CK es una base de conocimiento pública de MITRE sobre el comportamiento de los atacantes. Una táctica es el objetivo (el porqué) y una técnica, la forma de conseguirlo (el cómo).</p>\n<p>Cada técnica tiene un identificador, como T1547.001, y una página con su definición, ejemplos y formas de detectarla. Las subtécnicas llevan un punto y tres cifras.</p>\n<p>LupaBin solo asocia una técnica a una capacidad cuando el mecanismo del caso coincide con la definición de la técnica: escribir un valor en una clave Run es T1547.001. No la asocia por parecido. Abrir esa clave para escribir no escribe nada; la memoria ejecutable y escribible no es, por sí sola, inyección de código; y lanzar rundll32 no es, por sí solo, su abuso para ejecutar código de forma encubierta.</p>\n<p>Las técnicas describen lo que hacen los atacantes, pero los mismos mecanismos los usan a diario programas legítimos.</p>\n<p class=\"limit\">Límite: Coincidir con una técnica no demuestra intención: muchos programas legítimos usan el mismo mecanismo.</p><h4>Fuentes</h4><ul><li>FAQ (MITRE ATT&amp;CK): <a href=\"https://attack.mitre.org/resources/faq/\" rel=\"noreferrer\">https://attack.mitre.org/resources/faq/</a> · verificada el 2026-09-24</li><li>Cómo trabaja LupaBin: catálogo de capacidades (Proyecto LupaBin): docs/metodo.md#catálogo-de-capacidades · verificada el 2026-09-25</li></ul></article><article id=\"glossary-attack.t1547_001\"><h3>T1547.001: claves Run del registro y carpeta de inicio (attack.t1547_001)</h3><p>Técnica de persistencia de ATT&amp;CK: añadir un programa a una clave Run del registro, o a la carpeta de inicio, para que se ejecute cuando el usuario inicia sesión.</p>\n<p>Windows ejecuta en cada inicio de sesión las órdenes guardadas como valores en las claves Run, y una sola vez las de RunOnce, tanto las del usuario (HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run) como las del equipo (HKEY_LOCAL_MACHINE\\…). ATT&amp;CK lista además RunServices, RunServicesOnce y Policies\\Explorer\\Run.</p>\n<p>LupaBin asocia esta técnica solo a una llamada que escribe un valor en una de esas claves (RegSetKeyValue). Abrir la clave con permiso para escribir no escribe nada, así que no se asocia.</p>\n<p class=\"limit\">Límite: Muchos instaladores y programas legítimos se registran así para arrancar con Windows.</p><h4>Fuentes</h4><ul><li>Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder (MITRE ATT&amp;CK): <a href=\"https://attack.mitre.org/techniques/T1547/001/\" rel=\"noreferrer\">https://attack.mitre.org/techniques/T1547/001/</a> · verificada el 2026-09-24</li><li>Run and RunOnce Registry Keys (Microsoft Learn): <a href=\"https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys\" rel=\"noreferrer\">https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys</a> · verificada el 2026-09-24</li></ul></article></section><section id=\"external\"><h2>5. Fuente externa: VirusTotal (no verificada por LupaBin)</h2><p>No se incluyen datos de VirusTotal en este documento.</p>\n</section>\n<section id=\"evidence\"><h2>Evidencias del informe y procedencia</h2><details open><summary>Metadatos completos del informe</summary><pre>{&quot;schema_version&quot;: &quot;0.14.0&quot;, &quot;analysis&quot;: {&quot;version&quot;: &quot;0.14.0&quot;, &quot;started_at&quot;: &quot;2026-10-10T10:07:28.540215Z&quot;, &quot;finished_at&quot;: &quot;2026-10-10T10:07:29.312538Z&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;limits&quot;: {&quot;yara&quot;: {&quot;rules&quot;: 32, &quot;source_bytes&quot;: 16384, &quot;total_source_bytes&quot;: 262144, &quot;manifest_bytes&quot;: 65536, &quot;patterns_per_rule&quot;: 8, &quot;scan_seconds&quot;: 5, &quot;process_seconds&quot;: 10, &quot;matches&quot;: 32, &quot;instances&quot;: 16, &quot;capture_bytes&quot;: 256, &quot;output_bytes&quot;: 1048576, &quot;stderr_bytes&quot;: 65536}, &quot;decode&quot;: {&quot;strings&quot;: 2000, &quot;xor&quot;: 256, &quot;xor_examined&quot;: 200000, &quot;seconds&quot;: 10}, &quot;code&quot;: {&quot;instructions&quot;: 8000000, &quot;entries&quot;: 262144, &quot;call_sites&quot;: 1048576, &quot;seconds&quot;: 15, &quot;calls&quot;: 4096, &quot;arguments&quot;: 4096, &quot;argument_instructions&quot;: 65536}, &quot;input_bytes&quot;: 20971520, &quot;timeout_seconds&quot;: 30, &quot;memory_bytes&quot;: 536870912, &quot;cpus&quot;: 1, &quot;pids&quot;: 64, &quot;output_bytes&quot;: 8388608, &quot;imports&quot;: 10000, &quot;sections&quot;: 96, &quot;import_descriptors&quot;: 4096, &quot;exports&quot;: 5000, &quot;export_names&quot;: 10000, &quot;strings&quot;: 5000, &quot;string_characters&quot;: 1024, &quot;anomalies&quot;: 128, &quot;entropy_bytes&quot;: 20971520}}, &quot;sample&quot;: {&quot;sha256&quot;: &quot;3ed27bc7904e3b7d5784e77b631be065179586800c705b2b5910413c9ffe99bf&quot;, &quot;md5&quot;: &quot;4ecaed1940dc33a214daf404cb0d0e33&quot;, &quot;size&quot;: 5120, &quot;type&quot;: &quot;PE32&quot;}, &quot;extractor_runs&quot;: [{&quot;source&quot;: &quot;pe&quot;, &quot;version&quot;: &quot;2024.8.26&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;components&quot;: [{&quot;name&quot;: &quot;headers&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 1, &quot;evidence_count&quot;: 1}, {&quot;name&quot;: &quot;sections&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 2, &quot;evidence_count&quot;: 2}, {&quot;name&quot;: &quot;entropy&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 4608, &quot;evidence_count&quot;: 2}, {&quot;name&quot;: &quot;imports_normal&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 1, &quot;evidence_count&quot;: 1}, {&quot;name&quot;: &quot;imports_delay&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 0, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;exports&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 0, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;anomalies&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 0, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;toolchain&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 6, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;upx&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 0, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;dotnet&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 0, &quot;evidence_count&quot;: 0}], &quot;evidence_count&quot;: 6}, {&quot;source&quot;: &quot;strings&quot;, &quot;version&quot;: &quot;ascii-printable-v1&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;components&quot;: [{&quot;name&quot;: &quot;ascii&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 4, &quot;evidence_count&quot;: 4}, {&quot;name&quot;: &quot;utf16le&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 2, &quot;evidence_count&quot;: 2}], &quot;evidence_count&quot;: 6}, {&quot;source&quot;: &quot;yara&quot;, &quot;version&quot;: &quot;lupabin-yara-v1&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;components&quot;: [{&quot;name&quot;: &quot;yara_rules&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 4, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;yara_scan&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 4, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;yara_evidence&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 0, &quot;evidence_count&quot;: 0}], &quot;evidence_count&quot;: 0}, {&quot;source&quot;: &quot;decode&quot;, &quot;version&quot;: &quot;lupabin-decode-v1&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;components&quot;: [{&quot;name&quot;: &quot;decode_strings&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 6, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;decode_xor&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 24, &quot;evidence_count&quot;: 0}], &quot;evidence_count&quot;: 0}, {&quot;source&quot;: &quot;code&quot;, &quot;version&quot;: &quot;lupabin-code-v1&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;components&quot;: [{&quot;name&quot;: &quot;disassembly&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 8, &quot;evidence_count&quot;: 0}, {&quot;name&quot;: &quot;api_calls&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 1, &quot;evidence_count&quot;: 1}, {&quot;name&quot;: &quot;call_arguments&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 1, &quot;evidence_count&quot;: 4}, {&quot;name&quot;: &quot;string_references&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 4, &quot;evidence_count&quot;: 2}, {&quot;name&quot;: &quot;main_function&quot;, &quot;status&quot;: &quot;complete&quot;, &quot;examined&quot;: 0, &quot;evidence_count&quot;: 0}], &quot;evidence_count&quot;: 7}], &quot;yara_context&quot;: {&quot;catalog&quot;: {&quot;format_version&quot;: &quot;1&quot;, &quot;catalog_id&quot;: &quot;lupabin_builtin&quot;, &quot;revision&quot;: &quot;1.0.0&quot;, &quot;manifest_sha256&quot;: &quot;b5a97bd42736205627767642cd48571fac036073a9a9160177486914161cc67c&quot;, &quot;ruleset_sha256&quot;: &quot;67ec41785ae991070bcc73d3dfa910bcd4007cfbe8ff47d32bc5dbaf645d099a&quot;, &quot;rules&quot;: [{&quot;rule_id&quot;: &quot;lupabin_debug_marker_pair&quot;, &quot;namespace&quot;: &quot;lupabin_debug_marker_pair&quot;, &quot;filename&quot;: &quot;lupabin_debug_marker_pair.yar&quot;, &quot;revision&quot;: &quot;1.0.0&quot;, &quot;pattern_ids&quot;: [&quot;$signature&quot;, &quot;$extension&quot;], &quot;description&quot;: &quot;Presencia de RSDS y .pdb; no acredita una ruta PDB ni una estructura de depuración válida.&quot;, &quot;license&quot;: &quot;Apache-2.0&quot;, &quot;source_sha256&quot;: &quot;13b9f82b312ac2b8d8bb7030ed68baf086fa86d94e963eb8d7048121c8d4e5ac&quot;}, {&quot;rule_id&quot;: &quot;lupabin_dos_stub_text&quot;, &quot;namespace&quot;: &quot;lupabin_dos_stub_text&quot;, &quot;filename&quot;: &quot;lupabin_dos_stub_text.yar&quot;, &quot;revision&quot;: &quot;1.0.0&quot;, &quot;pattern_ids&quot;: [&quot;$stub&quot;], &quot;description&quot;: &quot;Presencia literal del mensaje habitual del stub DOS; no demuestra por sí sola el formato PE.&quot;, &quot;license&quot;: &quot;Apache-2.0&quot;, &quot;source_sha256&quot;: &quot;65a004441ca8f93d269631bc2a2fe88a6da014d419f90dbe77f462d10b10b804&quot;}, {&quot;rule_id&quot;: &quot;lupabin_process_memory_api_names&quot;, &quot;namespace&quot;: &quot;lupabin_process_memory_api_names&quot;, &quot;filename&quot;: &quot;lupabin_process_memory_api_names.yar&quot;, &quot;revision&quot;: &quot;1.0.0&quot;, &quot;pattern_ids&quot;: [&quot;$allocate&quot;, &quot;$write&quot;, &quot;$thread&quot;], &quot;description&quot;: &quot;Presencia conjunta de tres nombres de APIs; no demuestra imports, llamadas ni inyección.&quot;, &quot;license&quot;: &quot;Apache-2.0&quot;, &quot;source_sha256&quot;: &quot;73b81007c0022463629d8b8539a8931e13bd05e69adca8b09d60f5a0ca9342b6&quot;}, {&quot;rule_id&quot;: &quot;lupabin_training_marker&quot;, &quot;namespace&quot;: &quot;lupabin_training_marker&quot;, &quot;filename&quot;: &quot;lupabin_training_marker.yar&quot;, &quot;revision&quot;: &quot;1.0.0&quot;, &quot;pattern_ids&quot;: [&quot;$marker&quot;], &quot;description&quot;: &quot;Presencia del marcador de práctica LUPABIN PRACTICE; no identifica una familia.&quot;, &quot;license&quot;: &quot;Apache-2.0&quot;, &quot;source_sha256&quot;: &quot;42240cfd692c564ba81bbd60a261a2b133c5640079ca0fcc823581ef3f87341e&quot;}]}, &quot;package_version&quot;: &quot;4.5.4&quot;, &quot;module_version&quot;: &quot;4.5.4&quot;}, &quot;extractor_errors&quot;: [], &quot;limitations&quot;: []}</pre>\n</details><article id=\"evidence-E1\"><h3>E1 · pe_header · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E1&quot;, &quot;source&quot;: &quot;pe&quot;, &quot;component&quot;: &quot;headers&quot;, &quot;location&quot;: {&quot;offset&quot;: 128, &quot;rva&quot;: null, &quot;length&quot;: 248, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;pe_header&quot;, &quot;data&quot;: {&quot;machine&quot;: 332, &quot;number_of_sections&quot;: 2, &quot;timestamp_raw&quot;: 0, &quot;characteristics&quot;: 258, &quot;optional_magic&quot;: 267, &quot;image_base&quot;: 4194304, &quot;entry_point_rva&quot;: 8192, &quot;section_alignment&quot;: 4096, &quot;file_alignment&quot;: 512, &quot;size_of_image&quot;: 12288, &quot;size_of_headers&quot;: 512}}</pre>\n</details></article><article id=\"evidence-E2\"><h3>E2 · section · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E2&quot;, &quot;source&quot;: &quot;pe&quot;, &quot;component&quot;: &quot;sections&quot;, &quot;location&quot;: {&quot;offset&quot;: 376, &quot;rva&quot;: null, &quot;length&quot;: 40, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;section&quot;, &quot;data&quot;: {&quot;index&quot;: 0, &quot;name_raw_hex&quot;: &quot;2e69646174610000&quot;, &quot;name_text&quot;: &quot;.idata&quot;, &quot;rva&quot;: 4096, &quot;virtual_size&quot;: 4096, &quot;raw_offset&quot;: 512, &quot;raw_size&quot;: 4096, &quot;characteristics&quot;: 1073741888, &quot;raw_status&quot;: &quot;present&quot;, &quot;permissions&quot;: [&quot;read&quot;]}}</pre>\n</details></article><article id=\"evidence-E3\"><h3>E3 · entropy · observed</h3><p>Procedencia: <a href=\"#evidence-E2\">E2</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E3&quot;, &quot;source&quot;: &quot;pe&quot;, &quot;component&quot;: &quot;entropy&quot;, &quot;location&quot;: {&quot;offset&quot;: 512, &quot;rva&quot;: null, &quot;length&quot;: 4096, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E2&quot;]}, &quot;kind&quot;: &quot;entropy&quot;, &quot;data&quot;: {&quot;method&quot;: &quot;shannon-byte-v1&quot;, &quot;byte_count&quot;: 4096, &quot;bits_per_byte&quot;: 0.273292}}</pre>\n</details></article><article id=\"evidence-E4\"><h3>E4 · section · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E4&quot;, &quot;source&quot;: &quot;pe&quot;, &quot;component&quot;: &quot;sections&quot;, &quot;location&quot;: {&quot;offset&quot;: 416, &quot;rva&quot;: null, &quot;length&quot;: 40, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;section&quot;, &quot;data&quot;: {&quot;index&quot;: 1, &quot;name_raw_hex&quot;: &quot;2e74657874000000&quot;, &quot;name_text&quot;: &quot;.text&quot;, &quot;rva&quot;: 8192, &quot;virtual_size&quot;: 512, &quot;raw_offset&quot;: 4608, &quot;raw_size&quot;: 512, &quot;characteristics&quot;: 1610612768, &quot;raw_status&quot;: &quot;present&quot;, &quot;permissions&quot;: [&quot;read&quot;, &quot;execute&quot;]}}</pre>\n</details></article><article id=\"evidence-E5\"><h3>E5 · entropy · observed</h3><p>Procedencia: <a href=\"#evidence-E4\">E4</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E5&quot;, &quot;source&quot;: &quot;pe&quot;, &quot;component&quot;: &quot;entropy&quot;, &quot;location&quot;: {&quot;offset&quot;: 4608, &quot;rva&quot;: null, &quot;length&quot;: 512, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E4&quot;]}, &quot;kind&quot;: &quot;entropy&quot;, &quot;data&quot;: {&quot;method&quot;: &quot;shannon-byte-v1&quot;, &quot;byte_count&quot;: 512, &quot;bits_per_byte&quot;: 0.490432}}</pre>\n</details></article><article id=\"evidence-E6\"><h3>E6 · import · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E6&quot;, &quot;source&quot;: &quot;pe&quot;, &quot;component&quot;: &quot;imports_normal&quot;, &quot;location&quot;: {&quot;offset&quot;: 800, &quot;rva&quot;: 4384, &quot;length&quot;: 4, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e6964617461&quot;, &quot;text&quot;: &quot;.idata&quot;}}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;import&quot;, &quot;data&quot;: {&quot;dll&quot;: {&quot;raw_hex&quot;: &quot;61647661706933322e646c6c&quot;, &quot;text&quot;: &quot;advapi32.dll&quot;}, &quot;function&quot;: {&quot;raw_hex&quot;: &quot;5265675365744b657956616c756557&quot;, &quot;text&quot;: &quot;RegSetKeyValueW&quot;}, &quot;ordinal&quot;: null, &quot;table&quot;: &quot;normal&quot;, &quot;iat_rva&quot;: 4416}}</pre>\n</details></article><article id=\"evidence-E7\"><h3>E7 · string · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E7&quot;, &quot;source&quot;: &quot;strings&quot;, &quot;component&quot;: &quot;ascii&quot;, &quot;location&quot;: {&quot;offset&quot;: 376, &quot;rva&quot;: null, &quot;length&quot;: 6, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;string&quot;, &quot;data&quot;: {&quot;encoding&quot;: &quot;ascii&quot;, &quot;repertoire&quot;: &quot;ascii-printable-v1&quot;, &quot;text&quot;: &quot;.idata&quot;, &quot;raw_hex&quot;: &quot;2e6964617461&quot;, &quot;characters&quot;: 6, &quot;complete&quot;: true, &quot;total_characters&quot;: 6}}</pre>\n</details></article><article id=\"evidence-E8\"><h3>E8 · string · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E8&quot;, &quot;source&quot;: &quot;strings&quot;, &quot;component&quot;: &quot;ascii&quot;, &quot;location&quot;: {&quot;offset&quot;: 415, &quot;rva&quot;: null, &quot;length&quot;: 6, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;string&quot;, &quot;data&quot;: {&quot;encoding&quot;: &quot;ascii&quot;, &quot;repertoire&quot;: &quot;ascii-printable-v1&quot;, &quot;text&quot;: &quot;@.text&quot;, &quot;raw_hex&quot;: &quot;402e74657874&quot;, &quot;characters&quot;: 6, &quot;complete&quot;: true, &quot;total_characters&quot;: 6}}</pre>\n</details></article><article id=\"evidence-E9\"><h3>E9 · string · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E9&quot;, &quot;source&quot;: &quot;strings&quot;, &quot;component&quot;: &quot;ascii&quot;, &quot;location&quot;: {&quot;offset&quot;: 768, &quot;rva&quot;: null, &quot;length&quot;: 12, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;string&quot;, &quot;data&quot;: {&quot;encoding&quot;: &quot;ascii&quot;, &quot;repertoire&quot;: &quot;ascii-printable-v1&quot;, &quot;text&quot;: &quot;advapi32.dll&quot;, &quot;raw_hex&quot;: &quot;61647661706933322e646c6c&quot;, &quot;characters&quot;: 12, &quot;complete&quot;: true, &quot;total_characters&quot;: 12}}</pre>\n</details></article><article id=\"evidence-E10\"><h3>E10 · string · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E10&quot;, &quot;source&quot;: &quot;strings&quot;, &quot;component&quot;: &quot;ascii&quot;, &quot;location&quot;: {&quot;offset&quot;: 866, &quot;rva&quot;: null, &quot;length&quot;: 15, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;string&quot;, &quot;data&quot;: {&quot;encoding&quot;: &quot;ascii&quot;, &quot;repertoire&quot;: &quot;ascii-printable-v1&quot;, &quot;text&quot;: &quot;RegSetKeyValueW&quot;, &quot;raw_hex&quot;: &quot;5265675365744b657956616c756557&quot;, &quot;characters&quot;: 15, &quot;complete&quot;: true, &quot;total_characters&quot;: 15}}</pre>\n</details></article><article id=\"evidence-E11\"><h3>E11 · string · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E11&quot;, &quot;source&quot;: &quot;strings&quot;, &quot;component&quot;: &quot;utf16le&quot;, &quot;location&quot;: {&quot;offset&quot;: 3072, &quot;rva&quot;: null, &quot;length&quot;: 30, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;string&quot;, &quot;data&quot;: {&quot;encoding&quot;: &quot;utf-16-le&quot;, &quot;repertoire&quot;: &quot;ascii-printable-v1&quot;, &quot;text&quot;: &quot;LupaBinTraining&quot;, &quot;raw_hex&quot;: &quot;4c00750070006100420069006e0054007200610069006e0069006e006700&quot;, &quot;characters&quot;: 15, &quot;complete&quot;: true, &quot;total_characters&quot;: 15}}</pre>\n</details></article><article id=\"evidence-E12\"><h3>E12 · string · observed</h3><p>Procedencia: sin citas previas</p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E12&quot;, &quot;source&quot;: &quot;strings&quot;, &quot;component&quot;: &quot;utf16le&quot;, &quot;location&quot;: {&quot;offset&quot;: 3104, &quot;rva&quot;: null, &quot;length&quot;: 90, &quot;section&quot;: null}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: []}, &quot;kind&quot;: &quot;string&quot;, &quot;data&quot;: {&quot;encoding&quot;: &quot;utf-16-le&quot;, &quot;repertoire&quot;: &quot;ascii-printable-v1&quot;, &quot;text&quot;: &quot;Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run&quot;, &quot;raw_hex&quot;: &quot;53006f006600740077006100720065005c004d006900630072006f0073006f00660074005c00570069006e0064006f00770073005c00430075007200720065006e007400560065007200730069006f006e005c00520075006e00&quot;, &quot;characters&quot;: 45, &quot;complete&quot;: true, &quot;total_characters&quot;: 45}}</pre>\n</details></article><article id=\"evidence-E13\"><h3>E13 · api_call · observed</h3><p>Procedencia: <a href=\"#evidence-E6\">E6</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E13&quot;, &quot;source&quot;: &quot;code&quot;, &quot;component&quot;: &quot;api_calls&quot;, &quot;kind&quot;: &quot;api_call&quot;, &quot;location&quot;: {&quot;offset&quot;: 4630, &quot;rva&quot;: 8214, &quot;length&quot;: 6, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e74657874&quot;, &quot;text&quot;: &quot;.text&quot;}}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E6&quot;]}, &quot;data&quot;: {&quot;via&quot;: &quot;direct&quot;, &quot;raw_hex&quot;: &quot;ff1540114000&quot;, &quot;helper&quot;: null}}</pre>\n</details></article><article id=\"evidence-E14\"><h3>E14 · call_argument · inferred</h3><p>Procedencia: <a href=\"#evidence-E13\">E13</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E14&quot;, &quot;source&quot;: &quot;code&quot;, &quot;component&quot;: &quot;call_arguments&quot;, &quot;kind&quot;: &quot;call_argument&quot;, &quot;location&quot;: {&quot;offset&quot;: 4625, &quot;rva&quot;: 8209, &quot;length&quot;: 5, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e74657874&quot;, &quot;text&quot;: &quot;.text&quot;}}, &quot;confidence&quot;: &quot;inferred&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E13&quot;]}, &quot;data&quot;: {&quot;catalog&quot;: &quot;lupabin-api-semantics-v4&quot;, &quot;method&quot;: &quot;block-constant-v1&quot;, &quot;position&quot;: 0, &quot;name&quot;: &quot;hKey&quot;, &quot;type&quot;: &quot;hkey&quot;, &quot;value&quot;: 2147483649, &quot;raw_hex&quot;: &quot;6801000080&quot;, &quot;constant&quot;: &quot;HKEY_CURRENT_USER&quot;, &quot;string&quot;: null, &quot;source&quot;: null}}</pre>\n</details></article><article id=\"evidence-E15\"><h3>E15 · call_argument · inferred</h3><p>Procedencia: <a href=\"#evidence-E13\">E13</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E15&quot;, &quot;source&quot;: &quot;code&quot;, &quot;component&quot;: &quot;call_arguments&quot;, &quot;kind&quot;: &quot;call_argument&quot;, &quot;location&quot;: {&quot;offset&quot;: 4620, &quot;rva&quot;: 8204, &quot;length&quot;: 5, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e74657874&quot;, &quot;text&quot;: &quot;.text&quot;}}, &quot;confidence&quot;: &quot;inferred&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E13&quot;]}, &quot;data&quot;: {&quot;catalog&quot;: &quot;lupabin-api-semantics-v4&quot;, &quot;method&quot;: &quot;block-constant-v1&quot;, &quot;position&quot;: 1, &quot;name&quot;: &quot;lpSubKey&quot;, &quot;type&quot;: &quot;string&quot;, &quot;value&quot;: 4200992, &quot;raw_hex&quot;: &quot;68201a4000&quot;, &quot;constant&quot;: null, &quot;string&quot;: {&quot;offset&quot;: 3104, &quot;rva&quot;: 6688, &quot;raw_hex&quot;: &quot;53006f006600740077006100720065005c004d006900630072006f0073006f00660074005c00570069006e0064006f00770073005c00430075007200720065006e007400560065007200730069006f006e005c00520075006e000000&quot;, &quot;text&quot;: &quot;Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run&quot;}, &quot;source&quot;: null}}</pre>\n</details></article><article id=\"evidence-E16\"><h3>E16 · call_argument · inferred</h3><p>Procedencia: <a href=\"#evidence-E13\">E13</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E16&quot;, &quot;source&quot;: &quot;code&quot;, &quot;component&quot;: &quot;call_arguments&quot;, &quot;kind&quot;: &quot;call_argument&quot;, &quot;location&quot;: {&quot;offset&quot;: 4615, &quot;rva&quot;: 8199, &quot;length&quot;: 5, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e74657874&quot;, &quot;text&quot;: &quot;.text&quot;}}, &quot;confidence&quot;: &quot;inferred&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E13&quot;]}, &quot;data&quot;: {&quot;catalog&quot;: &quot;lupabin-api-semantics-v4&quot;, &quot;method&quot;: &quot;block-constant-v1&quot;, &quot;position&quot;: 2, &quot;name&quot;: &quot;lpValueName&quot;, &quot;type&quot;: &quot;string&quot;, &quot;value&quot;: 4200960, &quot;raw_hex&quot;: &quot;68001a4000&quot;, &quot;constant&quot;: null, &quot;string&quot;: {&quot;offset&quot;: 3072, &quot;rva&quot;: 6656, &quot;raw_hex&quot;: &quot;4c00750070006100420069006e0054007200610069006e0069006e0067000000&quot;, &quot;text&quot;: &quot;LupaBinTraining&quot;}, &quot;source&quot;: null}}</pre>\n</details></article><article id=\"evidence-E17\"><h3>E17 · call_argument · inferred</h3><p>Procedencia: <a href=\"#evidence-E13\">E13</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E17&quot;, &quot;source&quot;: &quot;code&quot;, &quot;component&quot;: &quot;call_arguments&quot;, &quot;kind&quot;: &quot;call_argument&quot;, &quot;location&quot;: {&quot;offset&quot;: 4610, &quot;rva&quot;: 8194, &quot;length&quot;: 5, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e74657874&quot;, &quot;text&quot;: &quot;.text&quot;}}, &quot;confidence&quot;: &quot;inferred&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E13&quot;]}, &quot;data&quot;: {&quot;catalog&quot;: &quot;lupabin-api-semantics-v4&quot;, &quot;method&quot;: &quot;block-constant-v1&quot;, &quot;position&quot;: 3, &quot;name&quot;: &quot;dwType&quot;, &quot;type&quot;: &quot;integer&quot;, &quot;value&quot;: 1, &quot;raw_hex&quot;: &quot;6801000000&quot;, &quot;constant&quot;: null, &quot;string&quot;: null, &quot;source&quot;: null}}</pre>\n</details></article><article id=\"evidence-E18\"><h3>E18 · string_reference · observed</h3><p>Procedencia: <a href=\"#evidence-E11\">E11</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E18&quot;, &quot;source&quot;: &quot;code&quot;, &quot;component&quot;: &quot;string_references&quot;, &quot;kind&quot;: &quot;string_reference&quot;, &quot;location&quot;: {&quot;offset&quot;: 4615, &quot;rva&quot;: 8199, &quot;length&quot;: 5, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e74657874&quot;, &quot;text&quot;: &quot;.text&quot;}}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E11&quot;]}, &quot;data&quot;: {&quot;raw_hex&quot;: &quot;68001a4000&quot;}}</pre>\n</details></article><article id=\"evidence-E19\"><h3>E19 · string_reference · observed</h3><p>Procedencia: <a href=\"#evidence-E12\">E12</a></p><details open><summary>Datos completos de la evidencia</summary><pre>{&quot;id&quot;: &quot;E19&quot;, &quot;source&quot;: &quot;code&quot;, &quot;component&quot;: &quot;string_references&quot;, &quot;kind&quot;: &quot;string_reference&quot;, &quot;location&quot;: {&quot;offset&quot;: 4620, &quot;rva&quot;: 8204, &quot;length&quot;: 5, &quot;section&quot;: {&quot;raw_hex&quot;: &quot;2e74657874&quot;, &quot;text&quot;: &quot;.text&quot;}}, &quot;confidence&quot;: &quot;observed&quot;, &quot;provenance&quot;: {&quot;evidence_ids&quot;: [&quot;E12&quot;]}, &quot;data&quot;: {&quot;raw_hex&quot;: &quot;68201a4000&quot;}}</pre>\n</details></article></section></main><footer><p>Recuerda: que algo no aparezca no demuestra que no esté. Solo significa que los métodos de LupaBin no lo encontraron en las partes que pudieron revisar.</p>\n</footer></body></html>\n",
+    "ghidra": "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"
+  },
+  "example": "capability-demo"
+}
