@@ -56,7 +56,12 @@ def read_triage(data: bytes, collector: Collector, progress: Progress) -> None:
     progress.examined["certificates"] = len(result.certificates.items)
     # A table that cannot be walked to its end publishes nothing: its entries would not
     # be the table's.
-    if result.certificates.status == "complete":
+    if (
+        result.certificates.status == "complete"
+        and result.layout.security.address < result.layout.tail_offset
+    ):
+        progress.issue("certificates", "triage_unreadable", limit=True)
+    elif result.certificates.status == "complete":
         for entry in result.certificates.items:
             collector.add(
                 f"pe:certificate:{entry.index}",

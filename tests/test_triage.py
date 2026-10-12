@@ -5,13 +5,17 @@ import pytest
 from pydantic import ValidationError
 
 from lupabin.analysis import analyze_bytes
-from lupabin.evidence.models import Report
+from lupabin.errors import LupaBinError
+from lupabin.evidence.models import Limits, Report
 from lupabin.evidence.triage_checks import verify_triage
 from lupabin.explain.engine import explain, validate
+from lupabin.extractors.pe import PEExtractor
 from lupabin.glossary.catalog import load_glossary
+from lupabin.ingest.reader import from_bytes
+from lupabin.saved_report import check_against_sample, load_report
 from tests.fixtures.pe_builder import build_demo
 from tests.test_pe_resources import _block, _tree, _version
-from tests.test_pe_triage import _GUID_BYTES, _certificate
+from tests.test_pe_triage import _GUID_BYTES, _PE, _certificate
 
 GLOSSARY = load_glossary()
 KINDS = ("pdb_reference", "certificate_entry", "overlay", "version_string")
@@ -119,6 +123,107 @@ def test_each_triage_fact_is_published_from_its_own_bytes(bits):
     assert data[second.location.offset :] == b"tail"
     assert all(fact.confidence == "observed" for kind in KINDS for fact in facts(report, kind))
     verify_triage(report.evidence, data, report.analysis.limits.string_characters)
+
+
+def _gap_certificate(bits, table):
+    pe = _PE(bits)
+    struct.pack_into("<H", pe.data, 0x86, 2)
+    struct.pack_into("<IIII", pe.data, pe.section + 8, 0x200, 0x1000, 0x200, 0x200)
+    struct.pack_into("<IIII", pe.data, pe.section + 48, 0x200, 0x2000, 0x200, 0x600)
+    pe.data.extend(b"\0" * 0x200 + b"tail")
+    pe.data[0x480 : 0x480 + len(table)] = table
+    pe.directory(4, 0x480, len(table))
+    return pe
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+@pytest.mark.parametrize("count", [1, 2])
+def test_pipeline_declares_gap_certificates_unpublished_without_changing_the_tail(bits, count):
+    pe = _gap_certificate(bits, _certificate(b"invented") * count)
+    assert pe.read().certificates.status == "complete"
+    data = bytes(pe.data)
+    report = analyze_bytes(data, extractors=[PEExtractor()])
+    assert not facts(report, "certificate_entry")
+    assert parts(report)["certificates"] == "partial"
+    assert parts(report)["overlay"] == "complete"
+    assert reasons(report) == {("certificates", "triage_unreadable")}
+    (overlay,) = facts(report, "overlay")
+    assert (overlay.location.offset, overlay.location.length) == (0x800, 4)
+    assert overlay.confidence == "observed"
+    verify_triage(report.evidence, data, report.analysis.limits.string_characters)
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+def test_saved_gap_report_is_verified_by_the_host(tmp_path, bits):
+    data = bytes(_gap_certificate(bits, _certificate(b"invented")).data)
+    report = analyze_bytes(data, extractors=[PEExtractor()])
+    path = tmp_path / "report.json"
+    path.write_text(report.model_dump_json(), encoding="utf-8")
+    restored = load_report(path, Limits())
+    assert restored == report
+    check_against_sample(restored, from_bytes(data, Limits()))
+    path.write_text(changed(report, "overlay", **{"data.sha256": "0" * 64}), encoding="utf-8")
+    forged = load_report(path, Limits())
+    with pytest.raises(LupaBinError) as caught:
+        check_against_sample(forged, from_bytes(data, Limits()))
+    assert caught.value.code == "report_mismatch"
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+@pytest.mark.parametrize("before", [b"", b"PREFIX!!"])
+def test_certificates_at_or_after_the_tail_keep_padding_and_table_order(bits, before):
+    pe = _PE(bits)
+    table = _certificate(b"abc") + _certificate(b"second")
+    start = pe.certificate_table(table, before, b"tail")
+    data = bytes(pe.data)
+    report = analyze_bytes(data, extractors=[PEExtractor()])
+    first, second = facts(report, "certificate_entry")
+    assert (first.data.index, first.location.offset, first.location.length) == (0, start, 11)
+    assert first.data.padding == 5
+    assert (second.data.index, second.location.offset, second.location.length) == (
+        1,
+        start + 16,
+        14,
+    )
+    assert second.data.padding == 2
+    assert parts(report)["certificates"] == "complete"
+    assert parts(report)["overlay"] == "complete"
+    restored = Report.model_validate_json(report.model_dump_json())
+    check_against_sample(restored, from_bytes(data, Limits()))
+    forged = Report.model_validate_json(
+        changed(report, "certificate_entry", **{"data.content_sha256": "0" * 64})
+    )
+    with pytest.raises(LupaBinError) as caught:
+        check_against_sample(forged, from_bytes(data, Limits()))
+    assert caught.value.code == "report_mismatch"
+    with pytest.raises(ValidationError):
+        Report.model_validate_json(
+            changed(report, "certificate_entry", index=1, **{"location.offset": start + 8})
+        )
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+@pytest.mark.parametrize("defect", ["alignment", "padding_missing", "padding_nonzero", "overlap"])
+def test_invalid_gap_tables_still_block_overlay_and_publish_no_certificates(bits, defect):
+    table = _certificate(b"abc")
+    pe = _gap_certificate(bits, table)
+    if defect == "alignment":
+        pe.directory(4, 0x481, len(table))
+    elif defect == "padding_missing":
+        pe.directory(4, 0x480, 11)
+    elif defect == "padding_nonzero":
+        pe.data[0x480 + 11] = 1
+    else:
+        pe.directory(4, 0x3F8, len(table))
+    report = analyze_bytes(bytes(pe.data), extractors=[PEExtractor()])
+    assert not facts(report, "certificate_entry")
+    assert not facts(report, "overlay")
+    assert parts(report)["certificates"] == "partial"
+    assert parts(report)["overlay"] == "blocked"
+    assert reasons(report) == {
+        ("certificates", "triage_unreadable"),
+        ("overlay", "dependency_omitted"),
+    }
 
 
 def test_a_file_without_these_data_has_no_fact_and_complete_coverage():

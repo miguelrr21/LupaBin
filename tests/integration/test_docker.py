@@ -1,5 +1,6 @@
 import asyncio
 import json
+import struct
 from uuid import uuid4
 
 import pytest
@@ -61,6 +62,116 @@ def test_dotnet_round_trip_has_all_five_kinds_and_host_checked_locations(bits):
             assert fact.location.offset + fact.location.length <= len(data)
             if fact is not root:
                 assert fact.provenance.evidence_ids == (root.id,)
+
+
+@pytest.mark.parametrize("bits", [32, 64])
+def test_triage_round_trip_has_four_kinds_and_host_checked_bytes(bits):
+    from lupabin.evidence.models import Report
+    from lupabin.evidence.triage_checks import verify_triage
+    from lupabin.explain.engine import explain, validate
+    from lupabin.glossary.catalog import load_glossary
+    from tests.test_triage import KINDS, PDB_PATH, build, facts, parts, reasons
+
+    data = build(bits=bits)
+    report = asyncio.run(run_isolated(data, Limits(), DockerCLI()))
+    restored = Report.model_validate_json(report.model_dump_json())
+    assert restored.schema_version == "0.15.0"
+    assert restored.analysis.status == "completed"
+    assert set(parts(restored).values()) == {"complete"}
+    assert not reasons(restored)
+    assert set(KINDS) <= {fact.kind for fact in restored.evidence}
+    assert facts(restored, "pdb_reference")[0].data.path.raw_hex == PDB_PATH.hex()
+    assert [(fact.data.key, fact.data.value) for fact in facts(restored, "version_string")] == [
+        ("CompanyName", "Lupa Example"),
+        ("OriginalFilename", "demo.exe"),
+    ]
+    entry = facts(restored, "certificate_entry")[0]
+    assert (entry.data.revision, entry.data.certificate_type, entry.data.padding) == (0x200, 2, 4)
+    assert [
+        data[fact.location.offset : fact.location.offset + fact.location.length]
+        for fact in facts(restored, "overlay")
+    ] == [b"OVERLAY!", b"tail"]
+    for fact in restored.evidence:
+        if fact.kind in KINDS:
+            assert fact.confidence == "observed"
+            assert fact.location.offset + fact.location.length <= len(data)
+    verify_triage(restored.evidence, data, restored.analysis.limits.string_characters)
+    glossary = load_glossary()
+    explanation = explain(restored, glossary)
+    assert {
+        "debug.pdb@1",
+        "version.strings@1",
+        "signature.certificates@1",
+        "overlay.data@1",
+    } <= {item.rule for item in explanation.items}
+    assert len(validate(explanation, restored, glossary)) == len(explanation.items)
+
+
+@pytest.mark.parametrize(
+    "kind,field,value",
+    [
+        ("pdb_reference", "debug_index", 1),
+        ("version_string", "language", 0x0C0A),
+        ("certificate_entry", "content_sha256", "0" * 64),
+        ("overlay", "sha256", "0" * 64),
+    ],
+)
+def test_triage_host_rejects_tampered_real_worker_output(kind, field, value):
+    from lupabin.evidence.models import Report
+    from lupabin.transport import Completed
+    from tests.test_triage import build
+
+    class TamperedDocker(DockerCLI):
+        altered = False
+        removed = False
+
+        async def run(self, args, **kwargs):
+            result = await super().run(args, **kwargs)
+            if args[0] == "start":
+                assert result.code == 0
+                document = json.loads(result.stdout)
+                fact = next(item for item in document["evidence"] if item["kind"] == kind)
+                fact["data"][field] = value
+                payload = json.dumps(document).encode("utf-8")
+                Report.model_validate_json(payload)
+                self.altered = True
+                return Completed(result.code, payload, result.stderr)
+            if args[:2] == ("container", "rm"):
+                self.removed = result.code == 0
+            return result
+
+    client = TamperedDocker()
+    with pytest.raises(LupaBinError) as caught:
+        asyncio.run(run_isolated(build(), Limits(), client))
+    assert caught.value.code == "invalid_worker_output"
+    assert client.altered and client.removed
+
+
+def test_triage_malformed_certificate_blocks_overlay_in_container():
+    from tests.test_triage import build, facts, parts, reasons
+
+    malformed = struct.pack("<IHH", 4096, 0x200, 2) + b"\0" * 8
+    report = asyncio.run(run_isolated(build(table=malformed), Limits(), DockerCLI()))
+    assert report.analysis.status == "partial"
+    assert not facts(report, "certificate_entry") and not facts(report, "overlay")
+    assert facts(report, "pdb_reference") and facts(report, "version_string")
+    assert parts(report)["certificates"] == "partial"
+    assert parts(report)["overlay"] == "blocked"
+    assert reasons(report) == {
+        ("certificates", "triage_unreadable"),
+        ("overlay", "dependency_omitted"),
+    }
+
+
+def test_triage_version_character_limit_is_declared_in_container():
+    from tests.test_triage import build, facts, parts, reasons
+
+    data = build(strings=(("Comments", "x" * 1025), ("ProductName", "Lupa")))
+    report = asyncio.run(run_isolated(data, Limits(), DockerCLI()))
+    assert report.analysis.status == "partial"
+    assert [fact.data.key for fact in facts(report, "version_string")] == ["ProductName"]
+    assert parts(report)["version_info"] == "partial"
+    assert ("version_info", "triage_limit") in reasons(report)
 
 
 def test_dotnet_unoptimized_layout_is_explicitly_blocked_in_container():
