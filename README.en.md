@@ -21,40 +21,57 @@ LupaBin favours **the lowest error rate over coverage**. Its extraction and infe
 
 ## Quick start
 
-Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/) and a Linux Docker engine.
+Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/) and a Linux Docker engine. The worker still runs Python 3.12. Host metadata allows Python 3.13 and a subset of tests has been checked on Windows; this does not establish that the full suite or CI matrix passes on Python 3.13.
 
 ```text
 docker build --load -f docker/Dockerfile -t lupabin-worker:0.15.0 .
-uv run --frozen lupabin analyze path/to/file.exe --no-virustotal
+uv run --frozen --no-dev lupabin analyze path/to/file.exe --no-virustotal
 ```
 
 Synthetic, harmless practice files (never execute them):
 
 ```text
-uv run python -m tests.fixtures.pe_builder --scenario capability-demo --output samples/capability-demo.bin
-uv run --frozen lupabin analyze samples/capability-demo.bin --no-virustotal
+uv run --frozen --no-dev python -m tests.fixtures.pe_builder --scenario capability-demo --output samples/capability-demo.bin
+uv run --frozen --no-dev lupabin analyze samples/capability-demo.bin --no-virustotal
 ```
 
 ## Web interface
 
 ```text
-uv sync --extra web
-uv run lupabin-web          # http://127.0.0.1:8080
+uv sync --frozen --no-dev --extra web
+uv run --frozen --no-dev --extra web lupabin-web          # http://127.0.0.1:8080
 ```
 
-For a server, `deploy/server/` has the systemd unit, the Caddy configuration and an installer for Ubuntu or Debian. Use a dedicated server: the service controls Docker.
+For a server, `deploy/server/` has the systemd unit, the Caddy configuration and an installer for Ubuntu or Debian. Use a dedicated server: the service controls Docker. Its install/update scripts install dependencies and restart services; do not use them just to verify a package. LupaBin ships a web interface and the technical CLI, not a desktop application.
+
+**Ver informe de ejemplo** opens the built-in synthetic `capability-demo` report without uploading a file, starting a worker or contacting VirusTotal. Explore its evidence and practice questions; the downloads include a short offline HTML summary and the complete fact report as JSON. Any screenshot used to document this flow should be an actual capture of that explicitly synthetic example, never a private report or a recreated image.
 
 ## Ghidra export
 
-After an analysis, the web page offers **Exportar a Ghidra (ZIP)**; from the CLI, run `uv run lupabin export-ghidra report.json --sample file.exe --output evidence.zip`. The ZIP holds the full fact report as JSON and a fixed Java script, `ImportLupaBin.java`, to run from Ghidra's Script Manager (tested with Ghidra 12.1.3 and Java 21). The script refuses a program whose SHA-256 differs from the report's, saves a review file listing every annotation and every piece of evidence it cannot place, and only after you confirm adds comments and `Note` bookmarks. It never removes your own annotations, a second import adds nothing, and a failure or cancellation leaves the program unchanged.
+After an analysis, the web page offers **Exportar a Ghidra (ZIP)**; from the CLI, run `uv run --frozen --no-dev lupabin export-ghidra report.json --sample file.exe --output evidence.zip`. The ZIP holds the full fact report as JSON and a fixed Java script, `ImportLupaBin.java`, to run from Ghidra's Script Manager (tested with Ghidra 12.1.3 and Java 21). The script refuses a program whose SHA-256 differs from the report's, saves a review file listing every annotation and every piece of evidence it cannot place, and only after you confirm adds comments and `Note` bookmarks. It never removes your own annotations, a second import adds nothing, and a failure or cancellation leaves the program unchanged.
 
 ## Self-graded practice
 
-In the web report, **Practicar con este informe** opens up to seven multiple-choice questions about that report (PE structure, imports versus calls, literal and decoded strings, incomplete coverage), each graded with its explanation and the evidence behind it. From the CLI, `uv run --frozen lupabin challenge report.json --practice` asks in the terminal, and `--json` gives an `answers_template` to fill in and grade with `--answers`. Grading is always recomputed from the report. It is practice, not a cheat-proof exam, and the score is about your answers, never about the sample's risk.
+In the web report, **Practicar con este informe** opens up to seven multiple-choice questions about that report (PE structure, imports versus calls, literal and decoded strings, incomplete coverage), each graded with its explanation and the evidence behind it. From the CLI, `uv run --frozen --no-dev lupabin challenge report.json --practice` asks in the terminal, and `--json` gives an `answers_template` to fill in and grade with `--answers`. Grading is always recomputed from the report. It is practice, not a cheat-proof exam, and the score is about your answers, never about the sample's risk.
 
 ## Safety
 
 Samples are never executed or emulated. Parsers run in a container with no network, a read-only root, no capabilities and resource limits; the host validates everything it receives. Only synthetic, harmless fixtures live in this repository: please do not submit real malware. See [SECURITY.md](SECURITY.md).
+
+## Verify the 0.15.0 distribution
+
+The [Spanish distribution checklist](README.md#comprobar-la-distribución-0150) gives the full sequential build and clean-install procedure for the final wheel and sdist. It is a procedure awaiting execution, not a claim that those artifacts passed. Use one integrated revision for the package, host and `lupabin-worker:0.15.0`; a matching version label alone does not establish matching contents. Build into a new directory and install each artifact in its own fresh environment, with the locked dependencies including the `web` extra. Isolated Python import checks (`-I`) and CLI `--help` must use that environment, not the checkout. These checks do not start or restart the web server.
+
+Once resources are available and the package checks have finished, run these commands one at a time, stopping on any failure. `--no-sync` reuses an already prepared test environment; it does not install the development group. Final CLI/web environments use locked runtime dependencies including `web`, exported with `--no-dev`, and do not need pre-commit or virtualenv:
+
+```text
+docker compose config --quiet
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.15.0 .
+uv run --frozen --no-sync pytest -q -m docker tests/integration/test_docker.py -k triage
+uv run --frozen --no-sync pytest -q -m docker tests/integration/test_docker.py -k "container_runtime_restrictions or timeout_removes_real_container"
+```
+
+The triage regressions use invented PE32/PE32+ bytes without ever executing them: PDB references, certificate entries, overlay spans and version strings, plus explicit incomplete coverage and rejection of tampered worker output on the host. A certificate entry is not a validated signature, a PDB path does not identify its author, version text is self-declared and overlay bytes do not prove execution or packing. Docker retains network `none`, UID/GID 65532, a read-only root, all capabilities dropped, `no-new-privileges`, one CPU, 512 MiB with no extra swap, 64 processes and 64 file descriptors. Missing Docker or a missing local image is an error, never a fallback to host analysis. None of these commands publishes to a registry.
 
 ## Contributing and licence
 

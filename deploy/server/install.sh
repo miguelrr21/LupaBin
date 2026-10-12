@@ -82,6 +82,7 @@ install -d -m 0755 "$APP"
 rsync -a --delete \
   --exclude ".git" --exclude ".venv" --exclude ".bootstrap" --exclude "samples" \
   --exclude ".env" --exclude "dist" --exclude "__pycache__" --exclude ".python" \
+  --exclude ".devin" \
   "$SOURCE/" "$APP/"
 
 say "Creando el entorno de Python (puede tardar unos minutos la primera vez)"
@@ -90,7 +91,7 @@ export UV_PYTHON_INSTALL_DIR="$APP/.python" UV_CACHE_DIR="/var/cache/lupabin-uv"
 chmod -R a+rX "$APP"
 
 say "Construyendo la imagen aislada $IMAGE (la primera vez tarda varios minutos)"
-docker build -f "$APP/docker/Dockerfile" -t "$IMAGE" "$APP"
+docker build --load -f "$APP/docker/Dockerfile" -t "$IMAGE" "$APP"
 
 say "Configuración en $CONFIG/web.env"
 install -d -m 0750 -g "$SERVICE_USER" "$CONFIG"

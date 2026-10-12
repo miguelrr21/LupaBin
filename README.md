@@ -16,7 +16,9 @@ Creado por [Miguel Ángel Rodríguez Romero](https://github.com/miguelrr21). *En
 - **VirusTotal**, como fuente externa separada de los hechos, con el significado documentado de algunas etiquetas y el contraste de sus técnicas con las capacidades observadas.
 - **Para aprender**: explicaciones que citan cada evidencia, un glosario con fuentes, preguntas de práctica autocorregibles sobre el propio informe y exportación de las evidencias a Ghidra.
 
-Ningún resultado se da por bueno porque lo diga el worker: el host vuelve a comprobar con los bytes de la muestra cada llamada, argumento, decodificación, marca, coincidencia YARA, bloque UPX y fila de metadatos de .NET, y cada frase del informe se regenera desde sus citas antes de mostrarse.
+Ningún resultado se da por bueno porque lo diga el worker: el host vuelve a comprobar con los bytes de la muestra cada llamada, argumento, decodificación, marca, coincidencia YARA, bloque UPX, fila de metadatos de .NET y dato de triaje, y cada frase del informe se regenera desde sus citas antes de mostrarse.
+
+Los datos de triaje no son un veredicto: una referencia PDB no identifica al autor, los textos de versión son declaraciones del archivo, una entrada en la tabla de certificados no acredita una firma válida y los bytes tras las secciones no demuestran empaquetado ni ejecución.
 
 ## Ejemplo
 
@@ -39,12 +41,12 @@ Resumen: qué contiene el código
 
 ## Inicio rápido
 
-Requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/) y Docker con motor Linux (en Windows, Docker Desktop en modo Linux).
+Requisitos: Python 3.12, [uv](https://docs.astral.sh/uv/) y Docker con motor Linux (en Windows, Docker Desktop en modo Linux). El worker usa Python 3.12. El host admite Python 3.13 en sus metadatos y se ha comprobado un subconjunto de pruebas en Windows; no equivale a verificar la suite completa ni la matriz de CI en Python 3.13.
 
 ```text
-uv sync --frozen
+uv sync --frozen --no-dev
 docker build --load -f docker/Dockerfile -t lupabin-worker:0.15.0 .
-uv run --frozen lupabin analyze "ruta/al/archivo.exe"
+uv run --frozen --no-dev lupabin analyze "ruta/al/archivo.exe"
 ```
 
 Por defecto se muestra el informe didáctico; `--markdown` lo da en Markdown y `--json`, el informe de hechos validado ([contrato](docs/evidence-schema.md)). Un informe guardado se explica de nuevo con `lupabin explain informe.json --sample archivo.exe`, que vuelve a contrastarlo con la muestra. Códigos de salida: 0 completo, 3 parcial, 1 fallo, 2 uso incorrecto.
@@ -52,8 +54,8 @@ Por defecto se muestra el informe didáctico; `--markdown` lo da en Markdown y `
 Para practicar sin aportar un binario, el generador crea archivos sintéticos e inofensivos (no los ejecutes):
 
 ```text
-uv run python -m tests.fixtures.pe_builder --scenario capability-demo --output samples/demo.bin
-uv run --frozen lupabin analyze samples/demo.bin --no-virustotal
+uv run --frozen --no-dev python -m tests.fixtures.pe_builder --scenario capability-demo --output samples/demo.bin
+uv run --frozen --no-dev lupabin analyze samples/demo.bin --no-virustotal
 ```
 
 Otros escenarios: `demo`, `decode-demo`, `toolchain-demo`, `upx-demo` y `dotnet-demo` ([procedencia de los fixtures](samples/README.md)).
@@ -66,7 +68,7 @@ Si VirusTotal no conoce el archivo, **LupaBin lo sube** con el nombre genérico 
 
 ## Web, Ghidra y práctica
 
-- **Web:** `uv sync --extra web` y `uv run lupabin-web` (en `http://127.0.0.1:8080`) sirven el mismo análisis aislado en el navegador, sin guardar las muestras recibidas ni sus informes. Para un servidor dedicado: `deploy/server/` (systemd y Caddy).
+- **Web:** `uv sync --frozen --no-dev --extra web` y `uv run --frozen --no-dev --extra web lupabin-web` (en `http://127.0.0.1:8080`) sirven el mismo análisis aislado en el navegador, sin guardar las muestras recibidas ni sus informes. Para un servidor dedicado: `deploy/server/` (systemd y Caddy). La distribución mantiene la web y la CLI técnica; no incluye una aplicación de escritorio.
 - **Ejemplo y descargas:** *Ver informe de ejemplo* permite explorar un informe sintético, sus citas y la práctica sin aportar un archivo ni consultar VirusTotal. El menú *Descargar* ofrece un resumen HTML breve para leer sin conexión, con citas y límites; el JSON conserva todas las evidencias. El resumen declara lo que omite y no incorpora los resultados de VirusTotal recibidos después.
 - **Ghidra:** `lupabin export-ghidra informe.json --sample archivo.exe --output evidencias.zip` genera un JSON y un script que, en Ghidra, comprueba el SHA-256, muestra una revisión previa y añade las evidencias como comentarios sin tocar tus anotaciones. [Detalles](docs/metodo.md#exportación-a-ghidra).
 - **Práctica:** `lupabin challenge informe.json --practice`, o *Practicar con este informe* en la web, plantea preguntas tipo test sobre el propio informe y las corrige citando las evidencias. [Detalles](docs/metodo.md#retos-autocorregibles).
@@ -87,6 +89,58 @@ node --test --test-concurrency=1 tests/test_web_vt.cjs tests/test_web_challenge.
 ```
 
 Las pruebas de la web necesitan Node.js 22 o posterior, sin paquetes npm. La CI ejecuta además las comprobaciones de los esquemas, el build y la distribución del catálogo YARA; tras cambiar los modelos, los esquemas se regeneran con `uv run python -m lupabin.evidence.schema` y `uv run python -m lupabin.explain.schema`. Las mediciones sobre binarios benignos se repiten con las herramientas `tests/*_eval.py` ([cómo](docs/metodo.md#repetir-las-mediciones)).
+
+## Comprobar la distribución 0.15.0
+
+Este es un procedimiento pendiente de ejecución sobre los artefactos definitivos, no una certificación de resultados. Usa la misma revisión integrada para el host, el wheel, el sdist y la imagen `lupabin-worker:0.15.0`. No reutilices artefactos de otra revisión aunque tengan igual número de versión. Reserva un turno con memoria disponible y ejecuta cada paso secuencialmente; detente si falla. No ejecutes los archivos PE generados por las pruebas.
+
+Desde el repositorio, con Python 3.12 y un entorno de pruebas ya preparado. Las órdenes de pytest usan `--no-sync` para reutilizarlo sin instalar todo el grupo de desarrollo. Los entornos finales de CLI/web solo reciben las dependencias de ejecución exportadas con `--no-dev --extra web`: no necesitan pre-commit ni virtualenv.
+
+```text
+uv lock --check --offline --no-build --no-python-downloads
+uv run --frozen --no-sync pytest -q tests/test_triage.py tests/test_web_example.py
+uv build --out-dir dist/verify-0.15.0
+```
+
+La carpeta de salida debe ser nueva. En Bash, comprueba los dos artefactos y sus recursos (lectores de triaje y recursos PE, glosario, YARA, Java de Ghidra y ejemplo web):
+
+```bash
+export LUPABIN_DISTRIBUTIONS="$PWD/dist/verify-0.15.0"
+uv run --frozen --no-sync --with hatchling==1.27.0 pytest -q tests/test_package.py
+uv export --frozen --no-dev --extra web --no-emit-project --format requirements-txt --output-file dist/verify-0.15.0/dependencies.txt
+```
+
+Las pruebas que requieren Hatchling o `LUPABIN_DISTRIBUTIONS` no deben quedar omitidas en la verificación definitiva: si aparece un *skip*, falta ese requisito. La construcción del sdist con Hatchling se prueba aparte de la inspección de los artefactos. No se publican paquetes con estos comandos.
+
+Instala después el wheel y el sdist, uno cada vez, en dos entornos nuevos **sin modo editable**, usando las dependencias exportadas del mismo lock. Este ejemplo Bash para Linux/macOS no activa ni sustituye el entorno de desarrollo:
+
+```bash
+uv venv --python 3.12 .devin/verify-wheel-015
+uv pip sync --python .devin/verify-wheel-015/bin/python --require-hashes dist/verify-0.15.0/dependencies.txt
+uv pip install --python .devin/verify-wheel-015/bin/python --no-deps dist/verify-0.15.0/lupabin-0.15.0-py3-none-any.whl
+.devin/verify-wheel-015/bin/lupabin --help
+.devin/verify-wheel-015/bin/python -I -c "import lupabin, lupabin.web.app, lupabin.evidence.pe_triage, lupabin.evidence.pe_resources; from lupabin.glossary.catalog import load_glossary; from importlib.resources import files; assert lupabin.__version__ == '0.15.0'; load_glossary(); assert files('lupabin.web').joinpath('static/example.json').is_file(); print(lupabin.__file__)"
+uv venv --python 3.12 .devin/verify-sdist-015
+uv pip sync --python .devin/verify-sdist-015/bin/python --require-hashes dist/verify-0.15.0/dependencies.txt
+uv pip install --python .devin/verify-sdist-015/bin/python --no-deps dist/verify-0.15.0/lupabin-0.15.0.tar.gz
+.devin/verify-sdist-015/bin/lupabin --help
+.devin/verify-sdist-015/bin/python -I -c "import lupabin, lupabin.web.app, lupabin.evidence.pe_triage, lupabin.evidence.pe_resources; from lupabin.glossary.catalog import load_glossary; from importlib.resources import files; assert lupabin.__version__ == '0.15.0'; load_glossary(); assert files('lupabin.web').joinpath('static/example.json').is_file(); print(lupabin.__file__)"
+```
+
+En Windows usa `Scripts/python.exe` y `Scripts/lupabin.exe` en lugar de `bin/python` y `bin/lupabin`; en PowerShell, define la carpeta con `$env:LUPABIN_DISTRIBUTIONS = (Resolve-Path dist/verify-0.15.0).Path`. Si uv no está en `PATH`, usa su ruta instalada. `-I` evita importar desde el checkout o desde `PYTHONPATH`: las rutas impresas deben pertenecer al entorno recién creado. El sdist necesita además obtener el constructor fijado en `pyproject.toml`; la instalación inicial de dependencias puede necesitar red. Esto no es red para el worker ni una consulta de muestras.
+
+Con motor Docker Linux disponible, y solo después de terminar los pasos anteriores:
+
+```text
+docker compose config --quiet
+docker build --load -f docker/Dockerfile -t lupabin-worker:0.15.0 .
+uv run --frozen --no-sync pytest -q -m docker tests/integration/test_docker.py -k triage
+uv run --frozen --no-sync pytest -q -m docker tests/integration/test_docker.py -k "container_runtime_restrictions or timeout_removes_real_container"
+```
+
+Las nuevas regresiones pasan bytes inventados al worker (PE32 y PE32+), comprueban los cuatro tipos de triaje y sus explicaciones, declaran una tabla de certificados malformada y un texto de versión que supera el límite, y alteran cada tipo en la respuesta real para exigir que el host lo rechace y retire el contenedor. No ejecutan el PE. El aislamiento conserva red `none`, UID/GID 65532, raíz de solo lectura, todas las capacidades retiradas, `no-new-privileges`, una CPU, 512 MiB sin swap adicional, 64 procesos y 64 descriptores. Sin Docker o sin la imagen local no se analiza en el host como alternativa.
+
+La revisión visual es distinta de estas pruebas: abre *Ver informe de ejemplo* en la web, recorre citas y práctica y descarga HTML/JSON. Para documentarla, captura realmente ese ejemplo, identificado como sintético; no uses informes privados ni presentes una imagen recreada como captura. Estas comprobaciones de instalación no arrancan otra web ni prueban visualmente el navegador. `deploy/server/install.sh` y `update.sh` sí instalan dependencias y reinician servicios: resérvalos para un despliegue autorizado en un servidor dedicado.
 
 ## Contribuir y licencia
 
