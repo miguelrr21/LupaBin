@@ -8,6 +8,9 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../src/lupabin/web/static/app.js"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "../src/lupabin/web/static/index.html"), "utf8");
+const css = fs.readFileSync(path.join(__dirname, "../src/lupabin/web/static/app.css"), "utf8");
+const favicon = fs.readFileSync(path.join(__dirname, "../src/lupabin/web/static/favicon.svg"), "utf8");
 
 const QUESTIONS = [
   { id: "identity", title: "¿Qué es?", intro: "Formato.", topics: [{ id: "format", title: "Formato y cabecera" }] },
@@ -31,6 +34,8 @@ const ITEMS = [
 
 function page() {
   const nodes = new Map();
+  const documentEvents = {};
+  let active = null;
   const element = () => ({
     textContent: "", children: [], hidden: false, events: {}, value: "",
     append(...children) {
@@ -46,7 +51,9 @@ function page() {
     getAttribute(key) { return this[key]; },
     addEventListener(name, fn) { this.events[name] = fn; },
     scrollIntoView() { this.scrolled = true; },
-    focus() {},
+    focus() { active = this; },
+    contains(node) { return node === this || this.children.some((child) => child.contains(node)); },
+    querySelector(selector) { return this.children.find((child) => child.tagName === selector); },
   });
   const get = (id) => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   const tabs = ["summary", ...QUESTIONS.map((question) => question.id)].map((id) => {
@@ -56,7 +63,8 @@ function page() {
     return tab;
   });
   const context = vm.createContext({
-    document: { getElementById: get, addEventListener() {}, createElement: element,
+    document: { getElementById: get, addEventListener(name, fn) { documentEvents[name] = fn; },
+      createElement(tagName) { return { ...element(), tagName }; },
       querySelector: get, querySelectorAll: () => tabs,
       createTextNode(text) { return { ...element(), textContent: text }; } },
     window: { scrollTo() {} }, clearTimeout() {}, clearInterval() {},
@@ -66,12 +74,144 @@ function page() {
   });
   vm.runInContext(source, context);
   vm.runInContext("lastResult = { data: payload, vt: null }; renderItems(payload);", context);
-  return { get, context };
+  return { get, context, documentEvents, active: () => active,
+    wire() {
+      run(context, 'loadConfig = () => {};');
+      get("downloads").append({ ...element(), tagName: "summary" }, get("download-json"));
+      documentEvents.DOMContentLoaded();
+    } };
 }
 
 const text = (node) => [node.textContent, ...node.children.map(text)].join(" ");
 const visible = (node) => (node.hidden ? "" : [node.textContent, ...node.children.map(visible)].join(" "));
 const run = (context, code) => vm.runInContext(code, context);
+const descendants = (node) => node.children.flatMap((child) => [child, ...descendants(child)]);
+
+test("the reading guide is a vertical list in DOM order on every viewport", () => {
+  const guide = html.match(/<ol class="steps">([\s\S]*?)<\/ol>/)[1];
+  assert.deepEqual([...guide.matchAll(/<li id="step-([a-z]+)"/g)].map((match) => match[1]),
+    ["identity", "code", "content", "vt", "coverage", "practice"]);
+  assert.match(guide, /<li id="step-vt" hidden>/);
+  assert.doesNotMatch(guide, /\bvalue=|\bstart=|\breversed\b/);
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter((match) => match[1].split(",").some((selector) => selector.trim() === ".steps"));
+  assert.equal(rules.length, 1);
+  assert.match(rules[0][2], /display:\s*block\s*;/);
+  assert.doesNotMatch(rules[0][2], /grid|columns|column-count|column-width|flex/);
+  for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (/\.steps|#step-/.test(rule[1])) assert.doesNotMatch(rule[2], /\border\s*:|grid-area|grid-row|grid-column/);
+  }
+});
+
+test("both themes keep AA text contrast and distinct control and focus boundaries", () => {
+  const themes = [...css.matchAll(/:root\s*\{([^}]+)\}/g)].map((match) =>
+    Object.fromEntries([...match[1].matchAll(/--([a-z-]+):\s*(#[a-f0-9]{6})\s*;/g)].map((value) => [value[1], value[2]])));
+  assert.equal(themes.length, 2);
+  const luminance = (color) => [0.2126, 0.7152, 0.0722].reduce((sum, weight, index) => {
+    const value = parseInt(color.slice(1 + 2 * index, 3 + 2 * index), 16) / 255;
+    return sum + weight * (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  }, 0);
+  for (const [index, theme] of themes.entries()) {
+    const results = {};
+    for (const [fg, bg, minimum] of [["text", "panel", 4.5], ["muted", "panel", 4.5],
+      ["muted", "bg", 4.5], ["blue", "panel", 4.5], ["blue", "blue-soft", 4.5],
+      ["violet", "violet-soft", 4.5], ["on-accent", "blue", 4.5], ["on-accent", "blue-hover", 4.5],
+      ["amber", "amber-soft", 4.5], ["red", "red-soft", 4.5],
+      ["border-strong", "bg", 3], ["border-strong", "panel", 3], ["focus", "panel", 3]]) {
+      const a = luminance(theme[fg]), b = luminance(theme[bg]);
+      const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      assert.ok(ratio >= minimum, `${index ? "dark" : "light"} ${fg}/${bg}: ${ratio}`);
+      results[`${fg}/${bg}`] = Number(ratio.toFixed(2));
+    }
+    console.log(`${index ? "dark" : "light"} contrast: ${JSON.stringify(results)}`);
+  }
+});
+
+test("the brand and favicon share an inert geometric lens instead of the old D", () => {
+  const mark = html.match(/<svg class="brand-mark"[^>]*>([\s\S]*?)<\/svg>/)[1];
+  assert.match(html, /class="brand"[^>]*aria-label="LupaBin, inicio"/);
+  assert.match(html, /class="brand-mark"[^>]*aria-hidden="true"/);
+  assert.match(mark, /<circle/);
+  assert.match(mark, /<rect/);
+  for (const shape of mark.matchAll(/<(?:circle|path|rect)\b[^>]*\/>/g)) assert.ok(favicon.includes(shape[0]));
+  assert.doesNotMatch(mark + favicon, /<script|<image|<foreignObject|\bon[a-z]+=|\bhref=/i);
+  assert.doesNotMatch(mark, /M4 3h7|M8 8h3/);
+});
+
+test("Escape closes Downloads and restores focus to its summary only while open", () => {
+  const pageView = page();
+  const { get, documentEvents, wire, active } = pageView;
+  wire();
+  get("downloads").open = true;
+  get("download-json").focus();
+  let prevented = false;
+  documentEvents.keydown({ key: "Escape", preventDefault() { prevented = true; } });
+  assert.equal(get("downloads").open, false);
+  assert.equal(active(), get("downloads").querySelector("summary"));
+  assert.equal(prevented, true);
+  get("search").focus();
+  documentEvents.keydown({ key: "Escape", preventDefault() { assert.fail("closed menu"); } });
+  assert.equal(active(), get("search"));
+});
+
+test("outside click closes Downloads without stealing focus; inside click keeps it open", () => {
+  const { get, documentEvents, wire, active } = page();
+  wire();
+  get("downloads").open = true;
+  documentEvents.click({ target: get("downloads").querySelector("summary") });
+  assert.equal(get("downloads").open, true);
+  documentEvents.keydown({ key: "Enter", preventDefault() { assert.fail("not Escape"); } });
+  assert.equal(get("downloads").open, true);
+  get("search").focus();
+  documentEvents.click({ target: get("search") });
+  assert.equal(get("downloads").open, false);
+  assert.equal(active(), get("search"));
+});
+
+test("opening Ghidra help closes Downloads without moving focus away from the disclosure", () => {
+  const { get, documentEvents, wire, active } = page();
+  wire();
+  get("downloads").open = true;
+  get("ghidra-help-toggle").focus();
+  documentEvents.click({ target: get("ghidra-help-toggle") });
+  assert.equal(get("downloads").open, false);
+  assert.equal(active(), get("ghidra-help-toggle"));
+});
+
+test("the guide has five visible steps without VT and six when its section is available", () => {
+  const { get, context } = page();
+  const names = ["identity", "code", "content", "vt", "coverage", "practice"];
+  run(context, 'render(payload, "sample.exe")');
+  assert.deepEqual(names.filter((id) => !get(`step-${id}`).hidden), ["identity", "code", "content", "coverage", "practice"]);
+  run(context, 'payload.virustotal = { status: "not_found" }; render(payload, "sample.exe")');
+  assert.deepEqual(names.filter((id) => !get(`step-${id}`).hidden), names);
+});
+
+test("structured header citations navigate to the exact item, not sample-shaped references", () => {
+  const { get, context, active } = page();
+  run(context, `payload.texts = 'Texto hostil (X999) (X4)';
+    payload.header = { texts: [{ text: 'Texto hostil (X999) ' }, { text: '(X4)', item_id: 'X4' }] };
+    renderHead(payload, 'sample.exe'); setFilter('nothing', 'inferred');`);
+  const links = descendants(get("hashes")).filter((node) => node.className === "header-ref");
+  assert.equal(links.length, 1);
+  assert.equal(links[0].textContent, "(X4)");
+  assert.match(text(get("hashes")), /Texto hostil \(X999\)/);
+  links[0].events.click();
+  assert.equal(get("tab-content")["aria-selected"], "true");
+  assert.equal(get("search").value, "");
+  assert.equal(active().id, "item-X4");
+  assert.match(text(active()), /<img src=x onerror=1>/);
+});
+
+test("legacy headers stay plain and a missing structured target never becomes a link", () => {
+  const { get, context } = page();
+  run(context, `payload.texts = 'Legacy (X999)'; renderHead(payload, 'old.exe');`);
+  assert.match(text(get("hashes")), /Legacy \(X999\)/);
+  assert.equal(descendants(get("hashes")).filter((node) => node.className === "header-ref").length, 0);
+  run(context, `payload.header = { texts: [{ text: '(X999)', item_id: 'X999' }] };
+    renderHead(payload, 'old.exe');`);
+  assert.equal(descendants(get("hashes")).filter((node) => node.className === "header-ref").length, 0);
+});
 
 test("each question shows its own items, grouped by topic and with their level", () => {
   const { get, context } = page();

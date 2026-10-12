@@ -26,6 +26,11 @@ MAX_NOTES = 8
 CONTEXT_RULES = frozenset(
     {
         "pe.header@1",
+        "debug.pdb@1",
+        "debug.pdb_unnamed@1",
+        "version.strings@1",
+        "signature.certificates@1",
+        "overlay.data@1",
         "upx.image@1",
         "upx.image_plain@1",
         "dotnet.metadata@1",

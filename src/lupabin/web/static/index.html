@@ -11,25 +11,39 @@
 <script src="/static/app.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Saltar al contenido</a>
 <header class="topbar">
   <div class="wrap topbar-inner">
     <a class="brand" href="/" aria-label="LupaBin, inicio">
-      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h7a9 9 0 0 1 0 18H4z" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M8 8h3a4 4 0 0 1 0 8H8z" fill="currentColor"/></svg>
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="13" cy="13" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M20 20l8 8" fill="none" stroke="currentColor" stroke-width="2.8"/><rect x="9" y="9" width="3" height="3" fill="currentColor"/><rect x="14" y="9" width="3" height="3" fill="currentColor"/><rect x="9" y="14" width="3" height="3" fill="currentColor"/><rect x="14" y="14" width="3" height="3" fill="none" stroke="currentColor"/></svg>
       <span class="brand-name">LupaBin</span>
     </a>
     <p class="topbar-note">Análisis estático de ejecutables de Windows · la muestra nunca se ejecuta</p>
   </div>
 </header>
 
-<main class="wrap" id="main">
-  <section class="panel" id="upload" aria-labelledby="upload-title">
-    <div class="panel-head">
-      <h1 id="upload-title">Analizar un archivo</h1>
-      <p class="muted">Ejecutables PE de Windows (.exe, .dll, .sys…), hasta <span id="max-size">20 MiB</span>.</p>
+<main class="wrap" id="main" tabindex="-1">
+  <section class="workspace-entry" id="upload" aria-labelledby="upload-title">
+    <div class="entry-intro">
+      <p class="eyebrow">Un archivo. Evidencias para entenderlo.</p>
+      <h1 id="upload-title">Entiende un ejecutable.<br><span>Sin ejecutarlo.</span></h1>
+      <p class="entry-lead">Explora qué contiene, qué llama su código y qué no se puede afirmar. Sigue cada conclusión hasta la evidencia que la respalda.</p>
+      <div class="example-entry">
+        <button type="button" class="button example-button" id="example-open" aria-describedby="example-help">Ver informe de ejemplo <span aria-hidden="true">↗</span></button>
+        <p class="muted small" id="example-help">Ejemplo sintético e inofensivo. Sin aportar una muestra, subir archivos ni consultar VirusTotal.</p>
+      </div>
+      <p class="entry-caption">Análisis estático, no un veredicto de seguridad.</p>
     </div>
-    <form id="form" novalidate>
+    <div class="panel analysis-card">
+      <div class="panel-head">
+        <p class="eyebrow">Tu mesa de análisis</p>
+        <h2>Analizar un archivo</h2>
+        <p class="muted">Ejecutables PE de Windows (.exe, .dll, .sys…), hasta <span id="max-size">20 MiB</span>.</p>
+      </div>
+      <form id="form" novalidate>
       <label class="drop" id="drop" for="file">
         <input type="file" id="file" name="file" class="visually-hidden">
+        <svg class="drop-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M13 5h15l8 8v30H13zM28 5v9h8M19 24h11M19 30h11M19 36h6"/></svg>
         <span class="drop-main" id="drop-text">Arrastra un archivo aquí o <span class="link-like">elige uno</span></span>
         <span class="drop-file" id="drop-file" hidden></span>
       </label>
@@ -44,10 +58,7 @@
         <button type="submit" class="button primary" id="submit" disabled>Analizar</button>
         <span class="muted small" id="limits-note"></span>
       </div>
-    </form>
-    <div class="example-entry">
-      <button type="button" class="button" id="example-open" aria-describedby="example-help">Ver informe de ejemplo</button>
-      <p class="muted small" id="example-help">Explora un ejemplo sintético e inofensivo, sin aportar una muestra. No se sube ningún archivo ni se consulta VirusTotal.</p>
+      </form>
     </div>
     <ul class="facts">
       <li><strong>No se ejecuta.</strong> El archivo se abre en un contenedor aislado, sin red ni privilegios, que se destruye al terminar.</li>
@@ -75,6 +86,7 @@
       <p>Informe preparado offline a partir de datos de prueba inofensivos (capability-demo). No procede de un archivo aportado por ti ni de un análisis del worker web. Sus evidencias se contrastaron con los bytes del fixture. No se ha subido ningún archivo ni consultado VirusTotal para este ejemplo.</p>
     </div>
     <div class="panel result-head">
+      <p class="eyebrow">Cuaderno de análisis · tu informe</p>
       <div class="result-title">
         <h2 id="result-name"></h2>
         <span class="badge" id="result-status"></span>
@@ -85,6 +97,7 @@
         <span id="vt-status-text"></span>
         <button type="button" class="link-button" id="vt-status-open">Ver detalle</button>
       </div>
+      <p class="muted small">El estado indica hasta dónde llegó el análisis, no si el archivo es seguro.</p>
       <dl class="hashes" id="hashes"></dl>
       <div class="actions">
         <button type="button" class="button primary" id="challenge-open" aria-controls="challenge-panel" aria-expanded="false">Practicar con este informe</button>
@@ -95,6 +108,21 @@
             <button type="button" id="download-md">Informe para leer (Markdown)</button>
             <button type="button" id="download-json">Informe de hechos (JSON)</button>
             <button type="button" id="ghidra-download">Evidencias para Ghidra (ZIP)</button>
+          </div>
+        </details>
+        <details class="ghidra-help" id="ghidra-help">
+          <summary class="button" id="ghidra-help-toggle">Cómo usar el ZIP en Ghidra</summary>
+          <div class="ghidra-help-body">
+            <p><strong>Ghidra se abre fuera de esta web.</strong> El ZIP no contiene el PE ni lo importa por ti: lleva evidencias y un script para añadir anotaciones al programa abierto.</p>
+            <ol class="ghidra-steps">
+              <li>Descarga «Evidencias para Ghidra (ZIP)» en «Descargar» y extrae sus dos archivos: <code>lupabin-ghidra.json</code> e <code>ImportLupaBin.java</code>.</li>
+              <li>Importa el <strong>mismo PE original</strong> en un proyecto de Ghidra y ábrelo en CodeBrowser, sin ejecutarlo. Si ya lo tienes abierto, comprueba que es ese archivo.</li>
+              <li>Abre <strong>Window &gt; Script Manager</strong>. Si falta el script, añade la carpeta extraída mediante <strong>Script Directories / Bundle Manager</strong>. Busca <code>ImportLupaBin.java</code> en el filtro del gestor.</li>
+              <li>Selecciona y ejecuta <strong>solo el script suministrado</strong>, <code>ImportLupaBin.java</code>, con <strong>Run Script</strong>. Cuando lo pida, elige <code>lupabin-ghidra.json</code> del mismo ZIP. No ejecutes el PE.</li>
+              <li>Guarda la revisión previa en un <strong>archivo nuevo</strong> y lee sus anotaciones, conflictos y abstenciones. Si hay anotaciones preparadas, confirma solo si quieres aplicarlas; después <strong>guarda el programa</strong> en tu proyecto de Ghidra. Conserva el JSON y la revisión.</li>
+            </ol>
+            <p class="notice">Si el SHA-256 no coincide, detente: no desactives esa comprobación. Necesitas el PE original completo. El ZIP del ejemplo sintético no sirve para otro ejecutable.</p>
+            <p class="muted small">Usa solo exportaciones de procedencia confiable. El importador conserva las anotaciones existentes; añade evidencias, no un veredicto de seguridad. Verificar bytes no autentica el informe ni demuestra sus afirmaciones.</p>
           </div>
         </details>
         <button type="button" class="button" id="again">Analizar otro archivo</button>
@@ -108,8 +136,8 @@
     </section>
 
     <div class="panel filter" id="filter">
+      <label class="filter-label" for="search">Encuentra una evidencia</label>
       <div class="filter-row">
-        <label class="visually-hidden" for="search">Buscar en el informe</label>
         <input type="search" id="search" class="search" autocomplete="off" spellcheck="false" placeholder="Buscar en el informe: una función, un texto, una sección…">
         <div class="segmented" role="group" aria-label="Tipo de afirmación">
           <button type="button" id="level-all" aria-pressed="true">Todo</button>

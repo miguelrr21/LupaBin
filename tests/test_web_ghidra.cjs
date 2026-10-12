@@ -34,6 +34,32 @@ function page() {
   return { context, captures, get };
 }
 
+test("Ghidra help is a native disclosure beside Downloads with the actual ZIP workflow", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../src/lupabin/web/static/index.html"), "utf8");
+  const help = html.match(/<details class="ghidra-help" id="ghidra-help">([\s\S]*?)<\/details>/);
+  assert.ok(help);
+  assert.match(help[1], /<summary[^>]*id="ghidra-help-toggle"[^>]*>Cómo usar el ZIP en Ghidra<\/summary>/);
+  assert.ok(html.indexOf('id="downloads"') < help.index && help.index < html.indexOf('id="again"'));
+  const steps = [...help[1].matchAll(/<li>([\s\S]*?)<\/li>/g)].map((match) => match[1]);
+  assert.equal(steps.length, 5);
+  assert.match(steps[0], /Descarga[\s\S]*extrae[\s\S]*lupabin-ghidra\.json[\s\S]*ImportLupaBin\.java/);
+  assert.match(steps[1], /mismo PE original[\s\S]*sin ejecutarlo/);
+  assert.match(steps[2], /Window[\s\S]*Script Manager[\s\S]*Script Directories[\s\S]*ImportLupaBin\.java/);
+  assert.match(steps[3], /solo[\s\S]*ImportLupaBin\.java[\s\S]*lupabin-ghidra\.json/);
+  assert.match(steps[4], /archivo nuevo[\s\S]*lee[\s\S]*confirma[\s\S]*guarda el programa/);
+  assert.match(help[1], /ZIP no contiene el PE/);
+  assert.match(help[1], /SHA-256[\s\S]*no desactives/);
+  assert.match(help[1], /ejemplo[\s\S]*otro ejecutable/);
+  assert.match(help[1], /conserva[\s\S]*anotaciones existentes/);
+  assert.match(help[1], /no[\s\S]*veredicto/);
+  assert.doesNotMatch(help[1], /\bhidden\b|\bautofocus\b|<script/);
+  const exporter = fs.readFileSync(path.join(__dirname, "../src/lupabin/ghidra/__init__.py"), "utf8");
+  const importer = fs.readFileSync(path.join(__dirname, "../src/lupabin/ghidra/ImportLupaBin.java"), "utf8");
+  for (const name of ["lupabin-ghidra.json", "ImportLupaBin.java"]) assert.ok(exporter.includes(`("${name}",`));
+  assert.match(importer, /askFile\("Selecciona lupabin-ghidra\.json"/);
+  assert.match(importer, /askFile\("Guardar revisión previa \(archivo NUEVO\)"/);
+});
+
 test("Ghidra ZIP download preserves every binary byte and uses only the sample hash", () => {
   const { context, captures } = page();
   const bytes = Buffer.from([0x50, 0x4b, 0, 0xff, 0x80, 0x1b]);

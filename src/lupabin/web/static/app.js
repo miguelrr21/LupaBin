@@ -243,13 +243,23 @@ function renderHead(data, name) {
     ["Tamaño", bytes(data.sample.size), false],
     ["Tipo", data.sample.type, false],
   ];
-  if (data.made_with) rows.push(["Hecho con", data.made_with, false]);
-  if (data.packed_with) rows.push(["Empaquetado", data.packed_with, false]);
-  if (data.main) rows.push(["main", data.main, false]);
-  if (data.texts) rows.push(["Textos", data.texts, false]);
-  if (data.areas) rows.push(["Familias", data.areas, false]);
-  for (const [label, value, copy] of rows) {
-    hashes.append(el("dt", { text: label }), el("dd", {}, el("span", { text: value }), copy ? copyButton(value) : null));
+  for (const [key, label] of [["made_with", "Hecho con"], ["packed_with", "Empaquetado"],
+    ["main", "main"], ["texts", "Textos (selección)"], ["areas", "Familias"]]) {
+    if (data[key]) rows.push([label, data[key], false, key]);
+  }
+  const itemIds = new Set((data.items || []).map((item) => item.id));
+  for (const [label, value, copy, key] of rows) {
+    const content = el("span");
+    const parts = key && data.header && data.header[key];
+    if (Array.isArray(parts) && parts.length && parts.every((part) => part && typeof part.text === "string")) {
+      for (const part of parts) {
+        content.append(part.item_id && itemIds.has(part.item_id)
+          ? el("button", { type: "button", className: "header-ref", text: part.text,
+            "aria-label": `Ver afirmación ${part.item_id}`, onclick: () => openItem(part.item_id) })
+          : document.createTextNode(part.text));
+      }
+    } else content.textContent = value;
+    hashes.append(el("dt", { text: label }), el("dd", { className: key ? "header-finding" : "header-meta" }, content, copy ? copyButton(value) : null));
   }
   renderScore(data.virustotal);
 }
@@ -923,6 +933,8 @@ function openItem(id) {
   if (!target) return;
   if (target.node.hidden) resetFilter(); // the filter must not hide what was asked for
   select(`tab-${questionOf(data, target.entry.topic).id}`);
+  target.node.setAttribute("tabindex", "-1");
+  target.node.focus({ preventScroll: true });
   target.node.scrollIntoView({ block: "start" });
 }
 
@@ -986,7 +998,17 @@ document.addEventListener("DOMContentLoaded", () => {
     $(`level-${level}`).addEventListener("click", () => setFilter($("search").value, level));
   }
   $("filter-reset").addEventListener("click", resetFilter);
-  const closeMenu = () => { $("downloads").open = false; };
+  const menu = $("downloads");
+  const closeMenu = () => { menu.open = false; };
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !menu.open) return;
+    event.preventDefault();
+    closeMenu();
+    menu.querySelector("summary").focus();
+  });
+  document.addEventListener("click", (event) => {
+    if (menu.open && !menu.contains(event.target)) closeMenu();
+  });
   $("ghidra-download").addEventListener("click", () => { closeMenu(); ghidra_download(); });
   $("download-json").addEventListener("click", () => {
     closeMenu();

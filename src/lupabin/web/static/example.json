@@ -8,6 +8,7 @@
     "type": "PE32"
   },
   "status": "completed",
+  "header": {},
   "made_with": null,
   "packed_with": null,
   "main": null,
