@@ -1,0 +1,13 @@
+id = "pe.debug_pdb"
+title = "Referencia al PDB"
+revision = "1.0.0"
+lang = "es"
+summary = "Un PDB es el archivo de símbolos que el enlazador genera junto al programa. El programa guarda en su directorio de depuración un registro con el identificador y la edad de ese PDB y, normalmente, la ruta donde se escribió."
+body = "El directorio de depuración de un PE es una lista de entradas; cada una declara un tipo, un tamaño y dónde están sus datos en el archivo. El tipo 2 (IMAGE_DEBUG_TYPE_CODEVIEW) es la información de depuración de Visual C++.\n\nEn los programas actuales esos datos son un registro que empieza por «RSDS» y contiene un identificador de 128 bits (GUID), una edad y la ruta del PDB terminada en un byte cero. El enlazador escribe el mismo identificador y la misma edad en el PDB: así un depurador comprueba que un archivo de símbolos corresponde exactamente a este programa.\n\nLa ruta es la que tenía el PDB en el equipo donde se enlazó el programa, así que a veces deja ver nombres de carpetas, de proyectos o de usuario. Algunos enlazadores escriben el registro sin ruta: entonces solo identifica la compilación.\n\nLupaBin publica el registro solo si una entrada de tipo 2 apunta a él, empieza por «RSDS» y su ruta termina dentro de los datos declarados. Las entradas de otros tipos y los registros CodeView de otros formatos no se leen."
+not_proven = "El identificador, la edad y la ruta son datos que escribió quien enlazó el programa y pueden cambiarse o borrarse después. No demuestran quién hizo el programa ni qué hace."
+related = ["pe.header", "toolchain.marker"]
+sources = [
+  { title = "PE Format: Debug Directory (Image Only)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#debug-directory-image-only", verified_on = 2026-10-10 },
+  { title = "The PDB Info Stream (aka the PDB Stream)", publisher = "LLVM Project", url = "https://llvm.org/docs/PDB/PdbStream.html", verified_on = 2026-10-10 },
+  { title = "Cómo trabaja LupaBin: datos de triaje", publisher = "Proyecto LupaBin", document = "docs/metodo.md#datos-de-triaje", verified_on = 2026-10-10 },
+]

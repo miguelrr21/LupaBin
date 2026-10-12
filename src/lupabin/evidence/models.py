@@ -4,7 +4,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from lupabin.evidence import dotnet, toolchain
+from lupabin.evidence import dotnet, toolchain, triage
 from lupabin.evidence.code import (
     validate_argument,
     validate_call,
@@ -30,6 +30,7 @@ from lupabin.evidence.primitives import Location as Location
 from lupabin.evidence.primitives import Name as Name
 from lupabin.evidence.relations import validate_anomaly
 from lupabin.evidence.toolchain_checks import validate_markers
+from lupabin.evidence.triage_checks import validate_triage
 from lupabin.evidence.yara import YaraContext, YaraReason, validate_matches
 
 Coverage = Literal["complete", "partial", "blocked"]
@@ -53,6 +54,8 @@ ErrorCode = (
         "entropy_limit",
         "anomaly_limit",
         "toolchain_limit",
+        "triage_unreadable",
+        "triage_limit",
         "upx_layout_unrecognized",
         "upx_rebuild_unrecognized",
         "dotnet_unsupported_layout",
@@ -80,7 +83,7 @@ ErrorCode = (
 
 
 class Analysis(Model):
-    version: Literal["0.14.0"] = "0.14.0"
+    version: Literal["0.15.0"] = "0.15.0"
     started_at: AwareDatetime
     finished_at: AwareDatetime
     status: Status
@@ -119,7 +122,7 @@ class Run(Model):
     source: Source
     version: Annotated[str, Field(min_length=1, max_length=64)]
     status: Status
-    components: Annotated[tuple[ComponentRun, ...], Field(max_length=10)]
+    components: Annotated[tuple[ComponentRun, ...], Field(max_length=14)]
     evidence_count: NonNegative
 
     @model_validator(mode="after")
@@ -152,7 +155,7 @@ def _callee(call: Evidence | None, facts: Mapping[str, Evidence]) -> Evidence | 
 
 
 class Report(Model):
-    schema_version: Literal["0.14.0"] = "0.14.0"
+    schema_version: Literal["0.15.0"] = "0.15.0"
     analysis: Analysis
     sample: Sample
     evidence: Annotated[tuple[Evidence, ...], Field(max_length=30801)] = ()
@@ -180,6 +183,10 @@ class Report(Model):
             "string": limits.strings,
             "header_anomaly": limits.anomalies,
             "toolchain_marker": toolchain.QUOTA,
+            "pdb_reference": triage.PDBS,
+            "certificate_entry": triage.CERTIFICATES,
+            "overlay": triage.OVERLAYS,
+            "version_string": triage.VERSION_STRINGS,
             "upx_image": 1,
             "upx_import": limits.imports,
             "upx_string": limits.strings,
@@ -496,6 +503,10 @@ class Report(Model):
                 "export": "exports",
                 "header_anomaly": "anomalies",
                 "toolchain_marker": "toolchain",
+                "pdb_reference": "debug_info",
+                "certificate_entry": "certificates",
+                "overlay": "overlay",
+                "version_string": "version_info",
                 "dotnet_metadata": "dotnet",
                 "dotnet_pinvoke": "dotnet",
                 "dotnet_string": "dotnet",
@@ -576,6 +587,8 @@ class Report(Model):
                 )
                 if fact.data.row > declared:
                     raise ValueError("a metadata row lies outside the table the root declares")
+            if fact.kind == "version_string" and (len(fact.data.value) > limits.string_characters):
+                raise ValueError("string exceeds character limit")
             if fact.kind == "header_anomaly":
                 if not refs or any(facts[ref].kind not in ("pe_header", "section") for ref in refs):
                     raise ValueError("anomaly requires structural evidence")
@@ -590,6 +603,7 @@ class Report(Model):
         validate_markers(
             tuple(fact for fact in self.evidence if isinstance(fact, ToolchainEvidence)), sections
         )
+        validate_triage(self.evidence, sections, header)
         ready = deque(key for key, degree in degrees.items() if degree == 0)
         visited = 0
         while ready:

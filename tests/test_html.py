@@ -30,9 +30,18 @@ from tests.fixtures.pe_builder import (
     build_decode_demo,
     build_pe,
 )
+from tests.test_triage import PDB_PATH, RECORD_AT
+from tests.test_triage import build as build_triage
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 GLOSSARY = load_glossary()
+TRIAGE_RULES = (
+    "debug.pdb@1",
+    "debug.pdb_unnamed@1",
+    "version.strings@1",
+    "signature.certificates@1",
+    "overlay.data@1",
+)
 
 
 class Page(HTMLParser):
@@ -371,6 +380,179 @@ def test_selection_is_bounded_deterministic_and_deduplicated(trusted):
     assert renderer._select(items + items) == renderer._select(items + items)
     calls = base.model_copy(update={"id": "X31", "rule": "code.calls@1"})
     assert calls not in renderer._select((calls, *items))
+
+
+@pytest.fixture(scope="module")
+def triage_reports():
+    return {path: prepared(build_triage(path=path)) for path in (PDB_PATH, b"")}
+
+
+@pytest.mark.parametrize("path", [PDB_PATH, b""])
+def test_validated_triage_context_keeps_limits_citations_and_brief_output(triage_reports, path):
+    args = triage_reports[path]
+    _, items, report, glossary = args
+    before = report.model_dump_json()
+    selected = renderer._select(items)
+    triage = tuple(item for item in selected if item.rule in TRIAGE_RULES)
+    pdb_rule = "debug.pdb@1" if path else "debug.pdb_unnamed@1"
+    assert tuple(item.rule for item in triage) == (
+        pdb_rule,
+        "version.strings@1",
+        "signature.certificates@1",
+        "overlay.data@1",
+    )
+    output = to_html(*args)
+    page = Page(output)
+    assert len(selected) <= renderer.MAX_ITEMS == 16
+    assert report.model_dump_json() == before
+    for item in triage:
+        assert item.level == "observed"
+        assert visible(item.statement) in page.content
+        assert visible(item.not_proven) in page.content
+        assert page.ids.count(f"item-{item.id}") == 1
+        for ref in item.evidence_ids[: renderer.MAX_CITATIONS]:
+            assert f"#evidence-{ref}" in page.links
+    assert "no descodifica ni valida" in page.content
+    assert "cualquiera puede poner el nombre de otra empresa" in page.content
+    assert "LupaBin no interpreta esos bytes" in page.content
+    assert "no de gravedad ni de peligrosidad" in page.content
+    assert len(page.ids) == len(set(page.ids))
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+    refs = {ref for item in selected for ref in item.evidence_ids[: renderer.MAX_CITATIONS]}
+    assert f"{len(items) - len(selected)} explicaciones validadas omitidas" in page.content
+    assert f"{len(report.evidence) - len(refs)} evidencias sin ficha" in page.content
+    assert not {"pre", "details", "script"} & {tag for tag, _ in page.elements}
+    assert "raw_hex" not in output
+    for ref in page.ids:
+        if ref.startswith("glossary-"):
+            assert visible(glossary.entries[ref.removeprefix("glossary-")].body) not in page.content
+
+
+@pytest.mark.parametrize("data", [build_pe(), b"not a PE"])
+def test_absent_triage_data_do_not_create_context(data):
+    args = prepared(data)
+    assert not any(item.rule in TRIAGE_RULES for item in args[1])
+    page = Page(to_html(*args))
+    assert all(rule not in page.content for rule in TRIAGE_RULES)
+    assert document.ABSENCE in page.content
+
+
+@pytest.mark.parametrize("rule", TRIAGE_RULES)
+def test_rejected_triage_items_are_not_recovered_from_unvalidated_explanation(triage_reports, rule):
+    path = b"" if rule == "debug.pdb_unnamed@1" else PDB_PATH
+    explanation, items, report, glossary = triage_reports[path]
+    target = next(item for item in items if item.rule == rule)
+    changed = target.model_copy(update={"statement": "UNSUPPORTED_TRIAGE_CLAIM"})
+    altered = explanation.model_copy(
+        update={"items": tuple(changed if item == target else item for item in items)}
+    )
+    valid = validate(altered, report, glossary)
+    assert valid == tuple(item for item in items if item != target)
+    page = Page(to_html(altered, valid, report, glossary))
+    assert f"item-{target.id}" not in page.ids
+    assert "UNSUPPORTED_TRIAGE_CLAIM" not in page.content
+    assert rule not in page.content
+    assert "1 explicaciones se omitieron porque no superaron la validación." in page.content
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+@pytest.mark.parametrize("rule", TRIAGE_RULES)
+@pytest.mark.parametrize("occupied", [15, 16])
+def test_triage_context_respects_full_quota_and_report_order(triage_reports, rule, occupied):
+    path = b"" if rule == "debug.pdb_unnamed@1" else PDB_PATH
+    explanation, items, report, glossary = triage_reports[path]
+    target = next(item for item in items if item.rule == rule)
+    header = next(item for item in items if item.rule == "pe.header@1")
+    prefix = (header,) * occupied
+    ordered = tuple(
+        item.model_copy(update={"id": f"X{n}"})
+        for n, item in enumerate((*prefix, target, *(item for item in items if item != target)), 1)
+    )
+    explanation = explanation.model_validate(explanation.model_dump() | {"items": ordered})
+    valid = validate(explanation, report, glossary)
+    assert valid == ordered
+    expected = ordered[:16]
+    assert tuple(item.rule for item in expected) == ("pe.header@1",) * occupied + (
+        (rule,) if occupied == 15 else ()
+    )
+    assert renderer._select(valid) == expected
+    page = Page(to_html(explanation, valid, report, glossary))
+    assert [ref for ref in page.ids if ref.startswith("item-")] == [
+        f"item-{item.id}" for item in expected
+    ]
+    assert f"{len(valid) - 16} explicaciones validadas omitidas" in page.content
+    assert f"16 mostradas de {len(valid)}" in page.content
+    refs = {ref for item in expected for ref in item.evidence_ids[: renderer.MAX_CITATIONS]}
+    assert f"{len(report.evidence) - len(refs)} evidencias sin ficha" in page.content
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+def test_triage_context_does_not_displace_a_validated_anomaly():
+    data = bytearray(build_triage())
+    data[0xA8:0xAC] = (0xFFFFFFFF).to_bytes(4, "little")
+    explanation, items, report, glossary = prepared(bytes(data))
+    target = next(item for item in items if item.rule == "debug.pdb@1")
+    ordered = tuple(
+        item.model_copy(update={"id": f"X{n}"})
+        for n, item in enumerate((*(target,) * 16, *items), 1)
+    )
+    explanation = explanation.model_validate(explanation.model_dump() | {"items": ordered})
+    valid = validate(explanation, report, glossary)
+    assert valid == ordered
+    warning = next(item for item in valid if item.rule.startswith("anomaly."))
+    selected = renderer._select(valid)
+    assert selected == (warning, *ordered[:15])
+    page = Page(to_html(explanation, valid, report, glossary))
+    assert visible(warning.statement) in page.content
+    assert visible(warning.not_proven) in page.content
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+def test_unreadable_triage_data_are_not_selected_as_facts():
+    data = bytearray(build_triage(strings=(("Comments", "x" * 1025),), table=b"\0" * 16))
+    data[RECORD_AT : RECORD_AT + 4] = b"BAD!"
+    args = prepared(bytes(data))
+    assert not any(item.rule in TRIAGE_RULES for item in args[1])
+    page = Page(to_html(*args))
+    assert all(rule not in page.content for rule in TRIAGE_RULES)
+    assert "triage_unreadable" in page.content
+    assert "triage_limit" in page.content
+    assert "partial" in page.content
+    assert document.ABSENCE in page.content
+
+
+def test_triage_many_version_citations_have_exact_omissions():
+    args = prepared(build_triage(strings=tuple((f"Key{n}", "x" * 200) for n in range(14))))
+    item = next(item for item in args[1] if item.rule == "version.strings@1")
+    assert len(item.evidence_ids) == 14
+    page = Page(to_html(*args))
+    assert visible(item.statement) in page.content
+    assert visible(item.not_proven) in page.content
+    assert "8 citas de evidencia omitidas en este HTML" in page.content
+    for ref in item.evidence_ids[: renderer.MAX_CITATIONS]:
+        assert f"#evidence-{ref}" in page.links
+    for ref in item.evidence_ids[renderer.MAX_CITATIONS :]:
+        assert f"evidence-{ref}" not in page.ids
+    assert all(link[1:] in page.ids for link in page.links if link.startswith("#"))
+
+
+def test_triage_sample_metadata_remain_inert_text():
+    hostile = '<script>alert("x")</script><img src=x onerror="bad()">https://evil.invalid'
+    value = hostile + "\u202e\x1b"
+    args = prepared(build_triage(path=hostile.encode(), strings=(("CompanyName", value),)))
+    selected = renderer._select(args[1])
+    assert {"debug.pdb@1", "version.strings@1"} <= {item.rule for item in selected}
+    output = to_html(*args)
+    page = Page(output)
+    for item in selected:
+        assert visible(item.statement) in page.content
+        assert visible(item.not_proven) in page.content
+    assert hostile in page.content
+    assert not {"script", "img"} & {tag for tag, _ in page.elements}
+    assert all("evil.invalid" not in link for link in page.links)
+    assert "\u202e" not in output and "\x1b" not in output
+    policy = next(attrs["content"] for _, attrs in page.elements if attrs.get("http-equiv"))
+    assert "script-src 'none'" in policy and "connect-src 'none'" in policy
 
 
 def test_citations_extras_and_glossary_are_bounded_with_exact_omissions(trusted):

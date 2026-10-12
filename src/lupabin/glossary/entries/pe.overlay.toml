@@ -1,0 +1,12 @@
+id = "pe.overlay"
+title = "Datos tras la última sección (overlay)"
+revision = "1.0.0"
+lang = "es"
+summary = "LupaBin llama overlay a los bytes que quedan en el archivo después del final de la última sección y que tampoco pertenecen a la tabla de certificados."
+body = "La tabla de secciones de un PE dice qué partes del archivo forman cada sección (PointerToRawData y SizeOfRawData). Un archivo puede tener más bytes después de la última: ninguna cabecera los describe.\n\n«Overlay» no es un término de la especificación del formato PE, sino el nombre habitual de esos bytes entre analistas. La definición que usa LupaBin es exacta: todo lo que hay desde el mayor final de sección (o desde el final de las cabeceras, si es mayor) hasta el final del archivo, quitando la tabla de certificados cuando se pudo recorrer entera. Por eso puede haber dos tramos, uno antes y otro después de la tabla.\n\nLupaBin publica de cada tramo su posición, su tamaño y su SHA-256. No interpreta su contenido. Si la tabla de certificados no se pudo recorrer, no se publica ningún tramo, porque no se sabría dónde acaba la tabla."
+not_proven = "Que haya bytes tras la última sección no dice qué contienen ni para qué se usan: LupaBin no los interpreta."
+related = ["pe.section", "pe.certificate_table"]
+sources = [
+  { title = "PE Format: Section Table (Section Headers)", publisher = "Microsoft Learn", url = "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers", verified_on = 2026-10-10 },
+  { title = "Cómo trabaja LupaBin: datos de triaje", publisher = "Proyecto LupaBin", document = "docs/metodo.md#datos-de-triaje", verified_on = 2026-10-10 },
+]

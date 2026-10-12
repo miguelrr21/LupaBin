@@ -62,6 +62,9 @@ QUESTIONS = (
         (
             Topic("format", "Formato y cabecera", ("pe.header@",)),
             Topic("toolchain", "Con qué se hizo", ("toolchain.",)),
+            Topic("debug", "Referencia al PDB", ("debug.",)),
+            Topic("version", "Lo que el archivo dice de sí mismo", ("version.",)),
+            Topic("signature", "Tabla de certificados", ("signature.",)),
             Topic("dotnet", "Ensamblado .NET", ("dotnet.metadata@", "dotnet.types@")),
             Topic("sections", "Secciones", ("pe.section",)),
             Topic("exports", "Funciones que exporta", ("exports.",)),
@@ -96,6 +99,7 @@ QUESTIONS = (
             Topic("dotnet_strings", "Textos literales del código .NET", ("dotnet.user_strings@",)),
             Topic("strings", "Cadenas de texto", ("strings.",)),
             Topic("entropy", "Entropía", ("entropy.",)),
+            Topic("overlay", "Datos tras la última sección", ("overlay.",)),
             Topic("yara", "Reglas YARA", ("yara.",)),
             # nothing is left out of the page because a rule has no topic yet
             Topic(OTHER, "Otras afirmaciones", ("",)),
@@ -142,6 +146,53 @@ def _item(item: Item) -> dict[str, Any]:
         "evidence": list(item.evidence_ids),
         "glossary": list(item.glossary_ids),
     }
+
+
+def _header(items: tuple[Item, ...]) -> dict[str, list[dict[str, str]]]:
+    shown: dict[str, list[dict[str, str]]] = {}
+
+    def cite(key: str, text: str, item_id: str) -> None:
+        parts = shown.setdefault(key, [])
+        if parts:
+            parts.append({"text": " · "})
+        parts.extend([{"text": text + " "}, {"text": f"({item_id})", "item_id": item_id}])
+
+    for item in items:
+        if item.rule in document.MADE_WITH:
+            cite("made_with", document.MADE_WITH[item.rule], item.id)
+    if "made_with" in shown:
+        shown["made_with"].append({"text": f", {document.MADE_WITH_NOTE}."})
+    packed = next((i for i in items if i.rule in ("upx.image@1", "upx.image_plain@1")), None)
+    if packed is not None:
+        cite("packed_with", f"UPX, método {packed.slots['method']}", packed.id)
+        shown["packed_with"].append({"text": f": {document.PACKED_WITH_NOTE}."})
+    found = {item.rule: item for item in items}
+    main = found.get("code.main_call@1")
+    if main is not None:
+        cite("main", str(main.slots["target"]), main.id)
+        reach = found.get("code.reach_main@1")
+        if reach is not None:
+            reachable = "alcanzable" if reach.slots["noun"] == "llamada" else "alcanzables"
+            cite(
+                "main",
+                f"{reach.slots['count']} {reach.slots['noun']} {reachable} desde main",
+                reach.id,
+            )
+        startup = found.get("code.reach_startup@1")
+        if startup is not None:
+            cite("main", f"{startup.slots['count']} solo del arranque", startup.id)
+    texts = document.main_texts(items)
+    if texts is not None:
+        cite("texts", " · ".join(texts[1]), texts[0])
+    areas = next((item for item in items if item.rule == "code.areas@1"), None)
+    if areas is not None and isinstance(touched := areas.slots["touched"], tuple):
+        cite(
+            "areas",
+            f"{areas.slots['count']} de {areas.slots['total']} familias con llamadas desde main: "
+            f"{', '.join(touched)}",
+            areas.id,
+        )
+    return shown
 
 
 def _summary(items: tuple[Item, ...], report: Report) -> dict[str, Any]:
@@ -216,6 +267,7 @@ def build(
             "type": report.sample.type,
         },
         "status": explanation.status,
+        "header": _header(items),
         "made_with": document.made_with(items),
         "packed_with": document.packed_with(items),
         "main": document.main_line(items),

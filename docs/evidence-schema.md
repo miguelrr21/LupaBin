@@ -1,6 +1,6 @@
 # LupaBin: contrato de evidencias
 
-El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.14.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`). Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
+El informe de hechos que produce `lupabin analyze --json` sigue el contrato **0.15.0**. Su JSON Schema se genera desde los modelos (`docs/evidence-schema.json`). Cómo se obtiene cada hecho y qué se midió para fijar sus umbrales está en [Cómo trabaja LupaBin](metodo.md).
 
 ## Regla principal: no inventar datos
 
@@ -30,10 +30,10 @@ El host trata la respuesta del worker como entrada no fiable: la valida, comprue
 
 | Campo | Contenido |
 | --- | --- |
-| `schema_version` | Literal `0.14.0`; versiones distintas se rechazan. |
+| `schema_version` | Literal `0.15.0`; versiones distintas se rechazan. |
 | `sample` | SHA-256, MD5, tamaño y tipo reconocido (`PE32`, `PE32+`, `unknown`), sin ruta local. MD5 se incluye solo por interoperabilidad. |
 | `analysis` | Versión, timestamps del análisis, límites efectivos y estado global. |
-| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `upx_image`, `upx_import`, `upx_string`, `dotnet_metadata`, `dotnet_pinvoke`, `dotnet_string`, `dotnet_member`, `dotnet_type`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call`, `code_reach` y `string_reference`. |
+| `evidence` | Unión discriminada por `kind`: `import`, `pe_header`, `section`, `entropy`, `export`, `string`, `header_anomaly`, `toolchain_marker`, `pdb_reference`, `certificate_entry`, `overlay`, `version_string`, `upx_image`, `upx_import`, `upx_string`, `dotnet_metadata`, `dotnet_pinvoke`, `dotnet_string`, `dotnet_member`, `dotnet_type`, `yara_match`, `decoded_string`, `api_call`, `call_argument`, `code_function`, `local_link`, `main_call`, `code_reach` y `string_reference`. |
 | `extractor_runs` | Fuentes `pe`, `strings`, `yara`, `decode` y `code`, con su versión y componentes tipados con cobertura y contadores. |
 | `extractor_errors` | Motivos de fallo, con fuente, componente y código estable. |
 | `limitations` | Cuotas, omisiones, prefijos acotados y warnings, separados de los fallos. |
@@ -79,6 +79,19 @@ Bytes que un compilador, un enlazador o un empaquetador deja en el archivo, con 
 
 El modelo comprueba la forma de los bytes; el informe, dónde está cada marca respecto a las secciones y que cada una aparezca una vez (la de GCC, una vez por texto); y el host, con la muestra, que los bytes son los suyos, que el checksum de la cabecera Rich se cumple sobre los bytes anteriores y que el directorio CLR apunta a la cabecera publicada. Solo `go_buildinfo` y `clr_header` llevan RVA y sección. Una candidata que falla cualquier comprobación no se publica. Con más de 8 textos distintos de GCC, el componente queda parcial (`toolchain_limit`). Una correspondencia ambigua entre memoria y archivo bloquea el componente (`unsafe_mapping`).
 
+
+## Datos de triaje (`pdb_reference`, `certificate_entry`, `overlay` y `version_string`)
+
+Cuatro componentes de la fuente `pe`, uno por tipo de hecho: `debug_info`, `certificates`, `overlay` y `version_info`. Todos son `observed`, sitúan en `location` (posición y longitud en el archivo, sin RVA) exactamente los bytes de los que salen y no citan otros hechos. Los leen dos lectores acotados propios, sin pefile ([el método](metodo.md#datos-de-triaje)).
+
+- **`pdb_reference`**: un registro CodeView `RSDS` al que apunta una entrada de tipo 2 del directorio de depuración. `data.raw_hex` es el registro entero, hasta el byte cero que cierra la ruta; `guid` y `age` son el identificador y la edad que lo ligan a su PDB; `path` es la ruta (bytes originales y texto solo si es ASCII), o nulo si el registro la lleva vacía; `debug_index` es la posición de la entrada en el directorio. Como mucho 4.
+- **`certificate_entry`**: una entrada `WIN_CERTIFICATE` de la tabla de certificados. `location` abarca la entrada sin su relleno; `data` lleva `index`, los 8 bytes de la cabecera (`header_hex`), `revision` y `certificate_type` tal como los declara, `content_sha256` (el SHA-256 del contenido) y `padding` (los bytes a cero hasta el múltiplo de 8). Solo se publican si la tabla se recorre entera y encaja en el tamaño declarado. El contenido no se descodifica ni se valida. Como mucho 16.
+- **`overlay`**: un tramo de bytes posterior al mayor final de sección (o al final de las cabeceras) que tampoco pertenece a la tabla de certificados, con su SHA-256. Hay como mucho dos: antes y después de la tabla.
+- **`version_string`**: un bloque `String` del recurso de versión. `data.raw_hex` es el bloque entero (hasta 4.096 bytes), `key` y `value` su clave y su valor, y `language` y `codepage` los de la tabla que lo contiene. Solo se publican los bloques de texto cuyo valor termina en un único carácter nulo. Como mucho 64.
+
+El informe comprueba que cada hecho tiene la forma exacta de sus bytes, que las entradas de certificado se suceden después de las secciones y que el overlay no se solapa con ellas. El host vuelve a leer la muestra con los mismos lectores y exige encontrar cada hecho publicado.
+
+Limitaciones propias: `triage_unreadable` (parte de los datos está dañada o tiene una forma que no se lee: no se publica lo que no se leyó entero) y `triage_limit` (se alcanzó un máximo de lectura o de hechos publicados). Si la tabla de certificados no se puede recorrer, `overlay` queda bloqueado con `dependency_omitted`. Las entradas de depuración de otros tipos no afectan a la cobertura. Un archivo sin estos datos no tiene hechos de estos componentes y su cobertura es completa.
 
 ## Empaquetado con UPX (`upx_image` y `upx_import`)
 
@@ -259,5 +272,6 @@ Los puntos de partida del recorrido son el punto de entrada, los exports y tabla
 | 0.12.0 | Componente `upx`, `upx_image` y `upx_import` (programas empaquetados con UPX 5) |
 | 0.13.0 | `upx_string`: las cadenas de la imagen reconstruida de un bloque UPX |
 | 0.14.0 | Componente `dotnet`, `dotnet_metadata`, `dotnet_pinvoke`, `dotnet_string`, `dotnet_member` y `dotnet_type` (metadatos de .NET) |
+| 0.15.0 | Componentes `debug_info`, `certificates`, `overlay` y `version_info`; `pdb_reference`, `certificate_entry`, `overlay` y `version_string` (datos de triaje) |
 
 Solo el esquema activo se publica (`docs/evidence-schema.json`); los anteriores siguen en el historial de git. Los consumidores rechazan versiones de esquema no soportadas y la CLI no transforma informes antiguos.

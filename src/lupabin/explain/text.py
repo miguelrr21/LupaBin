@@ -22,6 +22,10 @@ COMPONENTS: dict[Component, str] = {
     "toolchain": "marcas de compilador",
     "upx": "empaquetado UPX",
     "dotnet": "metadatos de .NET",
+    "debug_info": "referencia al PDB",
+    "certificates": "tabla de certificados",
+    "overlay": "datos tras la última sección",
+    "version_info": "textos de versión",
     "ascii": "cadenas ASCII",
     "utf16le": "cadenas UTF-16LE",
     "yara_rules": "catálogo de reglas",
@@ -76,6 +80,11 @@ MESSAGES: dict[str, str] = {
     ),
     "anomaly_limit": "Se alcanzó el máximo de anomalías conservadas.",
     "toolchain_limit": "Se alcanzó el máximo de marcas de GCC distintas conservadas.",
+    "triage_unreadable": (
+        "Parte de estos datos está dañada o tiene una forma que LupaBin no lee: no se "
+        "publica lo que no se pudo leer entero, así que puede haber más de lo que aparece."
+    ),
+    "triage_limit": ("Se alcanzó un máximo al leer estos datos: hay más de lo que aparece."),
     "dotnet_unsupported_layout": (
         "El archivo declara metadatos de .NET, pero no tienen la forma que LupaBin lee (un "
         "solo flujo «#~», sin tablas de punteros ni datos fuera del estándar): no se publica "

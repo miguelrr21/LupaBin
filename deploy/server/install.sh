@@ -7,7 +7,7 @@
 #  1. instala Docker, Caddy y las actualizaciones automáticas de seguridad;
 #  2. instala uv 0.8.22 comprobando su SHA-256 publicado;
 #  3. copia el código a /opt/lupabin y crea su entorno (Python 3.12, extra "web");
-#  4. construye la imagen aislada lupabin-worker:0.14.0;
+#  4. construye la imagen aislada lupabin-worker:0.15.0;
 #  5. crea el usuario de servicio "lupabin", la configuración /etc/lupabin/web.env,
 #     la unidad de systemd y el sitio de Caddy (puerto 80; HTTPS al poner un dominio);
 #  6. abre los puertos 80 y 443 si el sistema trae reglas de iptables que los bloquean
@@ -20,7 +20,7 @@ APP="/opt/lupabin"
 STATE="/var/lib/lupabin"
 CONFIG="/etc/lupabin"
 SERVICE_USER="lupabin"
-IMAGE="lupabin-worker:0.14.0"
+IMAGE="lupabin-worker:0.15.0"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="$(cd "$HERE/../.." && pwd)"
 
@@ -82,6 +82,7 @@ install -d -m 0755 "$APP"
 rsync -a --delete \
   --exclude ".git" --exclude ".venv" --exclude ".bootstrap" --exclude "samples" \
   --exclude ".env" --exclude "dist" --exclude "__pycache__" --exclude ".python" \
+  --exclude ".devin" \
   "$SOURCE/" "$APP/"
 
 say "Creando el entorno de Python (puede tardar unos minutos la primera vez)"
@@ -90,7 +91,7 @@ export UV_PYTHON_INSTALL_DIR="$APP/.python" UV_CACHE_DIR="/var/cache/lupabin-uv"
 chmod -R a+rX "$APP"
 
 say "Construyendo la imagen aislada $IMAGE (la primera vez tarda varios minutos)"
-docker build -f "$APP/docker/Dockerfile" -t "$IMAGE" "$APP"
+docker build --load -f "$APP/docker/Dockerfile" -t "$IMAGE" "$APP"
 
 say "Configuración en $CONFIG/web.env"
 install -d -m 0750 -g "$SERVICE_USER" "$CONFIG"

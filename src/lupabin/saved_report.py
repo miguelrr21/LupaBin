@@ -15,6 +15,7 @@ from lupabin.evidence.code import verify_calls
 from lupabin.evidence.dotnet_checks import verify_dotnet
 from lupabin.evidence.models import Limits, Report
 from lupabin.evidence.toolchain_checks import verify_markers
+from lupabin.evidence.triage_checks import verify_triage
 from lupabin.evidence.upx_checks import verify_upx
 from lupabin.evidence.yara import validate_matches
 from lupabin.extractors.decode import verify_decodings
@@ -68,6 +69,7 @@ def check_against_sample(report: Report, blob: Blob) -> None:
         verify_markers(report.evidence, blob.data)
         verify_upx(report.evidence, blob.data, report.analysis.limits.string_characters)
         verify_dotnet(report.evidence, blob.data, report.analysis.limits.string_characters)
+        verify_triage(report.evidence, blob.data, report.analysis.limits.string_characters)
         context = report.yara_context
         if context is not None and context.catalog is not None:
             limits = report.analysis.limits.yara

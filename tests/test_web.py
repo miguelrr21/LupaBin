@@ -202,6 +202,40 @@ def test_unobserved_api_families_are_not_listed_as_findings_in_the_header():
     assert detail["not_proven"]
 
 
+@pytest.mark.parametrize("fixture", [build_main_demo, build_dotnet_demo, build_pe])
+def test_structured_header_preserves_text_and_only_cites_published_items(fixture):
+    body = analyze(client(), fixture()).json()
+    items = {item["id"]: item for item in body["items"]}
+    for key in ("made_with", "packed_with", "main", "texts", "areas"):
+        parts = body["header"].get(key, [])
+        assert "".join(part["text"] for part in parts) == (body[key] or "")
+        for part in parts:
+            if "item_id" in part:
+                assert part["item_id"] in items
+                assert part["text"] == f"({part['item_id']})"
+
+
+def test_header_does_not_interpret_sample_text_as_a_citation():
+    from lupabin.explain.models import Item
+
+    item = Item(
+        id="X1",
+        rule="strings.from_main@1",
+        level="observed",
+        statement="Texto sintético.",
+        slots={"texts": ("«Texto hostil (X999) y (X1)»",)},
+        evidence_ids=("E1",),
+        glossary_ids=("pe.format",),
+        not_proven="No prueba ejecución.",
+    )
+    parts = view._header((item,))["texts"]
+    assert parts == [
+        {"text": "«Texto hostil (X999) y (X1)» "},
+        {"text": "(X1)", "item_id": "X1"},
+    ]
+    assert view._header(()) == {}
+
+
 def test_html_export_limit_keeps_the_analysis_and_other_downloads(monkeypatch):
     monkeypatch.setattr(view.html, "MAX_HTML_BYTES", 1)
     response = analyze(client(), build_pe())

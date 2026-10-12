@@ -1,3 +1,5 @@
+import configparser
+import json
 import os
 import shutil
 import tarfile
@@ -22,6 +24,7 @@ SDIST_PATHS = [
     "README.md",
 ]
 RESOURCE_PATTERNS = (
+    "**/*.py",
     "ghidra/*.java",
     "glossary/entries/*.toml",
     "glossary/entries/*.json",
@@ -36,6 +39,17 @@ def assert_metadata(data, project):
     metadata = BytesParser().parsebytes(data)
     assert metadata["Name"] == project["name"]
     assert metadata["Version"] == project["version"]
+    assert sorted(metadata["Requires-Python"].split(",")) == sorted(
+        project["requires-python"].split(",")
+    )
+    assert "web" in metadata.get_all("Provides-Extra", [])
+    requirements = metadata.get_all("Requires-Dist", [])
+    for dependency in project["optional-dependencies"]["web"]:
+        assert any(
+            requirement.split(";", 1)[0].strip() == dependency
+            and "extra == 'web'" in requirement.replace('"', "'")
+            for requirement in requirements
+        ), dependency
     assert metadata["License-Expression"] == project["license"]
     assert sorted(metadata.get_all("License-File", [])) == sorted(project["license-files"])
 
@@ -119,6 +133,22 @@ def test_built_distributions_contain_only_expected_paths_and_resources():
         assert len(names) == len(set(names)), "duplicate archive members"
         assert all(name.startswith(("lupabin/", dist_info)) for name in names)
         assert_metadata(wheel.read(dist_info + "METADATA"), project)
+        entry_points = configparser.ConfigParser()
+        entry_points.read_string(wheel.read(dist_info + "entry_points.txt").decode("utf-8"))
+        assert (
+            dict(entry_points["console_scripts"])
+            == project["scripts"]
+            == {
+                "lupabin": "lupabin.cli:app",
+                "lupabin-web": "lupabin.web.app:main",
+            }
+        )
+        example = json.loads(wheel.read("lupabin/web/static/example.json"))
+        assert example["example"] == "capability-demo"
+        assert example["virustotal"] is None
+        assert "EJEMPLO SINTÉTICO" in example["downloads"]["html"]
+        report = json.loads(example["downloads"]["report"])
+        assert report["schema_version"] == project["version"]
         for license_file in project["license-files"]:
             assert (
                 wheel.read(dist_info + "licenses/" + license_file)
@@ -141,5 +171,11 @@ def test_built_distributions_contain_only_expected_paths_and_resources():
 
 def test_package_version():
     import lupabin
+    from lupabin.evidence.models import Analysis, Report
+    from lupabin.runner import IMAGE
 
-    assert lupabin.__version__ == "0.14.0"
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert lupabin.__version__ == project["version"] == "0.15.0"
+    assert Report.model_fields["schema_version"].default == project["version"]
+    assert Analysis.model_fields["version"].default == project["version"]
+    assert IMAGE == f"lupabin-worker:{project['version']}"

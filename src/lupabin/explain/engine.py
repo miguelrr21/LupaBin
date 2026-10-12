@@ -6,6 +6,7 @@ from lupabin.evidence.facts import (
     AnomalyEvidence,
     ApiCallEvidence,
     CallArgumentEvidence,
+    CertificateEvidence,
     CodeFunctionEvidence,
     CodeReachEvidence,
     DecodedStringEvidence,
@@ -16,6 +17,8 @@ from lupabin.evidence.facts import (
     ImportEvidence,
     LocalLinkEvidence,
     MainCallEvidence,
+    OverlayEvidence,
+    PdbEvidence,
     SectionEvidence,
     StringEvidence,
     StringReferenceEvidence,
@@ -35,6 +38,7 @@ from lupabin.explain.rules import (
     groups,
     procedure_name,
     upx_groups,
+    version_tables,
 )
 from lupabin.explain.text import COMPONENTS, MESSAGES, SOURCES, STATUSES, name
 from lupabin.glossary.catalog import Glossary
@@ -106,6 +110,14 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
                 yield "toolchain.go_buildinfo_pointer@1", (fact,)
             else:
                 yield f"toolchain.{fact.data.marker}@1", (fact,)
+    for fact in evidence:
+        if isinstance(fact, PdbEvidence):
+            yield ("debug.pdb@1" if fact.data.path else "debug.pdb_unnamed@1"), (fact,)
+    for table in version_tables(report):
+        yield "version.strings@1", table
+    signed = tuple(fact for fact in evidence if isinstance(fact, CertificateEvidence))
+    if signed:
+        yield "signature.certificates@1", signed
     dotnet = dotnet_groups(report)
     if dotnet.root is not None:
         yield "dotnet.metadata@1", (dotnet.root,)
@@ -219,6 +231,9 @@ def _citations(report: Report) -> Iterator[tuple[str, tuple[Evidence, ...]]]:
     strings = tuple(fact for fact in evidence if isinstance(fact, StringEvidence))
     if strings:
         yield "strings.summary@1", strings
+    appended = tuple(fact for fact in evidence if isinstance(fact, OverlayEvidence))
+    if appended:
+        yield "overlay.data@1", appended
     for fact in evidence:
         if isinstance(fact, YaraEvidence):
             yield "yara.match@1", (fact,)

@@ -20,7 +20,7 @@ function deferred() {
 
 function payload() {
   return {
-    example: "capability-demo", report_schema: "0.14.0", report_digest: "c".repeat(64),
+    example: "capability-demo", report_schema: "0.15.0", report_digest: "c".repeat(64),
     sample: { sha256: "a".repeat(64), md5: "b".repeat(32), size: 100, type: "PE32" },
     status: "completed", summary: { groups: [], warnings: [] },
     questions: [{ id: "identity", intro: "Formato", topics: [{ id: "format", title: "Formato" }] }],
@@ -31,7 +31,7 @@ function payload() {
       html: "<!doctype html><html lang=\"es\"><body>EJEMPLO SINTÉTICO</body></html>" },
     challenge: { challenge_id: "d".repeat(64), feedback: [], challenge: {
       id: "d".repeat(64), sample_sha256: "a".repeat(64), report_digest: "c".repeat(64),
-      report_schema: "0.14.0", schema_version: "0.1.0", catalog: "lupabin-challenges-v1",
+      report_schema: "0.15.0", schema_version: "0.1.0", catalog: "lupabin-challenges-v1",
       questions: [], notice: "Práctica de prueba", empty_reason: "Sin preguntas en el mock.",
     } },
   };
