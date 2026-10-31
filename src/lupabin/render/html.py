@@ -405,12 +405,8 @@ def _fragments(
     shown_terms = terms[:MAX_GLOSSARY]
     yield '<section id="reading"><h2>Lectura seleccionada</h2>'
     yield from _paragraph(
-        f"Hasta {MAX_ITEMS} explicaciones: cobertura del recorrido; capacidades y anomalías; "
-        "después, contexto del archivo y del código. Dentro de cada grupo, el orden del informe. "
-        "Es un orden de lectura, no de gravedad ni de peligrosidad. "
-        f"Hasta {MAX_EXTRAS} campos extra, {MAX_VALUES} valores por campo, "
-        f"{MAX_VALUE_CHARS} caracteres por valor y {MAX_CITATIONS} citas de evidencia "
-        "por explicación."
+        f"Hasta {MAX_ITEMS} explicaciones ordenadas para su lectura "
+        "(no de gravedad ni de peligrosidad)."
     )
     yield from _paragraph(
         f"{len(items) - len(selected)} explicaciones validadas omitidas en este HTML; "
@@ -426,9 +422,7 @@ def _fragments(
     yield "</section>"
     yield '<section id="glossary"><h2>Glosario breve</h2>'
     yield from _paragraph(
-        "Conocimiento educativo general; no son afirmaciones sobre la muestra. "
-        f"Hasta {MAX_GLOSSARY} términos citados en la lectura; solo resúmenes, "
-        "sin los artículos completos."
+        "Definiciones generales de los términos citados (no son afirmaciones sobre la muestra)."
     )
     if len(terms) > MAX_GLOSSARY:
         yield from _paragraph(

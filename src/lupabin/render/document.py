@@ -13,7 +13,7 @@ from typing import NamedTuple
 from lupabin.evidence.facts import ApiCallEvidence, CodeReachEvidence, ImportEvidence
 from lupabin.evidence.models import Report
 from lupabin.explain.capabilities import BY_RULE, CATALOG_ID, TACTICS
-from lupabin.explain.models import Explanation, Item, SlotValue
+from lupabin.explain.models import Explanation, Item, Note, SlotValue
 from lupabin.explain.rules import RULES
 from lupabin.glossary.catalog import Glossary
 from lupabin.glossary.models import Entry
@@ -68,10 +68,8 @@ CREATE_PROCESS_W = (
     "estar en memoria escribible): lo que ejecuta esa llamada no aparece aquí."
 )
 ONE_CALL = (
-    "Casi todas las capacidades son de una sola llamada. Solo se encadenan llamadas en un "
-    "caso: abrir una clave Run o Winlogon y llamar a RegSetValueEx, cuando el identificador "
-    "pasa por una variable local en un camino recto o, solo en x64, en el mismo rango de "
-    "función de .pdata sin seguirlo. El resto no aparece."
+    "Salvo al encadenar la apertura de una clave Run o Winlogon con RegSetValueEx, cada "
+    "capacidad se reconoce a partir de llamadas individuales."
 )
 
 
@@ -248,8 +246,47 @@ def summary(items: tuple[Item, ...], report: Report) -> Summary:
         for callee in callees
     ):
         warnings.append(CREATE_PROCESS_W)
-    warnings.append(ONE_CALL)
+    if groups:
+        warnings.append(ONE_CALL)
     return Summary(groups, warnings)
+
+
+def _compact_notes(notes: tuple[Note, ...]) -> list[str]:
+    """Collapse redundant component/issue notes when an extractor fails for one shared reason."""
+    by_source: dict[str, list[Note]] = {}
+    for note in notes:
+        by_source.setdefault(note.source or "", []).append(note)
+    lines: list[str] = []
+    for group in by_source.values():
+        run_note = next((n for n in group if n.rule == "run.status@1"), None)
+        comp_notes = [n for n in group if n.rule == "component.status@1"]
+        issue_notes = [n for n in group if n.rule == "issue@1"]
+        if run_note is not None:
+            lines.append(run_note.statement)
+        reasons = list(
+            dict.fromkeys(
+                n.statement.split(": ", 1)[1] if ": " in n.statement else n.statement
+                for n in issue_notes
+            )
+        )
+        if (
+            issue_notes
+            and len(reasons) == 1
+            and all("bloqueado" in n.statement for n in comp_notes)
+        ):
+            label = (
+                run_note.statement.split(":", 1)[0]
+                if run_note is not None
+                else (issue_notes[0].source or "")
+            )
+            lines.append(f"{label}: {reasons[0]}")
+        else:
+            issued = {(n.source, n.component) for n in issue_notes}
+            for n in comp_notes:
+                if (n.source, n.component) not in issued or "bloqueado" not in n.statement:
+                    lines.append(n.statement)
+            lines.extend(dict.fromkeys(n.statement for n in issue_notes))
+    return lines
 
 
 def _techniques(item: Item) -> str | None:
@@ -343,8 +380,8 @@ def to_text(
         text = f"{warning.id}: {warning.statement}" if isinstance(warning, Item) else warning
         lines += wrap(visible(text), "     ", "   • ")
     lines += ["", "1. Qué se pudo analizar"]
-    for note in explanation.notes:
-        lines += wrap(visible(note.statement), "     ", "   • ")
+    for note_line in _compact_notes(explanation.notes):
+        lines += wrap(visible(note_line), "     ", "   • ")
     sections = (
         ("2. Hechos observados en los bytes", "observed"),
         (
@@ -474,7 +511,7 @@ def to_markdown(
         else:
             lines.append(f"- {markdown_text(warning)}")
     lines += ["", "## 1. Qué se pudo analizar", ""]
-    lines += [f"- {markdown_text(note.statement)}" for note in explanation.notes]
+    lines += [f"- {markdown_text(note_line)}" for note_line in _compact_notes(explanation.notes)]
     sections = (
         ("## 2. Hechos observados en los bytes", "observed"),
         (
@@ -500,7 +537,7 @@ def to_markdown(
                     if not shared:
                         lines.append(f"  - Límite: {markdown_text(item.not_proven)}")
                     lines.append(
-                        f"  - Evidencia: {', '.join(item.evidence_ids)}"
+                        f"  - {markdown_text(_evidence(item))}"
                         + (
                             ""
                             if shared
@@ -521,7 +558,6 @@ def to_markdown(
     for entry_id in _glossary_order(explanation, items):
         entry = glossary.entries[entry_id]
         lines += [f"### {markdown_text(entry.title)}", "", markdown_text(entry.summary), ""]
-        lines += [markdown_text(paragraph) + "\n" for paragraph in entry.body.split("\n\n")]
         if entry.not_proven:
             lines += [f"**Límite**: {markdown_text(entry.not_proven)}", ""]
         for source in entry.sources:
