@@ -320,8 +320,10 @@ function item(entry) {
     node.append(el("div", { className: "extra" },
       el("span", { className: "extra-label", text: `${extra.label}:` }), list));
   }
-  shownItems.set(entry.id, { node, entry, lists });
-  node.append(el("p", { className: "limit" }, el("strong", { text: "Límite: " }), entry.not_proven));
+  const limitLabel = el("strong", { text: "Límite: " });
+  const limitNode = el("p", { className: "limit" }, limitLabel, entry.not_proven);
+  shownItems.set(entry.id, { node, entry, lists, limitNode, limitLabel });
+  node.append(limitNode);
   const refs = el("div", { className: "refs" }, "Evidencia:");
   const evidence = entry.evidence.length > 12 ? [...entry.evidence.slice(0, 12), `y ${entry.evidence.length - 12} más`] : entry.evidence;
   for (const ref of evidence) refs.append(el("span", { className: "chip plain", text: ref }));
@@ -431,9 +433,25 @@ function applyFilter() {
     if (on && filter.words.length) reveal(lists);
   }
   for (const { node, entries, counter } of shownTopics) {
-    const count = entries.filter(matches).length;
+    const visibleEntries = entries.filter(matches);
+    const count = visibleEntries.length;
     node.hidden = count === 0;
     counter.textContent = active ? `${count}/${entries.length}` : String(entries.length);
+    let runStart = 0;
+    for (let i = 0; i < visibleEntries.length; i++) {
+      const current = shownItems.get(visibleEntries[i].id);
+      const next = i + 1 < visibleEntries.length ? visibleEntries[i + 1] : null;
+      const sameNext = next && next.rule === visibleEntries[i].rule && next.not_proven === visibleEntries[i].not_proven;
+      if (current && current.limitNode) {
+        current.limitNode.hidden = Boolean(sameNext);
+        if (!sameNext) {
+          const firstId = visibleEntries[runStart].id;
+          const lastId = visibleEntries[i].id;
+          current.limitLabel.textContent = runStart < i ? `Límite (${firstId} a ${lastId}): ` : "Límite: ";
+          runStart = i + 1;
+        }
+      }
+    }
   }
   $("filter-count").textContent = active
     ? `${shown} de ${data.items.length} afirmaciones.`

@@ -278,7 +278,7 @@ def build(
             else f"{' · '.join(texts[1])} ({texts[0]})"
         ),
         "summary": _summary(items, report),
-        "notes": [note.statement for note in explanation.notes],
+        "notes": document._compact_notes(explanation.notes),
         "items": [_item(item) for item in items],
         "questions": [
             {
