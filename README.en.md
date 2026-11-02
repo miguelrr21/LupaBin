@@ -6,6 +6,8 @@
 
 The didactic report, the glossary and the web interface are in Spanish (the structure supports other languages; translations are welcome). This page is an English overview; the full documentation is in [README.md](README.md).
 
+**Try it without installing anything at [lupabin.com](https://lupabin.com)**: upload an executable or open *Ver informe de ejemplo* (the built-in synthetic report).
+
 ## What it does
 
 - **Facts from the bytes** (contract 0.15.0), produced in an isolated Docker worker with no network: hashes, PE headers and sections, entropy, imports and exports, structural anomalies, toolchain markers (Microsoft linker Rich header, GCC and MinGW-w64, Go, .NET and PyInstaller), triage data (PDB path, version strings, certificate table and bytes after the last section), strings, matches of LupaBin's own YARA rules, and bounded static decoding (Base64, hex, repeating-key XOR anchored on known text).
@@ -58,20 +60,9 @@ In the web report, **Practicar con este informe** opens up to seven multiple-cho
 
 Samples are never executed or emulated. Parsers run in a container with no network, a read-only root, no capabilities and resource limits; the host validates everything it receives. Only synthetic, harmless fixtures live in this repository: please do not submit real malware. See [SECURITY.md](SECURITY.md).
 
-## Verify the 0.15.0 distribution
+## Releasing
 
-The [Spanish distribution checklist](README.md#comprobar-la-distribución-0150) gives the full sequential build and clean-install procedure for the final wheel and sdist. It is a procedure awaiting execution, not a claim that those artifacts passed. Use one integrated revision for the package, host and `lupabin-worker:0.15.0`; a matching version label alone does not establish matching contents. Build into a new directory and install each artifact in its own fresh environment, with the locked dependencies including the `web` extra. Isolated Python import checks (`-I`) and CLI `--help` must use that environment, not the checkout. These checks do not start or restart the web server.
-
-Once resources are available and the package checks have finished, run these commands one at a time, stopping on any failure. `--no-sync` reuses an already prepared test environment; it does not install the development group. Final CLI/web environments use locked runtime dependencies including `web`, exported with `--no-dev`, and do not need pre-commit or virtualenv:
-
-```text
-docker compose config --quiet
-docker build --load -f docker/Dockerfile -t lupabin-worker:0.15.0 .
-uv run --frozen --no-sync pytest -q -m docker tests/integration/test_docker.py -k triage
-uv run --frozen --no-sync pytest -q -m docker tests/integration/test_docker.py -k "container_runtime_restrictions or timeout_removes_real_container"
-```
-
-The triage regressions use invented PE32/PE32+ bytes without ever executing them: PDB references, certificate entries, overlay spans and version strings, plus explicit incomplete coverage and rejection of tampered worker output on the host. A certificate entry is not a validated signature, a PDB path does not identify its author, version text is self-declared and overlay bytes do not prove execution or packing. Docker retains network `none`, UID/GID 65532, a read-only root, all capabilities dropped, `no-new-privileges`, one CPU, 512 MiB with no extra swap, 64 processes and 64 file descriptors. Missing Docker or a missing local image is an error, never a fallback to host analysis. None of these commands publishes to a registry.
+The build and clean-install checklist for a release lives in [RELEASING.md](RELEASING.md).
 
 ## Contributing and licence
 
