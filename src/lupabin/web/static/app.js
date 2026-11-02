@@ -77,7 +77,7 @@ async function loadConfig() {
   }
   $("max-size").textContent = bytes(config.max_bytes);
   $("vt-options").hidden = !config.virustotal;
-  $("upload-notice").hidden = !config.upload;
+  $("upload-notice").hidden = !config.upload || !$("vt").checked; // VirusTotal is opt-in
   $("vt-label").textContent = config.upload
     ? "Analizar también en VirusTotal"
     : "Consultar VirusTotal por el SHA-256 del archivo";

@@ -10,7 +10,9 @@ import functools
 import hashlib
 import os
 import re
-from collections.abc import Awaitable, Callable, MutableMapping
+from collections.abc import AsyncIterator, Awaitable, Callable, MutableMapping
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from importlib.resources import files
 from typing import Any
 
@@ -60,6 +62,10 @@ Message = MutableMapping[str, Any]
 Receive = Callable[[], Awaitable[Message]]
 Send = Callable[[Message], Awaitable[None]]
 ASGI = Callable[[Scope, Receive, Send], Awaitable[None]]
+# VirusTotal calls may wait up to a minute for the shared quota (virustotal/quota.py);
+# they get their own threads so that waiting never holds the default pool that the
+# analyses use (asyncio.to_thread in `analyze`).
+VT_THREADS = 4
 
 
 class SecurityHeaders:
@@ -133,6 +139,18 @@ def create_app(
     # following an uploaded file's analysis: one check every 20 s for up to 15 minutes
     follow_rate = RateLimit(settings.rate * 10 + 45, settings.window)
     slots = Slots(settings.concurrency, settings.queue_seconds)
+    vt_pool = ThreadPoolExecutor(VT_THREADS, thread_name_prefix="lupabin-vt")
+
+    async def in_vt_pool(call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(vt_pool, functools.partial(call, *args, **kwargs))
+
+    @asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            vt_pool.shutdown(wait=False, cancel_futures=True)
 
     async def index(request: Request) -> Response:
         return FileResponse(str(STATIC / "index.html"), media_type="text/html; charset=utf-8")
@@ -254,7 +272,7 @@ def create_app(
             return failure("invalid_input", 400)
         upload = settings.upload and request.query_params.get("upload") == "1"
         sha256 = hashlib.sha256(data).hexdigest()
-        found, analysis = await asyncio.to_thread(submit, sha256, data, upload=upload)
+        found, analysis = await in_vt_pool(submit, sha256, data, upload=upload)
         return JSONResponse({**view.virustotal(found), "analysis": analysis})
 
     async def virustotal_follow(request: Request) -> Response:
@@ -267,7 +285,7 @@ def create_app(
         refused = vt_refused(request, follow_rate)
         if refused is not None:
             return refused
-        found = await asyncio.to_thread(follow, sha256, analysis)
+        found = await in_vt_pool(follow, sha256, analysis)
         return JSONResponse({**view.virustotal(found), "analysis": analysis})
 
     app = Starlette(
@@ -279,7 +297,8 @@ def create_app(
             Route("/api/virustotal", virustotal, methods=["POST"]),
             Route("/api/virustotal/{sha256}", virustotal_follow),
             Mount("/static", StaticFiles(directory=str(STATIC)), name="static"),
-        ]
+        ],
+        lifespan=lifespan,
     )
     app.add_middleware(SecurityHeaders)
     return app

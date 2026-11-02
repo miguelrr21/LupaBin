@@ -506,3 +506,23 @@ def test_health_checks_the_worker_image_without_analysing():
     assert test.get("/api/health").json()["status"] == "ok"
     assert all(args[0] == "image" for args, _ in test.docker.calls)
     assert client(docker=Worker(failure="image")).get("/api/health").status_code == 503
+
+
+def test_virustotal_is_opt_in_on_the_page():
+    page = (STATIC / "index.html").read_text(encoding="utf-8")
+    box = re.search(r"<input[^>]*id=\"vt\"[^>]*>", page)
+    assert box is not None and "checked" not in box.group(0)
+
+
+def test_virustotal_calls_wait_in_their_own_threads_not_in_the_analyses_pool():
+    import threading
+
+    names = []
+
+    def consult(sha256, data, upload):
+        names.append(threading.current_thread().name)
+        return vt_report(sha256, data, upload)
+
+    test = client(Settings(virustotal=True, upload=True), consult=consult)
+    vt_post(test, build_pe(), 0)
+    assert names and names[0].startswith("lupabin-vt")
