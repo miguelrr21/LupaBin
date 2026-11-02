@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Privacidad · LupaBin</title>
+<meta name="description" content="Qué datos trata LupaBin, durante cuánto tiempo y con quién se comparten.">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="/" aria-label="LupaBin, inicio">
+      <span class="brand-name">LupaBin</span>
+    </a>
+    <p class="topbar-note">Privacidad</p>
+  </div>
+</header>
+
+<main class="wrap privacy" id="main">
+  <h1>Privacidad</h1>
+  <p><strong>En resumen:</strong> LupaBin no guarda los archivos que subes, ni sus informes, ni registros de acceso. No usa cookies, analítica ni recursos de terceros. Solo consulta VirusTotal si tú lo pides.</p>
+
+  <h2>Responsable</h2>
+  <p>Miguel Ángel Rodríguez Romero, autor de LupaBin. Contacto: <a href="https://github.com/miguelrr21/LupaBin/issues">issues del proyecto en GitHub</a> (no incluyas datos personales ni muestras en un issue público).</p>
+
+  <h2>Qué se trata y durante cuánto tiempo</h2>
+  <ul>
+    <li><strong>El archivo que analizas.</strong> Se recibe en memoria, se analiza en un contenedor sin red que se elimina al terminar y no se escribe en disco ni se conserva. Puede contener datos personales sin que lo sepas (por ejemplo, un nombre de usuario en una ruta de depuración); aparecen solo en el informe que recibe tu navegador.</li>
+    <li><strong>Tu dirección IP.</strong> Se guarda solo en memoria para limitar cuántos análisis se piden desde una misma dirección, y se olvida al terminar la ventana del límite (10 minutos por defecto) o al reiniciarse el servicio. No se registra en ningún archivo. Base: el interés legítimo de proteger el servicio frente a abusos.</li>
+    <li><strong>En tu navegador.</strong> La página no usa cookies ni almacenamiento local. Las descargas (HTML, JSON, Ghidra) se generan para ti y no se guardan en el servidor.</li>
+  </ul>
+
+  <h2>Terceros</h2>
+  <ul>
+    <li><strong>Cloudflare</strong> intermedia todas las conexiones con lupabin.com, por lo que ve tu IP y las peticiones. Consulta su <a href="https://www.cloudflare.com/privacypolicy/">política de privacidad</a>.</li>
+    <li><strong>VirusTotal</strong> (Google), solo si marcas la casilla. Se consulta primero la huella SHA-256 del archivo. Si VirusTotal no lo conoce, el archivo se sube con el nombre genérico <code>sample</code> usando la clave de este servidor. Lo subido queda en VirusTotal, puede compartirse con sus clientes de pago y desde aquí no se puede retirar. No subas documentos ni programas internos o confidenciales. Base: tu consentimiento al marcar la casilla. Consulta su <a href="https://docs.virustotal.com/docs/privacy-policy">política de privacidad</a>.</li>
+  </ul>
+
+  <h2>Tus derechos</h2>
+  <p>Como no se conserva nada que te identifique, normalmente no habrá datos que consultar, corregir o borrar. Aun así, puedes escribir por el contacto de arriba para cualquier duda. Si crees que tus datos no se han tratado bien, puedes reclamar ante la <a href="https://www.aepd.es/">Agencia Española de Protección de Datos</a>.</p>
+
+  <p class="muted small">Última actualización: 2 de noviembre de 2026. El código del servicio es abierto y se puede revisar en <a href="https://github.com/miguelrr21/LupaBin">GitHub</a>.</p>
+  <p><a href="/">Volver a LupaBin</a></p>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <p class="credit">LupaBin, de <a href="https://github.com/miguelrr21" rel="author">Miguel Ángel Rodríguez Romero</a> · código abierto con licencia Apache 2.0</p>
+  </div>
+</footer>
+</body>
+</html>

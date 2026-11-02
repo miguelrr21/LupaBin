@@ -324,3 +324,8 @@ button.chip:hover { text-decoration: underline; }
   .guide { padding: 1rem; }
   .example-button { width: 100%; }
 }
+
+.privacy { max-width: 800px; }
+.privacy h2 { margin-top: 2rem; }
+.privacy ul { padding-left: 1.25rem; margin-bottom: 1.25rem; }
+.privacy li { margin-bottom: .45rem; }

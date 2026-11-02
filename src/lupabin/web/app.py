@@ -155,6 +155,9 @@ def create_app(
     async def index(request: Request) -> Response:
         return FileResponse(str(STATIC / "index.html"), media_type="text/html; charset=utf-8")
 
+    async def privacy(request: Request) -> Response:
+        return FileResponse(str(STATIC / "privacidad.html"), media_type="text/html; charset=utf-8")
+
     async def config(request: Request) -> Response:
         return JSONResponse(
             {
@@ -291,6 +294,7 @@ def create_app(
     app = Starlette(
         routes=[
             Route("/", index),
+            Route("/privacidad", privacy),
             Route("/api/config", config),
             Route("/api/health", health),
             Route("/api/analyze", analyze, methods=["POST"]),
