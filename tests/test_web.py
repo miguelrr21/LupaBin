@@ -526,3 +526,13 @@ def test_virustotal_calls_wait_in_their_own_threads_not_in_the_analyses_pool():
     test = client(Settings(virustotal=True, upload=True), consult=consult)
     vt_post(test, build_pe(), 0)
     assert names and names[0].startswith("lupabin-vt")
+
+
+def test_privacy_page_is_served_with_security_headers_and_linked_from_footer():
+    test = client()
+    response = test.get("/privacidad")
+    assert response.status_code == 200
+    assert "Privacidad" in response.text
+    assert "default-src 'none'" in response.headers["content-security-policy"]
+    index = test.get("/")
+    assert 'href="/privacidad"' in index.text
