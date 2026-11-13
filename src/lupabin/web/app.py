@@ -36,6 +36,23 @@ from lupabin.web import view
 from lupabin.web.guard import Busy, RateLimit, Settings, Slots, client_address
 
 STATIC = files("lupabin.web") / "static"
+PUBLIC_URL = "https://lupabin.com"
+ROBOTS_TXT = f"User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: {PUBLIC_URL}/sitemap.xml\n"
+SITEMAP_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    "  <url>\n"
+    f"    <loc>{PUBLIC_URL}/</loc>\n"
+    "    <changefreq>weekly</changefreq>\n"
+    "    <priority>1.0</priority>\n"
+    "  </url>\n"
+    "  <url>\n"
+    f"    <loc>{PUBLIC_URL}/privacidad</loc>\n"
+    "    <changefreq>monthly</changefreq>\n"
+    "    <priority>0.5</priority>\n"
+    "  </url>\n"
+    "</urlset>\n"
+)
 ANALYSIS_ID = re.compile(r"[A-Za-z0-9_=-]{1,200}")  # VirusTotal analysis IDs (base64url)
 STATUS: dict[FailureCode, int] = {
     "input_empty": 400,
@@ -157,6 +174,12 @@ def create_app(
 
     async def privacy(request: Request) -> Response:
         return FileResponse(str(STATIC / "privacidad.html"), media_type="text/html; charset=utf-8")
+
+    async def robots(request: Request) -> Response:
+        return Response(ROBOTS_TXT, media_type="text/plain; charset=utf-8")
+
+    async def sitemap(request: Request) -> Response:
+        return Response(SITEMAP_XML, media_type="application/xml; charset=utf-8")
 
     async def config(request: Request) -> Response:
         return JSONResponse(
@@ -295,6 +318,8 @@ def create_app(
         routes=[
             Route("/", index),
             Route("/privacidad", privacy),
+            Route("/robots.txt", robots),
+            Route("/sitemap.xml", sitemap),
             Route("/api/config", config),
             Route("/api/health", health),
             Route("/api/analyze", analyze, methods=["POST"]),

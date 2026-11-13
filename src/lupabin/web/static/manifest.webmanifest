@@ -1,0 +1,19 @@
+{
+  "name": "LupaBin · Tutor de análisis estático de ejecutables PE de Windows",
+  "short_name": "LupaBin",
+  "description": "Analiza un ejecutable de Windows (.exe, .dll, .sys) sin ejecutarlo: qué contiene, qué llama su código, capacidades MITRE ATT&CK, .NET, UPX y exportación a Ghidra.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f2f5fa",
+  "theme_color": "#132b50",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

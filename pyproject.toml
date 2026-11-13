@@ -6,10 +6,21 @@ build-backend = "hatchling.build"
 name = "lupabin"
 version = "0.15.0"
 description = "Evidence-first static analysis tutor; samples are never executed."
+readme = "README.md"
 requires-python = ">=3.12,<3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Miguel Ángel Rodríguez Romero" }]
+keywords = [
+    "static-analysis",
+    "pe",
+    "reverse-engineering",
+    "malware-analysis",
+    "ghidra",
+    "yara",
+    "security-education",
+    "windows",
+]
 dependencies = [
     "capstone==5.0.9",
     "pefile==2024.8.26",
@@ -17,6 +28,11 @@ dependencies = [
     "typer==0.16.1",
     "yara-python==4.5.4",
 ]
+
+[project.urls]
+Homepage = "https://lupabin.com"
+Repository = "https://github.com/miguelrr21/LupaBin"
+Issues = "https://github.com/miguelrr21/LupaBin/issues"
 
 [project.scripts]
 lupabin = "lupabin.cli:app"

@@ -88,9 +88,49 @@ def test_the_page_and_its_assets_are_served_with_strict_headers():
     assert "unsafe-inline" not in csp and "frame-ancestors 'none'" in csp
     assert page.headers["x-content-type-options"] == "nosniff"
     assert page.headers["referrer-policy"] == "no-referrer"
-    for asset in ("app.js", "app.css", "favicon.svg"):
+    for asset in ("app.js", "app.css", "favicon.svg", "manifest.webmanifest"):
         assert test.get(f"/static/{asset}").status_code == 200
     assert test.get("/api/config").headers["cache-control"] == "no-store"
+
+
+def test_robots_txt_and_sitemap_xml_are_served_for_crawlers():
+    test = client()
+    robots = test.get("/robots.txt")
+    assert robots.status_code == 200
+    assert robots.headers["content-type"].startswith("text/plain")
+    assert "Allow: /" in robots.text
+    assert "Disallow: /api/" in robots.text
+    assert "Sitemap: https://lupabin.com/sitemap.xml" in robots.text
+    sitemap = test.get("/sitemap.xml")
+    assert sitemap.status_code == 200
+    assert sitemap.headers["content-type"].startswith("application/xml")
+    assert "<urlset" in sitemap.text
+    assert "<loc>https://lupabin.com/</loc>" in sitemap.text
+
+
+def test_seo_metadata_structured_microdata_and_heading_hierarchy():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    for needle in (
+        '<meta name="description"',
+        '<meta name="robots" content="index, follow"',
+        '<link rel="canonical" href="https://lupabin.com/">',
+        '<link rel="manifest" href="/static/manifest.webmanifest">',
+        'property="og:title"',
+        'property="og:description"',
+        'property="og:type"',
+        'property="og:url"',
+        'property="og:image"',
+        'property="og:locale"',
+        'name="twitter:card"',
+        'name="twitter:title"',
+        'name="twitter:description"',
+        "https://schema.org/SoftwareApplication",
+        "https://schema.org/FAQPage",
+    ):
+        assert needle in html, needle
+    levels = [int(level) for level in re.findall(r"<h([1-6])\b", html)]
+    assert levels.count(1) == 1
+    assert all(curr - prev <= 1 for prev, curr in zip(levels, levels[1:], strict=False)), levels
 
 
 def test_the_page_has_no_inline_code_and_the_script_never_builds_html_from_data():
