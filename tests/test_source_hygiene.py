@@ -15,7 +15,20 @@ FORBIDDEN = {
 def test_no_literal_bidi_or_invisible_characters():
     paths = [
         path
-        for pattern in ("src/**/*.py", "src/**/*.toml", "src/**/*.json", "tests/**/*.py", "*.md")
+        for pattern in (
+            "src/**/*.py",
+            "src/**/*.toml",
+            "src/**/*.json",
+            "src/**/*.html",
+            "src/**/*.css",
+            "src/**/*.js",
+            "src/**/*.svg",
+            "src/**/*.webmanifest",
+            "src/**/*.yar",
+            "tests/**/*.py",
+            "tests/**/*.cjs",
+            "*.md",
+        )
         for path in ROOT.glob(pattern)
     ] + list((ROOT / "docs").rglob("*.md"))
     found = [
