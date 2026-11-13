@@ -37,7 +37,7 @@ function payload() {
   };
 }
 
-function page(route = async () => response(payload())) {
+function page(route = async () => response(payload()), location = { search: "", hash: "" }) {
   const nodes = new Map();
   const calls = [];
   const timers = new Map();
@@ -76,7 +76,7 @@ function page(route = async () => response(payload())) {
     document: { getElementById: get, addEventListener(name, callback) { ready = callback; },
       createElement: element, querySelector: get, querySelectorAll: () => tabs,
       createTextNode(value) { return { ...element(), textContent: value }; } },
-    window: { scrollTo() {} }, AbortController, console,
+    window: { scrollTo() {} }, location, AbortController, console,
     setInterval(callback) { const id = ++timerId; timers.set(id, callback); return id; },
     setTimeout(callback) { const id = ++timerId; timers.set(id, callback); return id; },
     clearInterval(id) { timers.delete(id); }, clearTimeout(id) { timers.delete(id); },
@@ -360,4 +360,12 @@ test("the generated artifact renders and preserves the report identity and suppo
   assert.doesNotMatch(text(get("challenge-content")), /No se puede validar/);
   assert.ok(run(context, "challenge_grade(lastResult.data, {}).total") > 0);
   assert.deepEqual(calls.map((call) => call.url), ["/static/example.json"]);
+});
+
+test("?ejemplo=1 opens the synthetic report automatically on startup", async () => {
+  const { get, calls } = page(async () => response(payload()), { search: "?ejemplo=1", hash: "" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls.map((call) => call.url), ["/static/example.json"]);
+  assert.equal(get("result").hidden, false);
+  assert.equal(get("example-notice").hidden, false);
 });

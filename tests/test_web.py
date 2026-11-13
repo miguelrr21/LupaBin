@@ -106,6 +106,18 @@ def test_robots_txt_and_sitemap_xml_are_served_for_crawlers():
     assert sitemap.headers["content-type"].startswith("application/xml")
     assert "<urlset" in sitemap.text
     assert "<loc>https://lupabin.com/</loc>" in sitemap.text
+    assert "<loc>https://lupabin.com/ejemplo</loc>" in sitemap.text
+
+
+def test_static_example_html_route_is_served_with_strict_no_script_csp():
+    test = client()
+    response = test.get("/ejemplo")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "script-src 'none'" in response.headers["content-security-policy"]
+    assert "EJEMPLO SINTÉTICO" in response.text
+    html_home = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'href="/ejemplo"' in html_home
 
 
 def test_seo_metadata_structured_microdata_and_heading_hierarchy():

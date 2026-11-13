@@ -1060,4 +1060,10 @@ document.addEventListener("DOMContentLoaded", () => {
       select(next.id, true);
     }
   });
+  if (
+    typeof location !== "undefined" &&
+    (location.search === "?ejemplo=1" || location.hash === "#ejemplo")
+  ) {
+    showExample();
+  }
 });
