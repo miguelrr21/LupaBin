@@ -8,6 +8,8 @@ CLI (runner.run_isolated), and sends only items that regenerate from their citat
 import asyncio
 import functools
 import hashlib
+import html
+import json
 import os
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, MutableMapping
@@ -36,6 +38,45 @@ from lupabin.web import view
 from lupabin.web.guard import Busy, RateLimit, Settings, Slots, client_address
 
 STATIC = files("lupabin.web") / "static"
+PUBLIC_URL = "https://lupabin.com"
+ROBOTS_TXT = f"User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: {PUBLIC_URL}/sitemap.xml\n"
+SITEMAP_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    "  <url>\n"
+    f"    <loc>{PUBLIC_URL}/</loc>\n"
+    "    <changefreq>weekly</changefreq>\n"
+    "    <priority>1.0</priority>\n"
+    "  </url>\n"
+    "  <url>\n"
+    f"    <loc>{PUBLIC_URL}/ejemplo</loc>\n"
+    "    <changefreq>weekly</changefreq>\n"
+    "    <priority>0.8</priority>\n"
+    "  </url>\n"
+    "  <url>\n"
+    f"    <loc>{PUBLIC_URL}/privacidad</loc>\n"
+    "    <changefreq>monthly</changefreq>\n"
+    "    <priority>0.5</priority>\n"
+    "  </url>\n"
+    "</urlset>\n"
+)
+_META_CSP_RE = re.compile(
+    r'<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"\s*>',
+    re.IGNORECASE,
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _load_example_html() -> tuple[str, str]:
+    raw = json.loads((STATIC / "example.json").read_text(encoding="utf-8"))
+    html_doc = str(raw["downloads"]["html"])
+    match = _META_CSP_RE.search(html_doc)
+    csp_header = (
+        html.unescape(match.group(1)) if match else SECURITY_HEADERS["content-security-policy"]
+    )
+    return html_doc, csp_header
+
+
 ANALYSIS_ID = re.compile(r"[A-Za-z0-9_=-]{1,200}")  # VirusTotal analysis IDs (base64url)
 STATUS: dict[FailureCode, int] = {
     "input_empty": 400,
@@ -157,6 +198,20 @@ def create_app(
 
     async def privacy(request: Request) -> Response:
         return FileResponse(str(STATIC / "privacidad.html"), media_type="text/html; charset=utf-8")
+
+    async def robots(request: Request) -> Response:
+        return Response(ROBOTS_TXT, media_type="text/plain; charset=utf-8")
+
+    async def sitemap(request: Request) -> Response:
+        return Response(SITEMAP_XML, media_type="application/xml; charset=utf-8")
+
+    async def example_page(request: Request) -> Response:
+        html_doc, csp_header = _load_example_html()
+        return Response(
+            html_doc,
+            media_type="text/html; charset=utf-8",
+            headers={"content-security-policy": csp_header},
+        )
 
     async def config(request: Request) -> Response:
         return JSONResponse(
@@ -294,7 +349,10 @@ def create_app(
     app = Starlette(
         routes=[
             Route("/", index),
+            Route("/ejemplo", example_page),
             Route("/privacidad", privacy),
+            Route("/robots.txt", robots),
+            Route("/sitemap.xml", sitemap),
             Route("/api/config", config),
             Route("/api/health", health),
             Route("/api/analyze", analyze, methods=["POST"]),

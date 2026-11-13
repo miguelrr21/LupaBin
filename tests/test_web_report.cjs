@@ -295,3 +295,12 @@ test("the guide marks the sections already opened and starts again with each rep
   run(context, 'render(payload, "b.exe")');
   assert.equal(get("step-code").className, "");
 });
+
+test("opening a report updates document.title and returning to upload restores the default", () => {
+  const { get, context, wire } = page();
+  wire();
+  run(context, 'render(payload, "sample.exe")');
+  assert.equal(context.document.title, "sample.exe · Informe · LupaBin");
+  get("again").events.click();
+  assert.match(context.document.title, /^LupaBin · Tutor de análisis estático/);
+});

@@ -137,6 +137,25 @@ main.wrap { padding-top: 36px; padding-bottom: 56px; }
 .facts li { margin: 0; padding-left: 1rem; border-left: 2px solid var(--border-strong); }
 .facts strong { display: block; color: var(--text); font-weight: 650; margin-bottom: .4rem; }
 
+/* landing overview and faq */
+.seo-section { grid-column: 1 / -1; padding-top: 28px; border-top: 1px solid var(--border); }
+.seo-section-head { max-width: 48rem; margin-bottom: 1.5rem; }
+.seo-section-head .eyebrow { margin-bottom: .6rem; }
+.seo-section-head p:last-child { margin-bottom: 0; }
+.feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.feature-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1.3rem 1.4rem; }
+.feature-card h3 { font-size: 1.05rem; margin-bottom: .5rem; }
+.feature-card p { margin: 0; font-size: .92rem; color: var(--muted); }
+.faq-list { display: grid; gap: .75rem; }
+.faq-item { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; }
+.faq-item summary { font-weight: 650; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: "+"; font-family: var(--mono); color: var(--blue); flex-shrink: 0; }
+.faq-item[open] summary { color: var(--blue); }
+.faq-item[open] summary::after { content: "−"; }
+.faq-body { margin-top: .85rem; padding-top: .85rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .94rem; }
+.faq-body p { margin: 0; max-width: 82ch; }
+
 /* progress and errors */
 .progress-bar { height: 4px; background: var(--blue-soft); border-radius: 2px; overflow: hidden; margin-bottom: 20px; }
 .progress-bar span { display: block; height: 100%; width: 35%; background: var(--blue); animation: slide 1.4s ease-in-out infinite; }
@@ -304,6 +323,7 @@ button.chip:hover { text-decoration: underline; }
   .entry-intro h1 { max-width: 16ch; }
   .entry-lead { max-width: 42rem; }
   .facts { gap: 18px; }
+  .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .wrap { padding-left: 20px; padding-right: 20px; }
@@ -313,6 +333,7 @@ button.chip:hover { text-decoration: underline; }
   .panel { padding: 20px 18px; border-radius: 8px; }
   .facts { grid-template-columns: minmax(0, 1fr); }
   .facts { padding-top: 24px; }
+  .feature-grid { grid-template-columns: minmax(0, 1fr); }
   .hashes { grid-template-columns: minmax(0, 1fr); gap: .3rem; }
   .hashes dt { margin-top: .6rem; }
   .tabs [role="tab"] { padding: .65rem .75rem; }

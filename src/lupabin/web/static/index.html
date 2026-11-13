@@ -4,8 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>LupaBin · análisis estático de ejecutables</title>
-<meta name="description" content="Analiza un ejecutable de Windows sin ejecutarlo: qué contiene, qué llama y qué no se puede afirmar.">
+<meta name="theme-color" content="#f2f5fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1525" media="(prefers-color-scheme: dark)">
+<title>LupaBin · Tutor de análisis estático de ejecutables PE de Windows (.exe, .dll)</title>
+<meta name="description" content="Analiza ejecutables PE de Windows (.exe, .dll, .sys) sin ejecutarlos: cabeceras, llamadas API x86/x64, capacidades MITRE ATT&amp;CK, .NET, UPX 5, YARA, triaje y exportación a Ghidra con evidencias verificadas.">
+<meta name="robots" content="index, follow">
+<meta name="author" content="Miguel Ángel Rodríguez Romero">
+<link rel="canonical" href="https://lupabin.com/">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="es_ES">
+<meta property="og:site_name" content="LupaBin">
+<meta property="og:title" content="LupaBin · Tutor de análisis estático de ejecutables de Windows">
+<meta property="og:description" content="Inspecciona ejecutables PE32/PE32+ sin ejecutarlos nunca. Cada afirmación cita sus bytes de evidencia, explica qué no demuestra y permite practicar o exportar a Ghidra.">
+<meta property="og:url" content="https://lupabin.com/">
+<meta property="og:image" content="https://lupabin.com/static/favicon.svg">
+<meta property="og:image:alt" content="Logotipo geométrico de LupaBin: lupa sobre matriz binaria">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="LupaBin · Análisis estático de ejecutables de Windows">
+<meta name="twitter:description" content="Entiende qué contiene un ejecutable PE (.exe, .dll, .sys) sin ejecutarlo, con evidencias verificables, glosario y exportación a Ghidra.">
+<meta name="twitter:image" content="https://lupabin.com/static/favicon.svg">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/app.js" defer></script>
@@ -22,12 +40,17 @@
   </div>
 </header>
 
-<main class="wrap" id="main" tabindex="-1">
+<main class="wrap" id="main" tabindex="-1" itemscope itemtype="https://schema.org/SoftwareApplication">
+  <meta itemprop="name" content="LupaBin">
+  <meta itemprop="applicationCategory" content="SecurityApplication, EducationalApplication">
+  <meta itemprop="operatingSystem" content="Windows, Linux">
+  <meta itemprop="url" content="https://lupabin.com/">
+  <meta itemprop="license" content="https://www.apache.org/licenses/LICENSE-2.0">
   <section class="workspace-entry" id="upload" aria-labelledby="upload-title">
     <div class="entry-intro">
       <p class="eyebrow">Un archivo. Evidencias para entenderlo.</p>
       <h1 id="upload-title">Entiende un ejecutable.<br><span>Sin ejecutarlo.</span></h1>
-      <p class="entry-lead">Explora qué contiene, qué llama su código y qué no se puede afirmar. Sigue cada conclusión hasta la evidencia que la respalda.</p>
+      <p class="entry-lead" itemprop="description">Explora qué contiene, qué llama su código y qué no se puede afirmar. Sigue cada conclusión hasta la evidencia que la respalda.</p>
       <div class="example-entry">
         <button type="button" class="button example-button" id="example-open" aria-describedby="example-help">Ver informe de ejemplo <span aria-hidden="true">↗</span></button>
         <p class="muted small" id="example-help">Ejemplo sintético e inofensivo. Sin aportar una muestra, subir archivos ni consultar VirusTotal.</p>
@@ -43,7 +66,7 @@
       <form id="form" novalidate>
       <label class="drop" id="drop" for="file">
         <input type="file" id="file" name="file" class="visually-hidden">
-        <svg class="drop-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M13 5h15l8 8v30H13zM28 5v9h8M19 24h11M19 30h11M19 36h6"/></svg>
+        <svg class="drop-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M13 5h15l8 8v30H13zM28 5v9h8M19 24h11M19 30h11M19 36h6"/></svg>
         <span class="drop-main" id="drop-text">Arrastra un archivo aquí o <span class="link-like">elige uno</span></span>
         <span class="drop-file" id="drop-file" hidden></span>
       </label>
@@ -65,6 +88,71 @@
       <li><strong>No se guarda.</strong> Ni el archivo ni el informe quedan en el servidor; puedes descargarlos al final.</li>
       <li><strong>Cada frase cita su evidencia</strong> y dice lo que no demuestra.</li>
     </ul>
+    <section class="seo-section" id="capabilities-overview" aria-labelledby="capabilities-heading">
+      <div class="seo-section-head">
+        <p class="eyebrow">Qué inspecciona</p>
+        <h2 id="capabilities-heading">Qué analiza LupaBin sin ejecutar la muestra</h2>
+        <p class="muted">Cada método se mide antes sobre binarios benignos y cada resultado se revalida en el host contra los bytes reales del ejecutable. <a href="/ejemplo">Consultar resumen HTML estático del caso de estudio</a>.</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <h3>Cabeceras PE32/PE32+ y triaje verificable</h3>
+          <p>Lee hashes, secciones, permisos de escritura y ejecución, entropía, marcas de compilador (MSVC, GCC, MinGW-w64, Go, .NET, PyInstaller), ruta PDB, textos de versión, tabla de certificados y datos tras la última sección.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Recorrido de código x86/x64 y argumentos</h3>
+          <p>Recorre instrucciones estáticamente con Capstone para localizar llamadas a 72 funciones de la API de Windows, recuperar argumentos constantes en registros o pila y separar lo alcanzable desde <code>main</code> del arranque.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Capacidades y contraste con MITRE ATT&amp;CK</h3>
+          <p>Resume capacidades observadas en el código (claves <code>Run</code>, servicios, ejecución de comandos, memoria escribible y ejecutable, red o criptografía) junto con su frecuencia medida en 3.090 binarios benignos.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Metadatos .NET y desempaquetado UPX 5</h3>
+          <p>Inspecciona tablas de metadatos CLI/CLR (P/Invoke, miembros, tipos y textos literales) y reconstruye estáticamente secciones, punto de entrada, importaciones y cadenas ocultas en ejecutables comprimidos con UPX 5.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Decodificación acotada y reglas YARA</h3>
+          <p>Extrae cadenas ASCII y UTF-16, aplica decodificación verificada de Base64, hexadecimal y XOR de 1 a 8 bytes anclado en texto conocido, y evalúa reglas YARA propias dentro de un subproceso aislado.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Citas, práctica guiada y exportación a Ghidra</h3>
+          <p>Regenera cada afirmación desde sus citas con su límite explícito, incluye glosario con fuentes primarias, preguntas tipo test autocorregibles y exportación ZIP con <code>ImportLupaBin.java</code> para Ghidra.</p>
+        </article>
+      </div>
+    </section>
+    <section class="seo-section" id="faq-overview" aria-labelledby="faq-heading" itemscope itemtype="https://schema.org/FAQPage">
+      <div class="seo-section-head">
+        <p class="eyebrow">Preguntas frecuentes</p>
+        <h2 id="faq-heading">Preguntas frecuentes sobre el análisis estático</h2>
+      </div>
+      <div class="faq-list">
+        <details class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿LupaBin ejecuta el archivo o funciona como un antivirus?</summary>
+          <div class="faq-body" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+            <p itemprop="text">No. LupaBin nunca ejecuta ni emula el programa ni emite veredictos de seguridad. Lee los bytes dentro de un contenedor Linux sin red ni privilegios y describe qué estructuras, llamadas y cadenas contiene el ejecutable.</p>
+          </div>
+        </details>
+        <details class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Cómo evita que el informe invente datos o dé falsos positivos?</summary>
+          <div class="faq-body" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+            <p itemprop="text">No utiliza modelos de lenguaje para deducir resultados. El host comprueba de nuevo cada evidencia contra los bytes de la muestra, regenera cada frase a partir de sus citas y declara siempre lo que ese dato no demuestra.</p>
+          </div>
+        </details>
+        <details class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Puedo probar LupaBin y practicar sin subir un ejecutable propio?</summary>
+          <div class="faq-body" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+            <p itemprop="text">Sí. El botón «Ver informe de ejemplo» abre un informe completo generado a partir de un archivo sintético e inofensivo, con filtros, glosario, descargas y preguntas de práctica autocorregibles sin consultar servicios externos.</p>
+          </div>
+        </details>
+        <details class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Cómo funciona la exportación de evidencias a Ghidra?</summary>
+          <div class="faq-body" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+            <p itemprop="text">Desde el menú «Descargar» puedes obtener un archivo ZIP con <code>lupabin-ghidra.json</code> y el script <code>ImportLupaBin.java</code>. Al ejecutarlo en Ghidra sobre el mismo ejecutable, verifica el SHA-256, genera una revisión previa y añade comentarios sin sobrescribir tus anotaciones.</p>
+          </div>
+        </details>
+      </div>
+    </section>
   </section>
 
   <section class="panel" id="progress" hidden aria-live="polite">

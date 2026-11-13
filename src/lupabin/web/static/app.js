@@ -3,6 +3,7 @@
 // nothing here builds markup from data (a test forbids the HTML-parsing sinks).
 
 const $ = (id) => document.getElementById(id);
+const DEFAULT_TITLE = "LupaBin · Tutor de análisis estático de ejecutables PE de Windows (.exe, .dll)";
 const VALUES_SHOWN = 8;
 const LEVEL = { observed: "Hecho", inferred: "Inferencia", general: "Criterio general" };
 const STEPS = ["identity", "code", "content", "vt", "coverage"]; // each opens the tab of its name
@@ -111,6 +112,7 @@ function startReport() {
 
 function returnToUpload() {
   resetReport();
+  document.title = DEFAULT_TITLE;
   $("file").value = "";
   choose(null);
   show("upload");
@@ -912,6 +914,7 @@ function challenge_toggle(open) {
 }
 
 function render(data, name) {
+  document.title = `${name} · Informe · LupaBin`;
   $("example-notice").hidden = !(lastResult && lastResult.example);
   challenge_reset();
   painted = new Set();
@@ -1057,4 +1060,10 @@ document.addEventListener("DOMContentLoaded", () => {
       select(next.id, true);
     }
   });
+  if (
+    typeof location !== "undefined" &&
+    (location.search === "?ejemplo=1" || location.hash === "#ejemplo")
+  ) {
+    showExample();
+  }
 });

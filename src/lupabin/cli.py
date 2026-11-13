@@ -249,6 +249,44 @@ def ghidra_export(
     raise typer.Exit(EXIT[report.analysis.status])
 
 
+@app.command(name="export-lab")
+def lab_export(
+    report_file: Annotated[Path, typer.Argument(help="Informe de hechos JSON guardado.")],
+    sample: Annotated[
+        Path, typer.Option("--sample", help="Archivo original para verificar hashes y bytes.")
+    ],
+    output: Annotated[
+        Path, typer.Option("--output", help="ZIP nuevo; nunca se sobrescribe un archivo existente.")
+    ],
+) -> None:
+    """Empaqueta un laboratorio docente completo (JSON, Markdown, HTML, reto, Ghidra y guía)."""
+    from lupabin.lab import build_lab_bundle
+
+    try:
+        report = load_report(report_file, Limits())
+        blob = read_sample(sample, report.analysis.limits)
+        bundle = build_lab_bundle(report, blob.data, origin=CHECKED)
+    except LupaBinError as error:
+        raise fail(error) from None
+    except (GlossaryError, ExplanationError):
+        raise fail(LupaBinError("glossary_invalid")) from None
+    except ValueError:
+        raise typer.BadParameter("no se pudo construir un paquete docente válido") from None
+    try:
+        with output.open("xb") as stream:
+            stream.write(bundle)
+    except OSError:
+        raise typer.BadParameter(
+            "el ZIP debe ser un archivo nuevo en un directorio escribible"
+        ) from None
+    write_utf8(
+        "Paquete docente ZIP creado: incluye GUIA_DOCENTE.md, informe.json, informe.md, "
+        "resumen.html, reto.json y evidencias-ghidra.zip.",
+        buffer=sys.stdout.buffer,
+    )
+    raise typer.Exit(EXIT[report.analysis.status])
+
+
 @app.command(name="virustotal")
 def virustotal_only(
     file: Annotated[Path | None, typer.Argument(help="Archivo cuyo SHA-256 se consulta.")] = None,
